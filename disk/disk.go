@@ -13,6 +13,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/diskfs/go-diskfs/filesystem"
+	"github.com/diskfs/go-diskfs/filesystem/ext4"
 	"github.com/diskfs/go-diskfs/filesystem/fat32"
 	"github.com/diskfs/go-diskfs/filesystem/iso9660"
 	"github.com/diskfs/go-diskfs/filesystem/squashfs"
@@ -185,6 +186,8 @@ func (d *Disk) CreateFilesystem(spec FilesystemSpec) (filesystem.FileSystem, err
 		return fat32.Create(d.File, size, start, d.LogicalBlocksize, spec.VolumeLabel)
 	case filesystem.TypeISO9660:
 		return iso9660.Create(d.File, size, start, d.LogicalBlocksize, spec.WorkDir)
+	case filesystem.TypeExt4:
+		return ext4.Create(d.File, size, start, d.LogicalBlocksize, nil)
 	case filesystem.TypeSquashfs:
 		return nil, errors.New("squashfs is a read-only filesystem")
 	default:
