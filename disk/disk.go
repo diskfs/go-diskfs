@@ -12,6 +12,7 @@ import (
 
 	"github.com/deitch/diskfs/filesystem"
 	"github.com/deitch/diskfs/filesystem/fat32"
+	"github.com/deitch/diskfs/filesystem/iso9660"
 	"github.com/deitch/diskfs/partition"
 )
 
@@ -127,6 +128,8 @@ func (d *Disk) CreateFilesystem(partition int, fstype filesystem.Type) (filesyst
 	switch fstype {
 	case filesystem.TypeFat32:
 		return fat32.Create(d.File, size, start, d.LogicalBlocksize)
+	case filesystem.TypeISO9660:
+		return iso9660.Create(d.File, size, start, d.LogicalBlocksize)
 	default:
 		return nil, errors.New("Unknown filesystem type requested")
 	}
@@ -168,6 +171,10 @@ func (d *Disk) GetFilesystem(partition int) (filesystem.FileSystem, error) {
 	fat32FS, err := fat32.Read(d.File, size, start, d.LogicalBlocksize)
 	if err == nil {
 		return fat32FS, nil
+	}
+	iso9660FS, err := iso9660.Read(d.File, size, start, d.LogicalBlocksize)
+	if err == nil {
+		return iso9660FS, nil
 	}
 	return nil, fmt.Errorf("Unknown filesystem on partition %d", partition)
 }

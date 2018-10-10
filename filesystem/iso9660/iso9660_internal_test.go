@@ -1,0 +1,66 @@
+package iso9660
+
+import (
+	"os"
+	"testing"
+)
+
+func TestIso9660ReadDirectory(t *testing.T) {
+	// will use the file.iso fixture to test an actual directory
+	// \ (root directory) should be in one block
+	// \FOO should be in multiple blocks
+	file, err := os.Open(ISO9660File)
+	defer file.Close()
+	if err != nil {
+		t.Fatalf("Could not open file %s to read: %v", ISO9660File, err)
+	}
+	// FileSystem implements the FileSystem interface
+	pathTable, _, _, err := getValidPathTable()
+	if err != nil {
+		t.Fatalf("Could not get path table: %v", err)
+	}
+	fs := &FileSystem{
+		workspace: "", // we only ever call readDirectory with no workspace
+		size:      ISO9660Size,
+		start:     0,
+		file:      file,
+		blocksize: 2048,
+		pathTable: pathTable,
+	}
+	validDe, _, _, _, err := getValidDirectoryEntries(fs)
+	if err != nil {
+		t.Fatalf("Unable to read valid directory entries: %v", err)
+	}
+	validDeExtended, _, _, err := getValidDirectoryEntriesExtended(fs)
+	if err != nil {
+		t.Fatalf("Unable to read valid directory entries extended: %v", err)
+	}
+	fs.rootDir = validDe[0] // validDe contains root directory entries, first one is the root itself
+
+	tests := []struct {
+		path    string
+		entries []*directoryEntry
+	}{
+		{`\`, validDe},
+		{"/", validDe},
+		{`\FOO`, validDeExtended},
+		{`/FOO`, validDeExtended},
+	}
+	for _, tt := range tests {
+		entries, err := fs.readDirectory(tt.path)
+		switch {
+		case err != nil:
+			t.Errorf("fs.readDirectory(%s): unexpected nil error: %v", tt.path, err)
+		case len(entries) != len(tt.entries):
+			t.Errorf("fs.readDirectory(%s): number of entries do not match, actual %d expected %d", tt.path, len(entries), len(tt.entries))
+		default:
+			for i, entry := range entries {
+				if !compareDirectoryEntriesIgnoreDates(entry, tt.entries[i]) {
+					t.Errorf("fs.readDirectory(%s) %d: entries do not match, actual then expected", tt.path, i)
+					t.Logf("%#v\n", entry)
+					t.Logf("%#v\n", tt.entries[i])
+				}
+			}
+		}
+	}
+}

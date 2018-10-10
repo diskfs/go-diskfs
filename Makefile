@@ -6,7 +6,7 @@ image:
 	docker build -t $(IMAGE) testhelper/docker
 
 dependencies:
-	@go get -t ./...
+	@dep ensure
 
 unit_test: dependencies
 	@go test ./...

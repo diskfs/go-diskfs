@@ -37,8 +37,8 @@ You do *not* need a partitioned disk to work with a filesystem; filesystems can 
 ### Working With a Disk
 Before you can do anything with a disk - partitions or filesystems - you need to access it.
 
-* If you have an existing disk, you `Open()` it
-* If you are creating a new one, in general just for disk image files, you `Create()` it
+* If you have an existing disk or image file, you `Open()` it
+* If you are creating a new one, usually just disk image files, you `Create()` it
 
 Once you have a `Disk`, you can work with partitions or filesystems in it.
 
@@ -57,7 +57,7 @@ Once you have a valid disk, and optionally partition, you can access filesystems
 * `CreateFilesystem()` - create a filesystem in an individual partition or the entire disk
 * `GetFilesystem()` - access an existing filesystem in a partition or the entire disk
 
-As of this writing, supported filesystems include `FAT32`.
+As of this writing, supported filesystems include `FAT32` and `ISO9660` (a.k.a. `.iso`).
 
 With a filesystem in hand, you can create, access and modify directories and files.
 
@@ -72,6 +72,14 @@ With a `File` in hand, you then can:
 * `Write(p []byte)` to the file
 * `Read(b []byte)` from the file
 * `Seek(offset int64, whence int)` to set the next read or write to an offset in the file
+
+### Read-Only Filesystems
+Some filesystem types are intended to be created once, after which they are read-only, for example `ISO9660`/`.iso` and `squashfs`.
+
+`godiskfs` recognizes read-only filesystems and limits working with them to the following:
+
+* You can `GetFilesystem()` a read-only filesystem and do all read activities, but cannot write to them. Any attempt to `Mkdir()` or `OpenFile()` in write/append/create modes or `Write()` to the file will result in an error.
+* You can `CreateFilesystem()` a read-only filesystem and write anything to it that you want. It will do all of its work in a "scratch" area, or temporary "workspace" directory on your local filesystem. When you are ready to complete it, you call `Finalize()`, after which it becomes read-only. If you forget to `Finalize()` it, you get... nothing. The `Finalize()` function exists only on read-only filesystems.
 
 ### Examples
 The following example will create a fully bootable EFI disk image. It assumes you have a bootable EFI file (any modern Linux kernel compiled with `CONFIG_EFI_STUB=y` will work) available.
@@ -139,5 +147,7 @@ Future plans are to add the following:
 
 * embed boot code in `mbr` e.g. `altmbr.bin` (no need for `gpt` since an ESP with `/EFI/BOOT/BOOT<arch>.EFI` will boot)
 * `ext4` filesystem
-* `iso9660` / `Rock Ridge` filesystem
+* `Rock Ridge` and `Joliet` extensions to `iso9660`
+* `El Torito` booting extension to `iso9660`
 * `qcow` disk format
+* `squashfs` filesystem
