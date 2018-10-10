@@ -20,4 +20,6 @@ type Type int
 const (
 	// TypeFat32 is a FAT32 compatible filesystem
 	TypeFat32 Type = iota
+	// TypeISO9660 is an iso filesystem
+	TypeISO9660
 )

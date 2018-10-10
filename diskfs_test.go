@@ -61,7 +61,7 @@ func TestOpen(t *testing.T) {
 		err  error
 	}{
 		{"", nil, fmt.Errorf("must pass device name")},
-		{"/tmp/foo/bar/232323/23/2322/disk.img", nil, fmt.Errorf("provided device %s does not exist", "/tmp/foo/bar/232323/23/2322/disk.img")},
+		{"/tmp/foo/bar/232323/23/2322/disk.img", nil, fmt.Errorf("")},
 		{path, &disk.Disk{Type: disk.File, LogicalBlocksize: 512, PhysicalBlocksize: 512, Size: size}, nil},
 	}
 
