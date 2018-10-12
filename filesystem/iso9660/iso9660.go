@@ -6,7 +6,6 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
-	"strings"
 
 	"github.com/deitch/diskfs/filesystem"
 	"github.com/deitch/diskfs/util"
@@ -22,14 +21,17 @@ const (
 
 // FileSystem implements the FileSystem interface
 type FileSystem struct {
-	workspace string
-	size      int64
-	start     int64
-	file      util.File
-	blocksize int64
-	volumes   volumeDescriptors
-	pathTable *pathTable
-	rootDir   *directoryEntry
+	workspace      string
+	size           int64
+	start          int64
+	file           util.File
+	blocksize      int64
+	volumes        volumeDescriptors
+	pathTable      *pathTable
+	rootDir        *directoryEntry
+	suspEnabled    bool  // is the SUSP in use?
+	suspSkip       uint8 // how many bytes to skip in each directory record
+	suspExtensions []suspExtension
 }
 
 // Equal compare if two filesystems are equal
@@ -111,6 +113,8 @@ func Create(f util.File, size int64, start int64, blocksize int64) (*FileSystem,
 //
 // If the provided blocksize is 0, it will use the default of 2K bytes
 func Read(file util.File, size int64, start int64, blocksize int64) (*FileSystem, error) {
+	var read int
+
 	if blocksize == 0 {
 		blocksize = defaultSectorSize
 	}
@@ -142,11 +146,14 @@ func Read(file util.File, size int64, start int64, blocksize int64) (*FileSystem
 	// next read the volume descriptors, one at a time, until we hit the terminator
 	vds := make([]volumeDescriptor, 2)
 	terminated := false
-	var pvd *primaryVolumeDescriptor
+	var (
+		pvd *primaryVolumeDescriptor
+		vd  volumeDescriptor
+	)
 	for i := 0; !terminated; i++ {
 		vdBytes := make([]byte, volumeDescriptorSize, volumeDescriptorSize)
 		// read vdBytes
-		read, err := file.ReadAt(vdBytes, start+systemAreaSize+int64(i)*volumeDescriptorSize)
+		read, err = file.ReadAt(vdBytes, start+systemAreaSize+int64(i)*volumeDescriptorSize)
 		if err != nil {
 			return nil, fmt.Errorf("Unable to read bytes for volume descriptor %d: %v", i, err)
 		}
@@ -154,7 +161,7 @@ func Read(file util.File, size int64, start int64, blocksize int64) (*FileSystem
 			return nil, fmt.Errorf("Read %d bytes instead of expected %d for volume descriptor %d", read, volumeDescriptorSize, i)
 		}
 		// convert to a vd structure
-		vd, err := volumeDescriptorFromBytes(vdBytes)
+		vd, err = volumeDescriptorFromBytes(vdBytes)
 		if err != nil {
 			return nil, fmt.Errorf("Error reading Volume Descriptor: %v", err)
 		}
@@ -171,13 +178,15 @@ func Read(file util.File, size int64, start int64, blocksize int64) (*FileSystem
 	}
 
 	// load up our path table and root directory entry
-	var pt *pathTable
-	var rootDirEntry *directoryEntry
+	var (
+		pt           *pathTable
+		rootDirEntry *directoryEntry
+	)
 	if pvd != nil {
 		rootDirEntry = pvd.rootDirectoryEntry
 		pathTableBytes := make([]byte, pvd.pathTableSize, pvd.pathTableSize)
 		pathTableLocation := pvd.pathTableLLocation * uint32(pvd.blocksize)
-		read, err := file.ReadAt(pathTableBytes, int64(pathTableLocation))
+		read, err = file.ReadAt(pathTableBytes, int64(pathTableLocation))
 		if err != nil {
 			return nil, fmt.Errorf("Unable to read path table of size %d at location %d: %v", pvd.pathTableSize, pathTableLocation, err)
 		}
@@ -190,6 +199,56 @@ func Read(file util.File, size int64, start int64, blocksize int64) (*FileSystem
 		}
 	}
 
+	// is system use enabled?
+	location := int64(rootDirEntry.location) * blocksize
+	// get the size of the directory entry
+	b := make([]byte, 1)
+	read, err = file.ReadAt(b, location)
+	if err != nil {
+		return nil, fmt.Errorf("Unable to read root directory size at location %d: %v", location, err)
+	}
+	if read != len(b) {
+		return nil, fmt.Errorf("Root directory entry size, read %d bytes instead of expected %d", read, len(b))
+	}
+	// now read the whole entry
+	b = make([]byte, b[0])
+	read, err = file.ReadAt(b, location)
+	if err != nil {
+		return nil, fmt.Errorf("Unable to read root directory entry at location %d: %v", location, err)
+	}
+	if read != len(b) {
+		return nil, fmt.Errorf("Root directory entry, read %d bytes instead of expected %d", read, len(b))
+	}
+	// parse it - we do not have any handlers yet
+	de, err := parseDirEntry(b, &FileSystem{
+		suspEnabled: true,
+		file:        file,
+		blocksize:   blocksize,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("Error parsing root entry from bytes: %v", err)
+	}
+	// is the SUSP in use?
+	var (
+		suspEnabled  bool
+		skipBytes    uint8
+		suspHandlers []suspExtension
+	)
+	for _, ext := range de.extensions {
+		if s, ok := ext.(directoryEntrySystemUseExtensionSharingProtocolIndicator); ok {
+			suspEnabled = true
+			skipBytes = s.SkipBytes()
+		}
+
+		// register any extension handlers
+		if s, ok := ext.(directoryEntrySystemUseExtensionReference); suspEnabled && ok {
+			extHandler := getRockRidgeExtension(s.ExtensionID())
+			if extHandler != nil {
+				suspHandlers = append(suspHandlers, extHandler)
+			}
+		}
+	}
+
 	fs := &FileSystem{
 		workspace: "", // no workspace when we do nothing with it
 		start:     start,
@@ -199,9 +258,12 @@ func Read(file util.File, size int64, start int64, blocksize int64) (*FileSystem
 			descriptors: vds,
 			primary:     pvd,
 		},
-		blocksize: blocksize,
-		pathTable: pt,
-		rootDir:   rootDirEntry,
+		blocksize:      blocksize,
+		pathTable:      pt,
+		rootDir:        rootDirEntry,
+		suspEnabled:    suspEnabled,
+		suspSkip:       skipBytes,
+		suspExtensions: suspHandlers,
 	}
 	rootDirEntry.filesystem = fs
 	return fs, nil
@@ -277,12 +339,6 @@ func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 	// get the path and filename
 	dir := path.Dir(p)
 	filename := path.Base(p)
-	// a single '.' separator normally is mandated, so enter it if non-existent
-	filenameExt := filename
-	if !strings.Contains(filenameExt, ".") {
-		filenameExt = fmt.Sprintf("%s.", filenameExt)
-	}
-	filenameExt = fmt.Sprintf("%s;1", filenameExt)
 
 	// if the dir == filename, then it is just /
 	if dir == filename {
@@ -305,12 +361,12 @@ func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 		// we now know that the directory exists, see if the file exists
 		var targetEntry *directoryEntry
 		for _, e := range entries {
-			eName := e.filename
+			eName := e.Name()
 			// cannot do anything with directories
 			if eName == filename && e.IsDir() {
 				return nil, fmt.Errorf("Cannot open directory %s as file", p)
 			}
-			if eName == filenameExt {
+			if eName == filename {
 				// if we got this far, we have found the file
 				targetEntry = e
 				break
@@ -346,11 +402,23 @@ func (fs *FileSystem) readDirectory(p string) ([]*directoryEntry, error) {
 		err            error
 		n              int
 	)
-	// try from path table, then walk the directory tree
-	location, err = fs.pathTable.getLocation(p)
-	if err != nil {
-		return nil, fmt.Errorf("Unable to read path %s from path table: %v", p, err)
+
+	// try from path table, then walk the directory tree, unless we were told explicitly not to
+	usePathtable := true
+	for _, e := range fs.suspExtensions {
+		usePathtable = e.UsePathtable()
+		if !usePathtable {
+			break
+		}
 	}
+
+	if usePathtable {
+		location, err = fs.pathTable.getLocation(p)
+		if err != nil {
+			return nil, fmt.Errorf("Unable to read path %s from path table: %v", p, err)
+		}
+	}
+
 	// if we found it, read the first directory entry to get the size
 	if location != 0 {
 		// we need 4 bytes to read the size of the directory; it is at offset 10 from beginning

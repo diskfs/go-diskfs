@@ -36,6 +36,14 @@ type dirEntry struct {
 	hasMoreEntries           bool
 	volumeSequence           uint16
 	filename                 string
+	extensions               []directoryEntrySystemUseExtension
+}
+
+type directoryEntrySystemUseExtension struct {
+	entryType string
+	length    uint8
+	version   uint8
+	data      []byte
 }
 type dirEntryList []*dirEntry
 
@@ -207,9 +215,12 @@ func dump(entries Enumerable) {
 	entries.Each(func(e Printable) {
 		val := fmt.Sprintf("%#v", e)
 		// strip the type header and add a , at the end
-		re := regexp.MustCompile(`^&main\.[^{]*`)
-		valPure := re.ReplaceAllString(val, ``)
-		fmt.Printf("%s,\n", valPure)
+		//re := regexp.MustCompile(`^&main\.[^{]*`)
+		//val = re.ReplaceAllString(val, ``)
+
+		re := regexp.MustCompile(`main\.`)
+		val = re.ReplaceAllString(val, ``)
+		fmt.Printf("%s,\n", val)
 	})
 }
 
@@ -249,6 +260,35 @@ func readDirectory(location, size uint32, f *os.File) []*dirEntry {
 		// get the filename itself
 		filename := string(recordBytes[33 : 33+namelen])
 
+		// get the extensions
+		// and now for extensions in the system use area
+		suspFields := make([]directoryEntrySystemUseExtension, 0)
+		suspBytes := make([]byte, 0)
+
+		if int(recordSize) > 33+int(namelen) {
+			suspBytes = recordBytes[33+int(namelen):]
+		}
+		// minimum size of 4 bytes for any SUSP entry
+		for i := 0; i+4 < len(suspBytes); {
+			// get the indicator
+			signature := string(suspBytes[i : i+2])
+			size := suspBytes[i+2]
+			version := suspBytes[i+3]
+			data := make([]byte, 0)
+			if size > 4 {
+				data = suspBytes[i+4 : i+int(size)]
+			}
+
+			suspEntry := directoryEntrySystemUseExtension{
+				entryType: signature,
+				length:    size,
+				version:   version,
+				data:      data,
+			}
+			suspFields = append(suspFields, suspEntry)
+			i += int(size)
+		}
+
 		e := &dirEntry{
 			recordSize:     recordSize,
 			extAttrSize:    extAttrSize,
@@ -256,6 +296,7 @@ func readDirectory(location, size uint32, f *os.File) []*dirEntry {
 			size:           size,
 			isSubdirectory: isSubdirectory,
 			filename:       filename,
+			extensions:     suspFields,
 		}
 		entries = append(entries, e)
 	}

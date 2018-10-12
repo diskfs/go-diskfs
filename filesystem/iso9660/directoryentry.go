@@ -11,7 +11,8 @@ import (
 )
 
 const (
-	minDirectoryEntrySize uint8 = 34 // min size is all the required fields (33 bytes) plus 1 byte for the filename
+	directoryEntryMinSize uint8 = 34  // min size is all the required fields (33 bytes) plus 1 byte for the filename
+	directoryEntryMaxSize int   = 254 // max size allowed
 )
 
 // directoryEntry is a single directory entry
@@ -38,29 +39,40 @@ type directoryEntry struct {
 	volumeSequence           uint16
 	filesystem               *FileSystem
 	filename                 string
+	extensions               []directoryEntrySystemUseExtension
 }
 
-func (de *directoryEntry) toBytes() ([]byte, error) {
+func (de *directoryEntry) countNamelenBytes() int {
 	// size includes the ";1" at the end as two bytes if a filename
-	var namelen byte
+	var namelen int
 	switch {
 	case de.isSelf:
 		namelen = 1
 	case de.isParent:
 		namelen = 1
 	default:
-		namelen = uint8(len(de.filename))
+		namelen = len(de.filename)
 	}
+
+	return namelen
+}
+
+func (de *directoryEntry) countBaseBytes() int {
+	namelen := de.countNamelenBytes()
 	// if even, we add one byte of padding to always end on an even byte
 	if namelen%2 == 0 {
 		namelen++
 	}
 
-	recordSize := 33 + namelen
+	return 33 + namelen
+}
 
-	b := make([]byte, recordSize, recordSize)
+func (de *directoryEntry) toBytes(skipExt bool, ceBlocks []uint32) ([][]byte, error) {
+	baseRecordSize := de.countBaseBytes()
+	namelen := de.countNamelenBytes()
 
-	b[0] = recordSize
+	b := make([]byte, baseRecordSize)
+
 	b[1] = de.extAttrSize
 	binary.LittleEndian.PutUint32(b[2:6], de.location)
 	binary.BigEndian.PutUint32(b[6:10], de.location)
@@ -93,7 +105,7 @@ func (de *directoryEntry) toBytes() ([]byte, error) {
 	binary.LittleEndian.PutUint16(b[28:30], de.volumeSequence)
 	binary.BigEndian.PutUint16(b[30:32], de.volumeSequence)
 
-	b[32] = namelen
+	b[32] = uint8(namelen)
 
 	// save the filename
 	var filenameBytes []byte
@@ -122,13 +134,73 @@ func (de *directoryEntry) toBytes() ([]byte, error) {
 	// copy it over
 	copy(b[33:], filenameBytes)
 
-	return b, nil
+	// output directory entry extensions - but only if we did not skip it
+	var extBytes [][]byte
+	if !skipExt {
+		extBytes, err = dirEntryExtensionsToBytes(de.extensions, directoryEntryMaxSize-len(b), de.filesystem.blocksize, ceBlocks)
+		if err != nil {
+			return nil, fmt.Errorf("Unable to convert directory entry SUSP extensions to bytes: %v", err)
+		}
+		b = append(b, extBytes[0]...)
+	}
+	// always end on an even
+	if len(b)%2 != 0 {
+		b = append(b, 0x00)
+	}
+	// update the record size
+	b[0] = uint8(len(b))
+
+	recWithCE := [][]byte{b}
+	if len(extBytes) > 1 {
+		recWithCE = append(recWithCE, extBytes[1:]...)
+	}
+	return recWithCE, nil
 }
 
-func dirEntryFromBytes(b []byte) (*directoryEntry, error) {
+// dirEntryExtensionsToBytes converts slice of SUSP extensions to slice ot []byte: first is dir entry, rest are continuation areas
+// returns:
+//   slice of []byte
+func dirEntryExtensionsToBytes(extensions []directoryEntrySystemUseExtension, maxSize int, blocksize int64, ceBlocks []uint32) ([][]byte, error) {
+	// output directory entries
+	var (
+		err            error
+		b              []byte
+		continuedBytes [][]byte
+	)
+	ret := make([][]byte, 0)
+	for i, e := range extensions {
+		b2 := e.Bytes()
+		// do we overrun the size
+		if len(b)+len(b2) > maxSize {
+			// we need an extension, so pop the first one off the slice, use it as a pointer, and pass the rest
+			nextCeBlock := ceBlocks[0]
+			continuedBytes, err = dirEntryExtensionsToBytes(extensions[i:], int(blocksize), blocksize, ceBlocks[1:])
+			if err != nil {
+				return nil, err
+			}
+			// use a continuation entry until the end of the
+			ce := &directoryEntrySystemUseContinuation{
+				offset:             0,
+				location:           nextCeBlock,
+				continuationLength: uint32(len(continuedBytes[0])),
+			}
+			b = append(b, ce.Bytes()...)
+			break
+		} else {
+			b = append(b, b2...)
+		}
+	}
+	ret = append(ret, b)
+	if len(continuedBytes) > 0 {
+		ret = append(ret, continuedBytes...)
+	}
+	return ret, nil
+}
+
+func dirEntryFromBytes(b []byte, ext []suspExtension) (*directoryEntry, error) {
 	// has to be at least 34 bytes
-	if len(b) < int(minDirectoryEntrySize) {
-		return nil, fmt.Errorf("Cannot read directoryEntry from %d bytes, fewer than minimum of %d bytes", len(b), minDirectoryEntrySize)
+	if len(b) < int(directoryEntryMinSize) {
+		return nil, fmt.Errorf("Cannot read directoryEntry from %d bytes, fewer than minimum of %d bytes", len(b), directoryEntryMinSize)
 	}
 	recordSize := b[0]
 	// what if it is not the right size?
@@ -153,11 +225,12 @@ func dirEntryFromBytes(b []byte) (*directoryEntry, error) {
 
 	// size includes the ";1" at the end as two bytes and any padding
 	namelen := b[32]
+	nameLenWithPadding := namelen
 
 	// get the filename itself
 	nameBytes := b[33 : 33+namelen]
-	if namelen > 1 && nameBytes[namelen-1] == 0x00 {
-		nameBytes = nameBytes[:namelen-1]
+	if namelen > 1 && namelen%2 == 0 {
+		nameLenWithPadding++
 	}
 	var filename string
 	var isSelf, isParent bool
@@ -170,6 +243,16 @@ func dirEntryFromBytes(b []byte) (*directoryEntry, error) {
 		isParent = true
 	default:
 		filename = string(nameBytes)
+	}
+
+	// and now for extensions in the system use area
+	suspFields := make([]directoryEntrySystemUseExtension, 0)
+	if len(b) > 33+int(nameLenWithPadding) {
+		var err error
+		suspFields, err = parseDirectoryEntryExtensions(b[33+nameLenWithPadding:], ext)
+		if err != nil {
+			return nil, fmt.Errorf("Unable to parse directory entry extensions: %v", err)
+		}
 	}
 
 	return &directoryEntry{
@@ -187,7 +270,57 @@ func dirEntryFromBytes(b []byte) (*directoryEntry, error) {
 		isParent:                 isParent,
 		volumeSequence:           volumeSequence,
 		filename:                 filename,
+		extensions:               suspFields,
 	}, nil
+}
+
+// parseDirEntry takes the bytes of a single directory entry
+// and parses it, including pulling in continuation entry bytes
+func parseDirEntry(b []byte, f *FileSystem) (*directoryEntry, error) {
+	// empty entry means nothing more to read - this might not actually be accurate, but work with it for now
+	entryLen := int(b[0])
+	if entryLen == 0 {
+		return nil, nil
+	}
+	// get the bytes
+	de, err := dirEntryFromBytes(b[:entryLen], f.suspExtensions)
+	if err != nil {
+		return nil, fmt.Errorf("Invalid directory entry : %v", err)
+	}
+	de.filesystem = f
+
+	if f.suspEnabled && len(de.extensions) > 0 {
+		// if the last entry is a continuation SUSP entry and SUSP is enabled, we need to follow and parse them
+		// because the extensions can be a linked list directory -> CE area -> CE area ...
+		//   we need to loop until it is no more
+		for {
+			if ce, ok := de.extensions[len(de.extensions)-1].(directoryEntrySystemUseContinuation); ok {
+				location := int64(ce.Location())
+				size := int(ce.ContinuationLength())
+				offset := int64(ce.Offset())
+				// read it from disk
+				continuationBytes := make([]byte, size)
+				read, err := f.file.ReadAt(continuationBytes, location*f.blocksize+offset)
+				if err != nil {
+					return nil, fmt.Errorf("Error reading continuation entry data at %d: %v", location, err)
+				}
+				if read != size {
+					return nil, fmt.Errorf("Read continuation entry data %d bytes instead of expected %d", read, size)
+				}
+				// parse and append
+				entries, err := parseDirectoryEntryExtensions(continuationBytes, f.suspExtensions)
+				if err != nil {
+					return nil, fmt.Errorf("Error parsing continuation entry data at %d: %v", location, err)
+				}
+				// remove the CE one from the extensions array and append our new ones
+				de.extensions = append(de.extensions[:len(de.extensions)-1], entries...)
+			} else {
+				break
+			}
+		}
+	}
+	return de, nil
+
 }
 
 // parseDirEntries takes all of the bytes in a special file (i.e. a directory)
@@ -203,13 +336,23 @@ func parseDirEntries(b []byte, f *FileSystem) ([]*directoryEntry, error) {
 			i += (int(f.blocksize) - i%int(f.blocksize))
 			continue
 		}
-		// get the bytes
-		de, err := dirEntryFromBytes(b[i+0 : i+entryLen])
+		de, err := parseDirEntry(b[i+0:i+entryLen], f)
 		if err != nil {
 			return nil, fmt.Errorf("Invalid directory entry %d at byte %d: %v", count, i, err)
 		}
-		de.filesystem = f
-		dirEntries = append(dirEntries, de)
+		// some extensions to directory relocation, so check if we should ignore it
+		if f.suspEnabled {
+			for _, e := range f.suspExtensions {
+				if e.Relocated(de) {
+					de = nil
+					break
+				}
+			}
+		}
+
+		if de != nil {
+			dirEntries = append(dirEntries, de)
+		}
 		i += entryLen
 	}
 	return dirEntries, nil
@@ -244,9 +387,49 @@ func (de *directoryEntry) getLocation(p string) (uint32, uint32, error) {
 		}
 		// find the entry among the children that has the desired name
 		for _, entry := range dirEntries {
-			if entry.filename == current {
+			// do we have an alternate name?
+			// only care if not self or parent entry
+			checkFilename := entry.filename
+			if de.filesystem.suspEnabled && !entry.isSelf && !entry.isParent {
+				for _, e := range de.filesystem.suspExtensions {
+					filename, err2 := e.GetFilename(entry)
+					switch {
+					case err2 != nil && err2 == ErrSuspFilenameUnsupported:
+						continue
+					case err2 != nil:
+						return 0, 0, fmt.Errorf("Extension %s count not find a filename property: %v", e.ID(), err2)
+					default:
+						checkFilename = filename
+						break
+					}
+				}
+			}
+			if checkFilename == current {
 				if len(parts) > 1 {
-					// just dig down further
+					// just dig down further - what if it looks like a file, but is a relocated directory?
+					if !entry.isSubdirectory && de.filesystem.suspEnabled && !entry.isSelf && !entry.isParent {
+						for _, e := range de.filesystem.suspExtensions {
+							location2 := e.GetDirectoryLocation(entry)
+							if location2 != 0 {
+								// need to get the directory entry for the child
+								dirb := make([]byte, de.filesystem.blocksize)
+								n, err2 := de.filesystem.file.ReadAt(dirb, int64(location2)*de.filesystem.blocksize)
+								if err2 != nil {
+									return 0, 0, fmt.Errorf("Could not read bytes of relocated directory %s from block %d: %v", checkFilename, location2, err2)
+								}
+								if n != len(dirb) {
+									return 0, 0, fmt.Errorf("Read %d bytes instead of expected %d for relocated directory %s from block %d: %v", n, len(dirb), checkFilename, location2, err)
+								}
+								// get the size of the actual directory entry
+								size2 := dirb[0]
+								entry, err2 = parseDirEntry(dirb[:size2], de.filesystem)
+								if err2 != nil {
+									return 0, 0, fmt.Errorf("Error converting bytes to a directory entry for relocated directory %s from block %d: %v", checkFilename, location2, err2)
+								}
+								break
+							}
+						}
+					}
 					location, size, err = entry.getLocation(path.Join(parts[1:]...))
 					if err != nil {
 						return 0, 0, fmt.Errorf("Could not get location: %v", err)
@@ -267,6 +450,19 @@ func (de *directoryEntry) getLocation(p string) (uint32, uint32, error) {
 // Name() string       // base name of the file
 func (de *directoryEntry) Name() string {
 	name := de.filename
+	if de.filesystem.suspEnabled {
+		for _, e := range de.filesystem.suspExtensions {
+			filename, err := e.GetFilename(de)
+			switch {
+			case err != nil:
+				continue
+			default:
+				name = filename
+				break
+			}
+		}
+	}
+	// check if we have an extension that overrides it
 	// filenames should have the ';1' stripped off, as well as the leading or trailing '.'
 	if !de.IsDir() {
 		name = strings.TrimSuffix(name, ";1")

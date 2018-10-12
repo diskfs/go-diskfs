@@ -7,8 +7,10 @@ import (
 )
 
 const (
-	ISO9660File = "./testdata/file.iso"
-	ISO9660Size = 11018240
+	//ISO9660File = "./testdata/file.iso"
+	ISO9660File   = "./testdata/9660.iso"
+	RockRidgeFile = "./testdata/rockridge.iso"
+	ISO9660Size   = 11018240
 )
 
 func GetTestFile(t *testing.T) (*File, string) {
@@ -31,16 +33,16 @@ func GetTestFile(t *testing.T) (*File, string) {
 	}
 	de := &directoryEntry{
 		extAttrSize: 0,
-		location:    0x1422,
-		size:        0xb,
+		location:    0x1473,
+		size:        0x7,
 		creation:    time.Now(),
 		filesystem:  fs,
-		filename:    "FILENA01.;1",
+		filename:    "README.MD;1",
 	}
 	return &File{
 		directoryEntry: de,
 		isReadWrite:    false,
 		isAppend:       false,
 		offset:         0,
-	}, "filename_1\n"
+	}, "README\n"
 }

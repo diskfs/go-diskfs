@@ -147,7 +147,8 @@ func TestCollapseAndSortChildren(t *testing.T) {
 		children[2].children[0], children[2].children[2], children[2].children[1].children[1], children[2].children[1].children[0],
 	}
 	root.children = children
-	dirs, files := root.collapseAndSortChildren(1)
+	root.addProperties(1)
+	dirs, files := root.collapseAndSortChildren()
 	dirsMatch := true
 	if len(dirs) != len(expectedDirs) {
 		dirsMatch = false

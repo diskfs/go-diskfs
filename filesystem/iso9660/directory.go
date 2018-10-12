@@ -17,28 +17,37 @@ func (d *Directory) entriesFromBytes(b []byte, f *FileSystem) error {
 }
 
 // entriesToBytes convert our entries to raw bytes
-func (d *Directory) entriesToBytes() ([]byte, error) {
+func (d *Directory) entriesToBytes(ceBlockLocations []uint32) ([][]byte, error) {
 	b := make([]byte, 0)
+	ceBlocks := make([][]byte, 0)
 	blocksize := int(d.filesystem.blocksize)
 	for _, de := range d.entries {
-		b2, err := de.toBytes()
+		b2, err := de.toBytes(false, ceBlockLocations)
 		if err != nil {
 			return nil, err
 		}
+		recBytes := b2[0]
 		// a directory entry cannot cross a block boundary
 		// so if adding this puts us past it, then pad it
 		// but only if we are not already exactly at the boundary
-		newlength := len(b) + len(b2)
+		newlength := len(b) + len(recBytes)
 		left := blocksize - len(b)%blocksize
 		if left != 0 && newlength/blocksize > len(b)/blocksize {
 			b = append(b, make([]byte, left)...)
 		}
-		b = append(b, b2...)
+		b = append(b, recBytes...)
+		if len(b2) > 1 {
+			ceBlocks = append(ceBlocks, b2[1:]...)
+		}
 	}
 	// in the end, must pad to exact blocks
 	left := blocksize - len(b)%blocksize
 	if left > 0 {
 		b = append(b, make([]byte, left)...)
 	}
-	return b, nil
+	ret := [][]byte{b}
+	if len(ceBlocks) > 0 {
+		ret = append(ret, ceBlocks...)
+	}
+	return ret, nil
 }

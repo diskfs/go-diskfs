@@ -48,6 +48,13 @@ func getValidIso9660FSReadOnly() (*iso9660.FileSystem, error) {
 	}
 	return iso9660.Read(f, 0, 0, 2048)
 }
+func getValidRockRidgeFSReadOnly() (*iso9660.FileSystem, error) {
+	f, err := os.Open(iso9660.RockRidgeFile)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to read iso9660 testfile %s: %v", iso9660.RockRidgeFile, err)
+	}
+	return iso9660.Read(f, 0, 0, 2048)
+}
 
 func tmpIso9660File() (*os.File, error) {
 	filename := "iso9660_test.iso"
@@ -167,7 +174,7 @@ func TestISO9660Read(t *testing.T) {
 		{500, 6000, -1, nil, fmt.Errorf("blocksize for ISO9660 must be")},
 		{513, 6000, -1, nil, fmt.Errorf("blocksize for ISO9660 must be")},
 		{512, iso9660.MaxBlocks*2048 + 10000, -1, nil, fmt.Errorf("requested size is larger than maximum allowed ISO9660 size")},
-		{512, 10000000, -1, &iso9660.FileSystem{}, nil},
+		{2048, 10000000, -1, &iso9660.FileSystem{}, nil},
 	}
 	for _, tt := range tests {
 		// get a temporary working file
@@ -211,14 +218,14 @@ func TestIso9660ReadDir(t *testing.T) {
 				t.Errorf("fs.ReadDir(%s): mismatched first non-self or parent entry, actual then expected", tt.path)
 				t.Logf("%s", fi[0].Name())
 				t.Logf("%s", tt.first)
-			case fi != nil && tt.count > 2 && fi[len(fi)-1].Name() != tt.last:
+			case fi != nil && tt.count > 0 && fi[len(fi)-1].Name() != tt.last:
 				t.Errorf("fs.ReadDir(%s): mismatched last entry, actual then expected", tt.path)
 				t.Logf("%s", fi[len(fi)-1].Name())
 				t.Logf("%s", tt.last)
 			}
 		}
 	}
-	t.Run("read-only", func(t *testing.T) {
+	t.Run("read-only 9660", func(t *testing.T) {
 		fs, err := getValidIso9660FSReadOnly()
 		if err != nil {
 			t.Errorf("Failed to get read-only ISO9660 filesystem: %v", err)
@@ -232,7 +239,26 @@ func TestIso9660ReadDir(t *testing.T) {
 			// /BAR
 			// /FOO
 			// /README.MD;1
-			{fs, "/", 4, "ABC", "README.MD", nil}, // exists
+			{fs, "/", 5, "ABC", "README.MD", nil},                                   // exists
+			{fs, "/ABC", 1, "", "LARGEFIL", nil},                                    // exists
+			{fs, "/abc", 0, "", "LARGEFIL", fmt.Errorf("directory does not exist")}, // should not find rock ridge name
+		},
+		)
+	})
+	t.Run("read-only rock ridge", func(t *testing.T) {
+		fs, err := getValidRockRidgeFSReadOnly()
+		if err != nil {
+			t.Errorf("Failed to get read-only Rock Ridge filesystem: %v", err)
+		}
+		runTests(t, []testList{
+			{fs, "/abcdef", 0, "", "", fmt.Errorf("directory does not exist")}, // does not exist
+			// root should have 4 entries (since we do not pass back . and ..):
+			{fs, "/", 6, "abc", "README.md", nil},                                   // exists
+			{fs, "/ABC", 0, "", "LARGEFIL", fmt.Errorf("directory does not exist")}, // should not find 8.3 name
+			{fs, "/abc", 1, "", "largefile", nil},                                   // should find rock ridge name
+			{fs, "/deep/a/b/c/d/e/f/g/h/i/j/k", 1, "file", "file", nil},             // should find a deep directory
+			{fs, "/G", 0, "", "H", fmt.Errorf("directory does not exist")},          // relocated directory
+			{fs, "/g", 0, "", "h", fmt.Errorf("directory does not exist")},          // relocated directory
 		},
 		)
 	})
@@ -303,7 +329,7 @@ func TestIso9660OpenFile(t *testing.T) {
 				}
 			}
 		}
-		t.Run("read-only", func(t *testing.T) {
+		t.Run("read-only 9660", func(t *testing.T) {
 			fs, err := getValidIso9660FSReadOnly()
 			if err != nil {
 				t.Errorf("Failed to get read-only ISO9660 filesystem: %v", err)
@@ -316,6 +342,27 @@ func TestIso9660OpenFile(t *testing.T) {
 				// open file for read or read write and check contents
 				{"/FOO/FILENA01", os.O_RDONLY, "filename_1\n", nil},
 				{"/FOO/FILENA75", os.O_RDONLY, "filename_9\n", nil},
+				// rock ridge versions should not exist
+				{"/README.md", os.O_RDONLY, "", fmt.Errorf("Target file %s does not exist", "/README.md")},
+			}
+			runTests(t, fs, tests)
+		})
+		t.Run("read-only rock ridge", func(t *testing.T) {
+			fs, err := getValidRockRidgeFSReadOnly()
+			if err != nil {
+				t.Errorf("Failed to get read-only Rock Ridge filesystem: %v", err)
+			}
+			tests := []testStruct{
+				// error opening a directory
+				{"/", os.O_RDONLY, "", fmt.Errorf("Cannot open directory %s as file", "/")},
+				// open non-existent file for read or read write
+				{"/abcdefg", os.O_RDONLY, "", fmt.Errorf("Target file %s does not exist", "/abcdefg")},
+				// open file for read or read write and check contents
+				{"/foo/filename_1", os.O_RDONLY, "filename_1\n", nil},
+				{"/foo/filename_75", os.O_RDONLY, "filename_75\n", nil},
+				// only rock ridge versions should exist
+				{"/README.MD", os.O_RDONLY, "", fmt.Errorf("Target file %s does not exist", "/README.MD")},
+				{"/README.md", os.O_RDONLY, "README\n", nil},
 			}
 			runTests(t, fs, tests)
 		})
