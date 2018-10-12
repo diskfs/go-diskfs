@@ -216,7 +216,7 @@ func Create(device string, size int64, format Format) (*disk.Disk, error) {
 	if size <= 0 {
 		return nil, errors.New("must pass valid device size to create")
 	}
-	f, err := os.OpenFile(device, os.O_RDONLY|os.O_EXCL|os.O_CREATE, 0666)
+	f, err := os.OpenFile(device, os.O_RDWR|os.O_EXCL|os.O_CREATE, 0666)
 	if err != nil {
 		return nil, fmt.Errorf("Could not create device %s", device)
 	}
