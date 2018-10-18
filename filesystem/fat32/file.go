@@ -11,6 +11,7 @@ type File struct {
 	isReadWrite bool
 	isAppend    bool
 	offset      int64
+	parent      *Directory
 	filesystem  *FileSystem
 }
 
@@ -153,6 +154,12 @@ func (fl *File) Write(p []byte) (int, error) {
 		file.WriteAt(p[totalWritten:totalWritten+toWrite], int64(offset)+fs.start)
 		totalWritten += toWrite
 	}
+	// update the parent that we have changed the file size
+	err = fs.writeDirectoryEntries(fl.parent)
+	if err != nil {
+		return 0, fmt.Errorf("Error writing directory entries to disk: %v", err)
+	}
+
 	return totalWritten, nil
 }
 
