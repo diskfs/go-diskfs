@@ -478,6 +478,12 @@ func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to create file %s: %v", p, err)
 		}
+		// write the directory entries to disk
+		err = fs.writeDirectoryEntries(parentDir)
+		if err != nil {
+			return nil, fmt.Errorf("Error writing directory file %s to disk: %v", p, err)
+		}
+
 	}
 	offset := int64(0)
 	if flag&os.O_APPEND == os.O_APPEND {
@@ -489,6 +495,7 @@ func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 		isAppend:       flag&os.O_APPEND != 0,
 		offset:         offset,
 		filesystem:     fs,
+		parent:         parentDir,
 	}, nil
 }
 
