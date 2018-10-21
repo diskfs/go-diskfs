@@ -42,3 +42,16 @@ You now have the exact fat32 files in `$PWD`
 * free data cluster count, should be copied over to the appropriate place in `getValidFSInfoSector` [fsinfosector_test.go](../fsinfosector_test.go)
 * last allocated cluster, should be copied over to the appropriate place in `getValidFSInfoSector` [fsinfosector_test.go](../fsinfosector_test.go)
 * allocated FAT clusters
+
+
+## Basic Builds
+In addition to the usual test harnesses, this directory contains a file that generates a basic fat32 filesystem. To build it:
+
+```
+go build -o fat32 fat32.go
+```
+
+and run it as `./fat32`. The output will be a file called `test_file.img`. 
+
+To build an `mtools` based image to compare, run `./mkfat32.sh`. 
+

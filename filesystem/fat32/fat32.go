@@ -156,7 +156,9 @@ func Create(f util.File, size int64, start int64, blocksize int64) (*FileSystem,
 
 	// what is our FAT ID / Media Type?
 	mediaType := uint8(MediaFixedDisk)
-	fatID := uint32(mediaType)<<24 + 0xffffff
+
+	fatIDbase := uint32(0x0f << 24)
+	fatID := fatIDbase + 0xffff00 + uint32(mediaType)
 
 	// we need an Extended BIOS Parameter Block
 	dos20bpb := dos20BPB{
@@ -664,7 +666,20 @@ func (fs *FileSystem) readDirWithMkdir(p string, doMake bool) (*Directory, []*di
 				if err != nil {
 					return nil, nil, fmt.Errorf("Failed to create subdirectory %s", "/"+strings.Join(paths[0:i+1], "/"))
 				}
-				// write the directory entries to disk
+				// make a basic entry for the new subdir
+				dir := &Directory{
+					directoryEntry: directoryEntry{clusterLocation: subdirEntry.clusterLocation},
+					entries: []*directoryEntry{
+						{filenameShort: ".", isSubdirectory: true, clusterLocation: subdirEntry.clusterLocation},
+						{filenameShort: "..", isSubdirectory: true, clusterLocation: currentDir.clusterLocation},
+					},
+				}
+				// write the new directory entries to disk
+				err = fs.writeDirectoryEntries(dir)
+				if err != nil {
+					return nil, nil, fmt.Errorf("Error writing new directory entries to disk: %v", err)
+				}
+				// write the parent directory entries to disk
 				err = fs.writeDirectoryEntries(currentDir)
 				if err != nil {
 					return nil, nil, fmt.Errorf("Error writing directory entries to disk: %v", err)
