@@ -144,7 +144,9 @@ func (v *primaryVolumeDescriptor) toBytes() []byte {
 
 	rootDirEntry := make([]byte, 34)
 	if v.rootDirectoryEntry != nil {
-		rootDirEntry, _ = v.rootDirectoryEntry.toBytes()
+		// we will skip the extensions anyways, so the CE blocks do not matter
+		rootDirEntrySlice, _ := v.rootDirectoryEntry.toBytes(true, []uint32{})
+		rootDirEntry = rootDirEntrySlice[0]
 	}
 	copy(b[156:156+34], rootDirEntry)
 
@@ -247,7 +249,7 @@ func parsePrimaryVolumeDescriptor(b []byte) (*primaryVolumeDescriptor, error) {
 		}
 	}
 
-	rootDirEntry, err := dirEntryFromBytes(b[156 : 156+34])
+	rootDirEntry, err := dirEntryFromBytes(b[156:156+34], nil)
 	if err != nil {
 		return nil, fmt.Errorf("Unable to read root directory entry: %v", err)
 	}
@@ -330,7 +332,8 @@ func parseSupplementaryVolumeDescriptor(b []byte) (*supplementaryVolumeDescripto
 		return nil, fmt.Errorf("Unable to convert effective date/time from bytes: %v", err)
 	}
 
-	rootDirEntry, err := dirEntryFromBytes(b[156 : 156+34])
+	// no susp extensions for the dir entry in the volume descriptor
+	rootDirEntry, err := dirEntryFromBytes(b[156:156+34], nil)
 	if err != nil {
 		return nil, fmt.Errorf("Unable to read root directory entry: %v", err)
 	}
@@ -388,7 +391,12 @@ func (v *supplementaryVolumeDescriptor) toBytes() []byte {
 	binary.BigEndian.PutUint32(b[148:152], v.pathTableMLocation)
 	binary.BigEndian.PutUint32(b[152:156], v.pathTableMOptionalLocation)
 
-	rootDirEntry, _ := v.rootDirectoryEntry.toBytes()
+	rootDirEntry := make([]byte, 34)
+	if v.rootDirectoryEntry != nil {
+		// we will skip the extensions anyways, so the CE blocks do not matter
+		rootDirEntrySlice, _ := v.rootDirectoryEntry.toBytes(true, []uint32{})
+		rootDirEntry = rootDirEntrySlice[0]
+	}
 	copy(b[156:156+34], rootDirEntry)
 
 	copy(b[190:190+128], ucs2StringToBytes(v.volumeSetIdentifier))

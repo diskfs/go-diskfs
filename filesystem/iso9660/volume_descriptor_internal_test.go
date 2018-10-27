@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -44,7 +45,7 @@ func comparePrimaryVolumeDescriptorsIgnoreDates(a, b *primaryVolumeDescriptor) b
 
 	// cannot actually compare root directory entry since can be pointers to different things
 	// so we compare them separately, and then compare the rest
-	if *c.rootDirectoryEntry != *c.rootDirectoryEntry {
+	if !reflect.DeepEqual(*c.rootDirectoryEntry, *c.rootDirectoryEntry) {
 		return false
 	}
 	c.rootDirectoryEntry = nil
@@ -154,7 +155,7 @@ func getValidVolumeDescriptors() ([]volumeDescriptor, []byte, error) {
 	return entries, b, nil
 }
 
-func getValidPrimaryVolumeDescriptor() (*primaryVolumeDescriptor, []byte, error) {
+func get9660PrimaryVolumeDescriptor() (*primaryVolumeDescriptor, []byte, error) {
 	// these are taken from the file ./testdata/fat32.img, see ./testdata/README.md
 	blocksize := 2048
 	pvdSector := 16
@@ -174,14 +175,14 @@ func getValidPrimaryVolumeDescriptor() (*primaryVolumeDescriptor, []byte, error)
 	pvd := &primaryVolumeDescriptor{
 		systemIdentifier:           fmt.Sprintf("%32v", ""),
 		volumeIdentifier:           "ISOIMAGE                        ",
-		volumeSize:                 5380, // in bytes
+		volumeSize:                 5386, // in bytes
 		setSize:                    1,
 		sequenceNumber:             1,
 		blocksize:                  2048,
-		pathTableSize:              46,
-		pathTableLLocation:         27,
+		pathTableSize:              168,
+		pathTableLLocation:         35,
 		pathTableLOptionalLocation: 0,
-		pathTableMLocation:         28,
+		pathTableMLocation:         36,
 		pathTableMOptionalLocation: 0,
 		rootDirectoryEntry:         &directoryEntry{},
 		volumeSetIdentifier:        fmt.Sprintf("%128v", ""),
@@ -247,7 +248,7 @@ func TestTimeToDecBytes(t *testing.T) {
 }
 
 func TestPrimaryVolumeDescriptorToBytes(t *testing.T) {
-	validPvd, validBytes, err := getValidPrimaryVolumeDescriptor()
+	validPvd, validBytes, err := get9660PrimaryVolumeDescriptor()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -259,7 +260,7 @@ func TestPrimaryVolumeDescriptorToBytes(t *testing.T) {
 	}
 }
 func TestParsePrimaryVolumeDescriptor(t *testing.T) {
-	validPvd, validBytes, err := getValidPrimaryVolumeDescriptor()
+	validPvd, validBytes, err := get9660PrimaryVolumeDescriptor()
 	if err != nil {
 		t.Fatal(err)
 	}
