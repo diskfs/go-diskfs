@@ -118,10 +118,7 @@ func getValidVolumeDescriptors() ([]volumeDescriptor, []byte, error) {
 			effective:                  t1,
 		},
 		&bootVolumeDescriptor{
-			systemIdentifier: "EL TORITO SPECIFICATION",
-			bootIdentifier:   "",
-			// data for el torito is first byte shows boot catalog location (block) followed by all zeros
-			data: []byte{0x71},
+			location: 0x71,
 		},
 		&supplementaryVolumeDescriptor{
 			systemIdentifier:           fmt.Sprintf("%32v", ""),

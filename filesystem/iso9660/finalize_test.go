@@ -7,16 +7,95 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"regexp"
 	"testing"
 
 	"github.com/deitch/diskfs/filesystem"
 	"github.com/deitch/diskfs/filesystem/iso9660"
+	"github.com/deitch/diskfs/partition/mbr"
 	"github.com/deitch/diskfs/testhelper"
 )
 
 var (
 	intImage = os.Getenv("TEST_IMAGE")
 )
+
+// test creating an iso with el torito boot
+func TestFinalizeElTorito(t *testing.T) {
+	blocksize := int64(2048)
+	f, err := ioutil.TempFile("", "iso_finalize_test")
+	defer os.Remove(f.Name())
+	//fmt.Println(f.Name())
+	if err != nil {
+		t.Fatalf("Failed to create tmpfile: %v", err)
+	}
+	fs, err := iso9660.Create(f, 0, 0, blocksize)
+	if err != nil {
+		t.Fatalf("Failed to iso9660.Create: %v", err)
+	}
+	var isofile filesystem.File
+	for _, filename := range []string{"/BOOT1.IMG", "/BOOT2.IMG"} {
+		isofile, err = fs.OpenFile(filename, os.O_CREATE|os.O_RDWR)
+		if err != nil {
+			t.Fatalf("Failed to iso9660.OpenFile(%s): %v", filename, err)
+		}
+		// create some random data
+		blen := 1024 * 1024
+		for i := 0; i < 5; i++ {
+			b := make([]byte, blen)
+			_, err = rand.Read(b)
+			if err != nil {
+				t.Fatalf("%d: error getting random bytes for file %s: %v", i, filename, err)
+			}
+			if _, err = isofile.Write(b); err != nil {
+				t.Fatalf("%d: error writing random bytes to tmpfile %s: %v", i, filename, err)
+			}
+		}
+	}
+
+	err = fs.Finalize(iso9660.FinalizeOptions{ElTorito: &iso9660.ElTorito{
+		BootCatalog:     "/BOOT.CAT",
+		HideBootCatalog: false,
+		Platform:        iso9660.EFI,
+		Entries: []*iso9660.ElToritoEntry{
+			{Platform: iso9660.BIOS, Emulation: iso9660.NoEmulation, BootFile: "/BOOT1.IMG", HideBootFile: true, LoadSegment: 0, SystemType: mbr.Fat32LBA},
+			{Platform: iso9660.EFI, Emulation: iso9660.NoEmulation, BootFile: "/BOOT2.IMG", HideBootFile: false, LoadSegment: 0, SystemType: mbr.Fat32LBA},
+		},
+	},
+	})
+	if err != nil {
+		t.Fatal("Unexpected error fs.Finalize()", err)
+	}
+	if err != nil {
+		t.Fatalf("Error trying to Stat() iso file: %v", err)
+	}
+
+	// now check the contents
+	fs, err = iso9660.Read(f, 0, 0, 2048)
+	if err != nil {
+		t.Fatalf("error reading the tmpfile as iso: %v", err)
+	}
+
+	// we chose to hide the first one, so check the first one exists and not the second
+	_, err = fs.OpenFile("/BOOT1.IMG", os.O_RDONLY)
+	if err == nil {
+		t.Errorf("Did not receive expected error opening file %s: %v", "/BOOT1.IMG", err)
+	}
+	_, err = fs.OpenFile("/BOOT2.IMG", os.O_RDONLY)
+	if err != nil {
+		t.Errorf("Error opening file %s: %v", "/BOOT2.IMG", err)
+	}
+
+	validateIso(t, f)
+
+	validateElTorito(t, f)
+
+	// close the file
+	err = f.Close()
+	if err != nil {
+		t.Fatalf("Could not close iso file: %v", err)
+	}
+}
 
 // full test - create some files, finalize, check the output
 func TestFinalize9660(t *testing.T) {
@@ -344,4 +423,26 @@ func validateIso(t *testing.T, f *os.File) {
 		t.Errorf("Unexpected err: %v", err)
 		t.Log(outString)
 	}
+}
+
+func validateElTorito(t *testing.T, f *os.File) {
+	// only do this test if os.Getenv("TEST_IMAGE") contains a real image for integration testing
+	if intImage == "" {
+		return
+	}
+	output := new(bytes.Buffer)
+	f.Seek(0, 0)
+	err := testhelper.DockerRun(f, output, false, true, intImage, "isoinfo", "-d", "-i", "/file.img")
+	outString := output.String()
+	if err != nil {
+		t.Errorf("Unexpected err: %v", err)
+		t.Log(outString)
+	}
+	// look for El Torito line
+	re := regexp.MustCompile(`El Torito VD version 1 found, boot catalog is in sector (\d+)\n`)
+	matches := re.FindStringSubmatch(outString)
+	if matches == nil || len(matches) < 1 {
+		t.Fatalf("Unable to match El Torito information")
+	}
+	// what sector should it be in?
 }

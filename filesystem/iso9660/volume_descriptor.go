@@ -19,8 +19,9 @@ const (
 )
 
 const (
-	isoIdentifier uint64 = 0x4344303031 // string "CD001"
-	isoVersion    uint8  = 0x01
+	isoIdentifier        uint64 = 0x4344303031 // string "CD001"
+	isoVersion           uint8  = 0x01
+	bootSystemIdentifier        = "EL TORITO SPECIFICATION"
 )
 
 // volumeDescriptor interface for any given type of volume descriptor
@@ -57,9 +58,7 @@ type primaryVolumeDescriptor struct {
 }
 
 type bootVolumeDescriptor struct {
-	systemIdentifier string
-	bootIdentifier   string
-	data             []byte // length 1977 bytes; trailing 0x00 are stripped off
+	location uint32 // length 1977 bytes; trailing 0x00 are stripped off
 }
 type terminatorVolumeDescriptor struct {
 }
@@ -198,10 +197,9 @@ func volumeDescriptorFromBytes(b []byte) (volumeDescriptor, error) {
 			return nil, fmt.Errorf("Unable to parse primary volume descriptor bytes: %v", err)
 		}
 	case volumeDescriptorBoot:
-		vd = &bootVolumeDescriptor{
-			systemIdentifier: string(b[7:39]),
-			bootIdentifier:   string(b[39:71]),
-			data:             b[71:2048],
+		vd, err = parseBootVolumeDescriptor(b)
+		if err != nil {
+			return nil, fmt.Errorf("Unable to parse primary volume descriptor bytes: %v", err)
 		}
 	case volumeDescriptorTerminator:
 		vd = &terminatorVolumeDescriptor{}
@@ -302,11 +300,20 @@ func (v *bootVolumeDescriptor) equal(a volumeDescriptor) bool {
 }
 func (v *bootVolumeDescriptor) toBytes() []byte {
 	b := volumeDescriptorFirstBytes(volumeDescriptorBoot)
-	copy(b[7:39], []byte(v.systemIdentifier))
-	copy(b[39:71], []byte(v.bootIdentifier))
-	copy(b[71:2048], v.data)
+	copy(b[7:39], []byte(bootSystemIdentifier))
+	binary.LittleEndian.PutUint32(b[0x47:0x4b], v.location)
 
 	return b
+}
+
+// parseBootVolumeDescriptor
+func parseBootVolumeDescriptor(b []byte) (*bootVolumeDescriptor, error) {
+	systemIdentifier := string(b[0x7 : 0x7+len(bootSystemIdentifier)])
+	if systemIdentifier != bootSystemIdentifier {
+		return nil, fmt.Errorf("Incorrect specification, actual '%s' expected '%s'", systemIdentifier, bootSystemIdentifier)
+	}
+	location := binary.LittleEndian.Uint32(b[0x47:0x4b])
+	return &bootVolumeDescriptor{location: location}, nil
 }
 
 // supplementaryVolumeDescriptor

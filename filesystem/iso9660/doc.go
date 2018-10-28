@@ -6,4 +6,5 @@
 //  ISO9660 / ECMA-119 http://www.ecma-international.org/publications/files/ECMA-ST/Ecma-119.pdf
 //  System Use Sharing Protocol http://cdrtools.sourceforge.net/private/RRIP/susp.ps
 //  Rock Ridge http://cdrtools.sourceforge.net/private/RRIP/rrip.ps
+//  El Torito https://wiki.osdev.org/El-Torito
 package iso9660

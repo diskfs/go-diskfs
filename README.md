@@ -148,7 +148,6 @@ Future plans are to add the following:
 * embed boot code in `mbr` e.g. `altmbr.bin` (no need for `gpt` since an ESP with `/EFI/BOOT/BOOT<arch>.EFI` will boot)
 * `ext4` filesystem
 * `Joliet` extensions to `iso9660`
-* `El Torito` booting extension to `iso9660`
 * `Rock Ridge` sparse file support - supports the flag, but not yet reading or writing
 * `squashfs` filesystem
 * `qcow` disk format
