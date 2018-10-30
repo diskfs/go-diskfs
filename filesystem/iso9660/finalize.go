@@ -13,12 +13,23 @@ import (
 	"github.com/deitch/diskfs/util"
 )
 
+const (
+	dataStartSector = 16
+)
+
+// fileInfoFinder a struct that represents an ability to find a path and return its entry
+type fileInfoFinder interface {
+	findEntry(string) (*finalizeFileInfo, error)
+}
+
 // FinalizeOptions options to pass to finalize
 type FinalizeOptions struct {
 	// RockRidge enable Rock Ridge extensions
 	RockRidge bool
 	// DeepDirectories allow directories deeper than 8
 	DeepDirectories bool
+	// ElTorito slice of el torito entry configs
+	ElTorito *ElTorito
 }
 
 // finalizeFileInfo is a file info useful for finalization
@@ -278,6 +289,55 @@ func (fi *finalizeFileInfo) collapseAndSortChildren() ([]*finalizeFileInfo, []*f
 	return finalDirs, finalFiles
 }
 
+func (fi *finalizeFileInfo) findEntry(p string) (*finalizeFileInfo, error) {
+	// break path down into parts and levels
+	parts, err := splitPath(p)
+	if err != nil {
+		return nil, fmt.Errorf("Could not parse path: %v", err)
+	}
+	var target *finalizeFileInfo
+	if len(parts) == 0 {
+		target = fi
+	} else {
+		current := parts[0]
+		// read the directory bytes
+		for _, e := range fi.children {
+			// do we have an alternate name?
+			// only care if not self or parent entry
+			checkFilename := e.name
+			if checkFilename == current {
+				if len(parts) > 1 {
+					target, err = e.findEntry(path.Join(parts[1:]...))
+					if err != nil {
+						return nil, fmt.Errorf("Could not get entry: %v", err)
+					}
+				} else {
+					// this is the final one, we found it, keep it
+					target = e
+				}
+				break
+			}
+		}
+	}
+	return target, nil
+}
+func (fi *finalizeFileInfo) removeChild(p string) *finalizeFileInfo {
+	var removed *finalizeFileInfo
+	children := make([]*finalizeFileInfo, 0)
+	for _, e := range fi.children {
+		if e.name != p {
+			children = append(children, e)
+		} else {
+			removed = e
+		}
+	}
+	fi.children = children
+	return removed
+}
+func (fi *finalizeFileInfo) addChild(entry *finalizeFileInfo) {
+	fi.children = append(fi.children, entry)
+}
+
 func finalizeFileInfoNames(fi []*finalizeFileInfo) []string {
 	ret := make([]string, len(fi))
 	for i, v := range fi {
@@ -330,7 +390,7 @@ func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 	blocksize := int(fs.blocksize)
 
 	// 1- blank out sectors 0-15
-	b := make([]byte, 15*fs.blocksize)
+	b := make([]byte, dataStartSector*fs.blocksize)
 	n, err := f.WriteAt(b, 0)
 	if err != nil {
 		return fmt.Errorf("Could not write blank system area: %v", err)
@@ -338,8 +398,6 @@ func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 	if n != len(b) {
 		return fmt.Errorf("Only wrote %d bytes instead of expected %d to system area", n, len(b))
 	}
-
-	// 2- skip sectors 16-17 for PVD and terminator (fill later)
 
 	// 3- build out file tree
 	fileList, dirList, err := walkTree(fs.Workspace())
@@ -376,6 +434,7 @@ func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 			}
 		}
 	}
+
 	// convert sizes to required blocks for files
 	for _, e := range fileList {
 		e.blocks = calculateBlocks(e.size, fs.blocksize)
@@ -389,7 +448,11 @@ func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 	dirs = append(dirs, subdirs...)
 
 	// calculate the sizes and locations of the directories from the flat list and assign blocks
-	rootLocation := uint32(18)
+	rootLocation := uint32(dataStartSector + 2)
+	// if el torito was enabled, use one sector for boot volume entry
+	if options.ElTorito != nil {
+		rootLocation++
+	}
 	location := rootLocation
 
 	var size, ceBlocks int
@@ -425,9 +488,81 @@ func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 	pathTableMLocation := location
 	location += pathTableBlocks
 
+	// if we asked for ElTorito, need to generate the boot catalog and save it
+	var (
+		catEntry *finalizeFileInfo
+		bootcat  []byte
+	)
+	if options.ElTorito != nil {
+		bootcat, err = options.ElTorito.generateCatalog()
+		if err != nil {
+			return fmt.Errorf("Unable to generate El Torito boot catalog: %v", err)
+		}
+		// figure out where to save it on disk
+		catname := options.ElTorito.BootCatalog
+		switch {
+		case catname == "" && options.RockRidge:
+			catname = elToritoDefaultCatalogRR
+		case catname == "":
+			catname = elToritoDefaultCatalog
+		}
+		shortname, extension := calculateShortnameExtension(path.Base(catname))
+		// break down the catalog basename from the parent dir
+		catEntry = &finalizeFileInfo{
+			content:   bootcat,
+			size:      int64(len(bootcat)),
+			path:      catname,
+			name:      path.Base(catname),
+			shortname: shortname,
+			extension: extension,
+		}
+		catEntry.location = location
+		catEntry.blocks = calculateBlocks(catEntry.size, fs.blocksize)
+		location += catEntry.blocks
+		// make it the first file
+		files = append([]*finalizeFileInfo{catEntry}, files...)
+
+		// if we were not told to hide the catalog, add it to its parent
+		if !options.ElTorito.HideBootCatalog {
+			var parent *finalizeFileInfo
+			parent, err = root.findEntry(path.Dir(catname))
+			if err != nil {
+				return fmt.Errorf("Error finding parent for boot catalog %s: %v", catname, err)
+			}
+			parent.addChild(catEntry)
+		}
+		for _, e := range options.ElTorito.Entries {
+			var parent, child *finalizeFileInfo
+			parent, err = root.findEntry(path.Dir(e.BootFile))
+			if err != nil {
+				return fmt.Errorf("Error finding parent for boot image file %s: %v", e.BootFile, err)
+			}
+			// did we ask to hide any image files?
+			if e.HideBootFile {
+				child = parent.removeChild(path.Base(e.BootFile))
+			} else {
+				child, err = parent.findEntry(path.Base(e.BootFile))
+				if err != nil {
+					return fmt.Errorf("Unable to find image child %s: %v", e.BootFile, err)
+				}
+			}
+			e.size = uint16(child.size)
+			e.location = child.location
+		}
+	}
+
 	for _, e := range files {
 		e.location = location
 		location += e.blocks
+	}
+
+	// now that we have all of the files with their locations, we can rebuild the boot catalog using the correct data
+	if catEntry != nil {
+		bootcat, err = options.ElTorito.generateCatalog()
+		if err != nil {
+			return fmt.Errorf("Unable to generate El Torito boot catalog: %v", err)
+		}
+		catEntry.content = bootcat
 	}
 
 	// now we can write each one out - dirs first then files
@@ -495,7 +630,9 @@ func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 		}
 	}
 
-	// create and write the primary volume descriptor and the volume descriptor set terminator
+	totalSize := location
+	location = dataStartSector
+	// create and write the primary volume descriptor, supplementary and boot, and volume descriptor set terminator
 	now := time.Now()
 	rootDE, err := root.toDirectoryEntry(fs, true, false)
 	if err != nil {
@@ -505,7 +642,7 @@ func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 	pvd := &primaryVolumeDescriptor{
 		systemIdentifier:           "",
 		volumeIdentifier:           "ISOIMAGE",
-		volumeSize:                 location,
+		volumeSize:                 totalSize,
 		setSize:                    1,
 		sequenceNumber:             1,
 		blocksize:                  uint16(fs.blocksize),
@@ -528,10 +665,19 @@ func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 		rootDirectoryEntry:         rootDE,
 	}
 	b = pvd.toBytes()
-	f.WriteAt(b, 16*int64(blocksize))
+	f.WriteAt(b, int64(location)*int64(blocksize))
+	location++
+
+	// do we have a boot sector?
+	if options.ElTorito != nil {
+		bvd := &bootVolumeDescriptor{location: catEntry.location}
+		b = bvd.toBytes()
+		f.WriteAt(b, int64(location)*int64(blocksize))
+		location++
+	}
 	terminator := &terminatorVolumeDescriptor{}
 	b = terminator.toBytes()
-	f.WriteAt(b, 17*int64(blocksize))
+	f.WriteAt(b, int64(location)*int64(blocksize))
 
 	// finish by setting as finalized
 	fs.workspace = ""
@@ -638,15 +784,7 @@ func walkTree(workspace string) ([]*finalizeFileInfo, map[string]*finalizeFileIn
 	filepath.Walk(".", func(fp string, fi os.FileInfo, err error) error {
 		isRoot := fp == "."
 		name := fi.Name()
-		parts := strings.SplitN(name, ".", 2)
-		shortname := parts[0]
-		extension := ""
-		if len(parts) > 1 {
-			extension = parts[1]
-		}
-		// shortname and extension must be upper-case
-		shortname = strings.ToUpper(shortname)
-		extension = strings.ToUpper(extension)
+		shortname, extension := calculateShortnameExtension(name)
 
 		if isRoot {
 			name = string([]byte{0x00})
@@ -687,4 +825,18 @@ func calculateBlocks(size, blocksize int64) uint32 {
 		blocks++
 	}
 	return blocks
+}
+
+func calculateShortnameExtension(name string) (string, string) {
+	parts := strings.SplitN(name, ".", 2)
+	shortname := parts[0]
+	extension := ""
+	if len(parts) > 1 {
+		extension = parts[1]
+	}
+	// shortname and extension must be upper-case
+	shortname = strings.ToUpper(shortname)
+	extension = strings.ToUpper(extension)
+
+	return shortname, extension
 }
