@@ -3,8 +3,8 @@ package iso9660
 import (
 	"encoding/binary"
 
-	"github.com/deitch/diskfs/partition/mbr"
-	"github.com/deitch/diskfs/util"
+	"github.com/diskfs/go-diskfs/partition/mbr"
+	"github.com/diskfs/go-diskfs/util"
 )
 
 const (

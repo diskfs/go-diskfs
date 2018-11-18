@@ -13,7 +13,7 @@
 //
 // 1. Create a disk image of size 10MB with a FAT32 filesystem spanning the entire disk.
 //
-//     import diskfs "github.com/deitch/godiskfs"
+//     import diskfs "github.com/diskfs/go-diskfs"
 //     size := 10*1024*1024 // 10 MB
 //
 //     diskImg := "/tmp/disk.img"
@@ -24,7 +24,7 @@
 // 2. Create a disk of size 20MB with an MBR partition table, a single partition beginning at block 2048 (1MB),
 //    of size 10MB filled with a FAT32 filesystem.
 //
-//     import diskfs "github.com/deitch/godiskfs"
+//     import diskfs "github.com/diskfs/go-diskfs"
 //
 //     diskSize := 10*1024*1024 // 10 MB
 //
@@ -49,7 +49,7 @@
 // 3. Create a disk of size 20MB with a GPT partition table, a single partition beginning at block 2048 (1MB),
 //    of size 10MB, and fill with the contents from the 10MB file "/root/contents.dat"
 //
-//     import diskfs "github.com/deitch/godiskfs"
+//     import diskfs "github.com/diskfs/go-diskfs"
 //
 //     diskSize := 10*1024*1024 // 10 MB
 //
@@ -74,7 +74,7 @@
 // 4. Create a disk of size 20MB with an MBR partition table, a single partition beginning at block 2048 (1MB),
 //    of size 10MB filled with a FAT32 filesystem, and create some directories and files in that filesystem.
 //
-//     import diskfs "github.com/deitch/godiskfs"
+//     import diskfs "github.com/diskfs/go-diskfs"
 //
 //     diskSize := 10*1024*1024 // 10 MB
 //
@@ -114,7 +114,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"github.com/deitch/diskfs/disk"
+	"github.com/diskfs/go-diskfs/disk"
 )
 
 // when we use a disk image with a GPT, we cannot get the logical sector size from the disk via the kernel

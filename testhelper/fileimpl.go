@@ -5,7 +5,7 @@ import "fmt"
 type reader func(b []byte, offset int64) (int, error)
 type writer func(b []byte, offset int64) (int, error)
 
-// FileImpl implement github.com/deitch/diskfs/util/File
+// FileImpl implement github.com/diskfs/go-diskfs/util/File
 // used for testing to enable stubbing out files
 type FileImpl struct {
 	Reader reader

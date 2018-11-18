@@ -1,7 +1,7 @@
 // Package disk provides utilities for working directly with a disk
 //
 // Most of the provided functions are intelligent wrappers around implementations of
-// github.com/deitch/diskfs/partition and github.com/deitch/diskfs/filesystem
+// github.com/diskfs/go-diskfs/partition and github.com/diskfs/go-diskfs/filesystem
 package disk
 
 import (
@@ -10,10 +10,10 @@ import (
 	"io"
 	"os"
 
-	"github.com/deitch/diskfs/filesystem"
-	"github.com/deitch/diskfs/filesystem/fat32"
-	"github.com/deitch/diskfs/filesystem/iso9660"
-	"github.com/deitch/diskfs/partition"
+	"github.com/diskfs/go-diskfs/filesystem"
+	"github.com/diskfs/go-diskfs/filesystem/fat32"
+	"github.com/diskfs/go-diskfs/filesystem/iso9660"
+	"github.com/diskfs/go-diskfs/partition"
 )
 
 // Disk is a reference to a single disk block device or image that has been Create() or Open()
@@ -96,7 +96,7 @@ func (d *Disk) ReadPartitionContents(partition int, writer io.Writer) (int64, er
 // CreateFilesystem creates a filesystem on a disk image, the equivalent of mkfs.
 //
 // pass the desired partition number, or 0 to create the filesystem on the entire block device / disk image,
-// as well as the filesystem type from github.com/deitch/diskfs/filesystem
+// as well as the filesystem type from github.com/diskfs/go-diskfs/filesystem
 //
 // if successful, returns a filesystem-implementing structure for the given filesystem type
 //

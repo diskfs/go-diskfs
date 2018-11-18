@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/deitch/diskfs/util"
+	"github.com/diskfs/go-diskfs/util"
 )
 
 const (

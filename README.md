@@ -11,7 +11,7 @@ You can do nearly everything that go-diskfs provides using shell tools like gdis
 go-diskfs performs all modifications _natively_ in go, without mounting any disks.
 
 ## Usage
-Note: detailed go documentation is available at [godoc.org](https://godoc.org/github.com/deitch/diskfs).
+Note: detailed go documentation is available at [godoc.org](https://godoc.org/github.com/diskfs/go-diskfs).
 
 ### Concepts
 `go-diskfs` has a few basic concepts:
@@ -85,7 +85,7 @@ Some filesystem types are intended to be created once, after which they are read
 The following example will create a fully bootable EFI disk image. It assumes you have a bootable EFI file (any modern Linux kernel compiled with `CONFIG_EFI_STUB=y` will work) available.
 
 ```go
-import diskfs "github.com/deitch/godiskfs"
+import diskfs "github.com/diskfs/goi-diskfs"
 
 espSize int := 100*1024*1024 // 100 MB
 diskSize int := espSize + 4*1024*1024 // 104 MB
@@ -128,7 +128,7 @@ err = rw.Write(kernel)
 There are two ways to run tests: unit and integration (somewhat loosely defined).
 
 * Unit: these tests run entirely within the go process, primarily test unexported and some exported functions, and may use pre-defined test fixtures in a directory's `testdata/` subdirectory. By default, these are run by running `go test ./...` or just `make unit_test`.
-* Integration: these test the exported functions and their ability to create or manipulate correct files. They are validated by running a [docker](https://docker.com) container with the right utilities to validate the output. These are run by running `TEST_IMAGE=deitch/godiskfs go test ./...` or just `make test`. The value of `TEST_IMAGE` will be the image to use to run tests.
+* Integration: these test the exported functions and their ability to create or manipulate correct files. They are validated by running a [docker](https://docker.com) container with the right utilities to validate the output. These are run by running `TEST_IMAGE=diskfs/godiskfs go test ./...` or just `make test`. The value of `TEST_IMAGE` will be the image to use to run tests.
 
 For integration tests to work, the correct docker image must be available. You can create it by running `make image`. Check the [Makefile](./Makefile) to see the `docker build` command used to create it. Running `make test` automatically creates the image for you.
 

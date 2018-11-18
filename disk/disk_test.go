@@ -14,11 +14,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/deitch/diskfs/disk"
-	"github.com/deitch/diskfs/filesystem"
-	"github.com/deitch/diskfs/partition"
-	"github.com/deitch/diskfs/partition/gpt"
-	"github.com/deitch/diskfs/partition/mbr"
+	"github.com/diskfs/go-diskfs/disk"
+	"github.com/diskfs/go-diskfs/filesystem"
+	"github.com/diskfs/go-diskfs/partition"
+	"github.com/diskfs/go-diskfs/partition/gpt"
+	"github.com/diskfs/go-diskfs/partition/mbr"
 )
 
 var (

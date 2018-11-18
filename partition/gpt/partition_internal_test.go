@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/deitch/diskfs/testhelper"
+	"github.com/diskfs/go-diskfs/testhelper"
 )
 
 const (

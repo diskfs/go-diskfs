@@ -8,7 +8,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/deitch/diskfs/util"
+	"github.com/diskfs/go-diskfs/util"
 	uuid "github.com/satori/go.uuid"
 )
 

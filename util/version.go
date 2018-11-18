@@ -1,5 +1,5 @@
 package util
 
 const (
-	AppNameVersion = "https://github.com/deitch/diskfs"
+	AppNameVersion = "https://github.com/diskfs/go-diskfs"
 )

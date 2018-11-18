@@ -10,10 +10,10 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/deitch/diskfs/filesystem"
-	"github.com/deitch/diskfs/filesystem/iso9660"
-	"github.com/deitch/diskfs/partition/mbr"
-	"github.com/deitch/diskfs/testhelper"
+	"github.com/diskfs/go-diskfs/filesystem"
+	"github.com/diskfs/go-diskfs/filesystem/iso9660"
+	"github.com/diskfs/go-diskfs/partition/mbr"
+	"github.com/diskfs/go-diskfs/testhelper"
 )
 
 var (

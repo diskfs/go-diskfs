@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/deitch/diskfs"
-	"github.com/deitch/diskfs/disk"
+	"github.com/diskfs/go-diskfs"
+	"github.com/diskfs/go-diskfs/disk"
 )
 
 const oneMB = 10 * 1024 * 1024

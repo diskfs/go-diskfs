@@ -3,9 +3,9 @@
 // You can use this package to manipulate existing GPT disks, read existing disks, or create entirely
 // new partition tables on disks or disk files.
 //
-// gpt.Table implements the Table interface in github.com/deitch/diskfs/partition
+// gpt.Table implements the Table interface in github.com/diskfs/go-diskfs/partition
 //
-// Normally, the best way to interact with a disk is to use the github.com/deitch/diskfs package,
+// Normally, the best way to interact with a disk is to use the github.com/diskfs/go-diskfs package,
 // which, when necessary, will call this one. When creating a new disk or manipulating an existing one,
 // You will, however, need to interact with an gpt.Table and gpt.Partition structs.
 //

@@ -4,8 +4,8 @@ import (
     "os"
     "fmt"
 
-    "github.com/deitch/diskfs"
-    "github.com/deitch/diskfs/filesystem"
+    "github.com/diskfs/go-diskfs"
+    "github.com/diskfs/go-diskfs/filesystem"
 )
 
 func main() {

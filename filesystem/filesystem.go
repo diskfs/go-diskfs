@@ -1,5 +1,5 @@
 // Package filesystem provides interfaces and constants required for filesystem implementations.
-// All interesting implementations are in subpackages, e.g. github.com/deitch/diskfs/filesystem/fat32
+// All interesting implementations are in subpackages, e.g. github.com/diskfs/go-diskfs/filesystem/fat32
 package filesystem
 
 import (

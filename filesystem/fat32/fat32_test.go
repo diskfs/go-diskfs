@@ -15,10 +15,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/deitch/diskfs/filesystem"
-	"github.com/deitch/diskfs/filesystem/fat32"
-	"github.com/deitch/diskfs/testhelper"
-	"github.com/deitch/diskfs/util"
+	"github.com/diskfs/go-diskfs/filesystem"
+	"github.com/diskfs/go-diskfs/filesystem/fat32"
+	"github.com/diskfs/go-diskfs/testhelper"
+	"github.com/diskfs/go-diskfs/util"
 )
 
 var (
