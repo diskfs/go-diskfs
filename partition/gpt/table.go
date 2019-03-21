@@ -518,7 +518,8 @@ func (t *Table) GetPartitionSize(partition int) (int64, error) {
 		return 0, fmt.Errorf("Requested partition %d but only have %d partitions in table", partition, len(t.Partitions))
 	}
 
-	return int64(t.Partitions[partition-1].Size) * int64(t.LogicalSectorSize), nil
+	// size already is in Bytes
+	return int64(t.Partitions[partition-1].Size), nil
 }
 
 // GetPartitionStart returns the start position in bytes of a single partition
