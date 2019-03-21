@@ -366,13 +366,12 @@ func TestGetPartitionSize(t *testing.T) {
 	})
 	t.Run("valid", func(t *testing.T) {
 		table := GetValidTable()
-		maxPart := len(table.Partitions)
-		request := maxPart - 1
+		request := 1
 		size, err := table.GetPartitionSize(request)
 		if err != nil {
 			t.Errorf("Error was not nil")
 		}
-		expected := int64(table.Partitions[request].Size)
+		expected := int64(table.Partitions[request-1].Size)
 		if size != expected {
 			t.Errorf("Received size %d instead of %d", size, expected)
 		}
