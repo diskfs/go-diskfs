@@ -58,8 +58,8 @@ func TestElToritoValidationEntry(t *testing.T) {
 	e[0x1f] = 0xaa
 
 	// add the checksum - we calculated this manually
-	e[0x1c] = 0x37
-	e[0x1d] = 0xe2
+	e[0x1c] = 0x3c
+	e[0x1d] = 0xd5
 	if bytes.Compare(b, e) != 0 {
 		t.Errorf("Mismatched bytes, actual then expected\n% x\n% x\n", b, e)
 	}
