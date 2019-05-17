@@ -15,6 +15,7 @@ import (
 
 const (
 	dataStartSector = 16
+	defaultVolumeIdentifier = "ISOIMAGE"
 )
 
 // fileInfoFinder a struct that represents an ability to find a path and return its entry
@@ -30,6 +31,8 @@ type FinalizeOptions struct {
 	DeepDirectories bool
 	// ElTorito slice of el torito entry configs
 	ElTorito *ElTorito
+	// VolumeIdentifier custom volume name, defaults to "ISOIMAGE"
+	VolumeIdentifier string
 }
 
 // finalizeFileInfo is a file info useful for finalization
@@ -492,7 +495,11 @@ func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 	var (
 		catEntry *finalizeFileInfo
 		bootcat  []byte
+		volIdentifier string = defaultVolumeIdentifier
 	)
+	if options.VolumeIdentifier != "" {
+		volIdentifier = options.VolumeIdentifier
+	}
 	if options.ElTorito != nil {
 		bootcat, err = options.ElTorito.generateCatalog()
 		if err != nil {
@@ -641,7 +648,7 @@ func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 
 	pvd := &primaryVolumeDescriptor{
 		systemIdentifier:           "",
-		volumeIdentifier:           "ISOIMAGE",
+		volumeIdentifier:           volIdentifier,
 		volumeSize:                 totalSize,
 		setSize:                    1,
 		sequenceNumber:             1,
