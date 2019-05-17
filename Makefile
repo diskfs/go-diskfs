@@ -5,11 +5,8 @@ IMAGE ?= deitch/godiskfs:build
 image:
 	docker build -t $(IMAGE) testhelper/docker
 
-dependencies:
-	@dep ensure
-
-unit_test: dependencies
+unit_test:
 	@go test ./...
 
-test: image dependencies
+test: image
 	TEST_IMAGE=$(IMAGE) go test ./...
