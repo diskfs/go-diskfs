@@ -103,31 +103,57 @@ func (d *Disk) ReadPartitionContents(partition int, writer io.Writer) (int64, er
 // returns error if there was an error creating the filesystem, or the partition table is invalid and did not
 // request the entire disk.
 func (d *Disk) CreateFilesystem(partition int, fstype filesystem.Type) (filesystem.FileSystem, error) {
+	return d.CreateFilesystemSpecial(FilesystemSpec{Partition: partition, FSType: fstype})
+}
+
+// FilesystemSpec represents the details of a filesystem to be created
+type FilesystemSpec struct {
+	Partition   int
+	FSType      filesystem.Type
+	VolumeLabel string
+}
+
+// CreateFilesystemSpecial creates a filesystem on a disk image, the equivalent of mkfs.
+//
+// Required:
+// * desired partition number, or 0 to create the filesystem on the entire block device or
+//   disk image,
+// * the filesystem type from github.com/diskfs/go-diskfs/filesystem
+//
+// Optional:
+// * volume label for those filesystems that support it; under Linux this shows
+//   in '/dev/disks/by-label/<label>'
+//
+// if successful, returns a filesystem-implementing structure for the given filesystem type
+//
+// returns error if there was an error creating the filesystem, or the partition table is invalid and did not
+// request the entire disk.
+func (d *Disk) CreateFilesystemSpecial(spec FilesystemSpec) (filesystem.FileSystem, error) {
 	// find out where the partition starts and ends, or if it is the entire disk
 	var (
 		size, start int64
 		err         error
 	)
 	switch {
-	case partition == 0:
+	case spec.Partition == 0:
 		size = d.Size
 		start = 0
 	case d.Table == nil:
 		return nil, fmt.Errorf("cannot create filesystem on a partition without a partition table")
 	default:
-		size, err = d.Table.GetPartitionSize(partition)
+		size, err = d.Table.GetPartitionSize(spec.Partition)
 		if err != nil {
-			return nil, fmt.Errorf("error getting size of partition %d: %v", partition, err)
+			return nil, fmt.Errorf("error getting size of partition %d: %v", spec.Partition, err)
 		}
-		start, err = d.Table.GetPartitionStart(partition)
+		start, err = d.Table.GetPartitionStart(spec.Partition)
 		if err != nil {
-			return nil, fmt.Errorf("error getting start of partition %d: %v", partition, err)
+			return nil, fmt.Errorf("error getting start of partition %d: %v", spec.Partition, err)
 		}
 	}
 
-	switch fstype {
+	switch spec.FSType {
 	case filesystem.TypeFat32:
-		return fat32.Create(d.File, size, start, d.LogicalBlocksize)
+		return fat32.Create(d.File, size, start, d.LogicalBlocksize, spec.VolumeLabel)
 	case filesystem.TypeISO9660:
 		return iso9660.Create(d.File, size, start, d.LogicalBlocksize)
 	default:
