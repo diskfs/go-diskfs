@@ -198,7 +198,7 @@ func Open(device string) (*disk.Disk, error) {
 	if _, err := os.Stat(device); os.IsNotExist(err) {
 		return nil, fmt.Errorf("provided device %s does not exist", device)
 	}
-	f, err := os.OpenFile(device, os.O_RDONLY|os.O_EXCL, 0600)
+	f, err := os.OpenFile(device, os.O_RDWR|os.O_EXCL, 0600)
 	if err != nil {
 		return nil, fmt.Errorf("Could not open device %s exclusively for writing", device)
 	}
