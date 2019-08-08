@@ -2,7 +2,7 @@
 
 IMAGE ?= deitch/godiskfs:build
 
-GOENV ?= GO111MODULES=on CGO_ENABLED=0
+GOENV ?= GO111MODULE=on CGO_ENABLED=0
 
 image:
 	docker build -t $(IMAGE) testhelper/docker
