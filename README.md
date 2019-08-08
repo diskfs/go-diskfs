@@ -40,6 +40,8 @@ Before you can do anything with a disk - partitions or filesystems - you need to
 * If you have an existing disk or image file, you `Open()` it
 * If you are creating a new one, usually just disk image files, you `Create()` it
 
+The disk will be opened read-write, with exclusive access. If it cannot do either, it will fail.
+
 Once you have a `Disk`, you can work with partitions or filesystems in it.
 
 #### Partitions on a Disk
