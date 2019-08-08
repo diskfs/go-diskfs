@@ -2,14 +2,15 @@
 
 IMAGE ?= deitch/godiskfs:build
 
+GOENV ?= GO111MODULES=on CGO_ENABLED=0
+
 image:
 	docker build -t $(IMAGE) testhelper/docker
 
-dependencies:
-	@dep ensure
+# because we keep making the same typo
+unit-test: unit_test
+unit_test:
+	@$(GOENV) go test ./...
 
-unit_test: dependencies
-	@go test ./...
-
-test: image dependencies
-	TEST_IMAGE=$(IMAGE) go test ./...
+test: image
+	TEST_IMAGE=$(IMAGE) $(GOENV) go test ./...
