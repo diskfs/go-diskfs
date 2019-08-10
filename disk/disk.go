@@ -93,27 +93,14 @@ func (d *Disk) ReadPartitionContents(partition int, writer io.Writer) (int64, er
 	return d.Table.ReadPartitionContents(partition, d.File, writer)
 }
 
-// CreateFilesystem creates a filesystem on a disk image, the equivalent of mkfs.
-//
-// pass the desired partition number, or 0 to create the filesystem on the entire block device / disk image,
-// as well as the filesystem type from github.com/diskfs/go-diskfs/filesystem
-//
-// if successful, returns a filesystem-implementing structure for the given filesystem type
-//
-// returns error if there was an error creating the filesystem, or the partition table is invalid and did not
-// request the entire disk.
-func (d *Disk) CreateFilesystem(partition int, fstype filesystem.Type) (filesystem.FileSystem, error) {
-	return d.CreateFilesystemSpecial(FilesystemSpec{Partition: partition, FSType: fstype})
-}
-
-// FilesystemSpec represents the details of a filesystem to be created
+// FilesystemSpec represents the specification of a filesystem to be created
 type FilesystemSpec struct {
 	Partition   int
 	FSType      filesystem.Type
 	VolumeLabel string
 }
 
-// CreateFilesystemSpecial creates a filesystem on a disk image, the equivalent of mkfs.
+// CreateFilesystem creates a filesystem on a disk image, the equivalent of mkfs.
 //
 // Required:
 // * desired partition number, or 0 to create the filesystem on the entire block device or
@@ -128,7 +115,7 @@ type FilesystemSpec struct {
 //
 // returns error if there was an error creating the filesystem, or the partition table is invalid and did not
 // request the entire disk.
-func (d *Disk) CreateFilesystemSpecial(spec FilesystemSpec) (filesystem.FileSystem, error) {
+func (d *Disk) CreateFilesystem(spec FilesystemSpec) (filesystem.FileSystem, error) {
 	// find out where the partition starts and ends, or if it is the entire disk
 	var (
 		size, start int64

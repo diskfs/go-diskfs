@@ -1,4 +1,4 @@
-package fat32_test
+package fat32
 
 /*
  These tests the exported functions
@@ -162,11 +162,15 @@ func TestFat32Mkdir(t *testing.T) {
 		})
 	})
 	t.Run("Create to Mkdir", func(t *testing.T) {
+		// This is to enable Create "fit" into the common testing logic
+		createShim := func(file util.File, size int64, start int64, blocksize int64) (*fat32.FileSystem, error) {
+			return fat32.Create(file, size, start, blocksize, "")
+		}
 		t.Run("entire image", func(t *testing.T) {
-			runTest(t, 0, 0, fat32.Create)
+			runTest(t, 0, 0, createShim)
 		})
 		t.Run("embedded filesystem", func(t *testing.T) {
-			runTest(t, 500, 1000, fat32.Create)
+			runTest(t, 500, 1000, createShim)
 		})
 	})
 }
@@ -193,7 +197,7 @@ func TestFat32Create(t *testing.T) {
 			}
 			defer os.Remove(f.Name())
 			// create the filesystem
-			fs, err := fat32.Create(f, tt.filesize-pre-post, pre, tt.blocksize)
+			fs, err := fat32.Create(f, tt.filesize-pre-post, pre, tt.blocksize, "")
 			switch {
 			case (err == nil && tt.err != nil) || (err != nil && tt.err == nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
 				t.Errorf("Create(%s, %d, %d, %d): mismatched errors, actual %v expected %v", f.Name(), tt.filesize, 0, tt.blocksize, err, tt.err)
