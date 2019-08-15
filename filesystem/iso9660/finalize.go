@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -844,6 +845,11 @@ func calculateShortnameExtension(name string) (string, string) {
 	// shortname and extension must be upper-case
 	shortname = strings.ToUpper(shortname)
 	extension = strings.ToUpper(extension)
+
+	// replace illegal characters in shortname and extension with _
+	re := regexp.MustCompile("[^A-Z0-9_]")
+	shortname = re.ReplaceAllString(shortname, "_")
+	extension = re.ReplaceAllString(extension, "_")
 
 	return shortname, extension
 }
