@@ -111,8 +111,6 @@ func (p *Partition) writeContents(f util.File, logicalSectorSize, physicalSector
 	b := make([]byte, physicalSectorSize, physicalSectorSize)
 	// we start at the correct byte location
 	start := p.Start * uint32(logicalSectorSize)
-	size := p.Size * uint32(logicalSectorSize)
-
 	// loop in physical sector sizes
 	for {
 		read, err := contents.Read(b)
@@ -120,7 +118,7 @@ func (p *Partition) writeContents(f util.File, logicalSectorSize, physicalSector
 			return total, fmt.Errorf("Could not read contents to pass to partition: %v", err)
 		}
 		tmpTotal := uint64(read) + total
-		if uint32(tmpTotal) > size {
+		if uint32(tmpTotal) > p.Size {
 			return total, fmt.Errorf("Requested to write at least %d bytes to partition but maximum size is %d", tmpTotal, p.Size)
 		}
 		var written int
@@ -138,7 +136,7 @@ func (p *Partition) writeContents(f util.File, logicalSectorSize, physicalSector
 		}
 	}
 	// did the total written equal the size of the partition?
-	if total != uint64(size) {
+	if total != uint64(p.Size) {
 		return total, fmt.Errorf("Write %d bytes to partition but actual size is %d", total, p.Size)
 	}
 	return total, nil
