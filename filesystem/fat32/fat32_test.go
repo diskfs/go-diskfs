@@ -1,4 +1,4 @@
-package fat32
+package fat32_test
 
 /*
  These tests the exported functions
