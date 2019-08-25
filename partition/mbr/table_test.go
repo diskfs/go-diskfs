@@ -470,7 +470,7 @@ func TestWritePartitionContents(t *testing.T) {
 	t.Run("valid", func(t *testing.T) {
 		table := mbr.GetValidTable()
 		request := 0
-		size := table.Partitions[request].Size
+		size := table.Partitions[request].Size * uint32(table.LogicalSectorSize)
 		b := make([]byte, size, size)
 		rand.Read(b)
 		reader := bytes.NewReader(b)

@@ -277,7 +277,7 @@ func TestWriteContents(t *testing.T) {
 			EndHead:       0,
 			EndSector:     2,
 			EndCylinder:   0,
-			Start:         partitionStart,
+			Start:         partitionStart / 512,
 			Size:          1,
 		}
 		// make a byte array that is too big
@@ -290,9 +290,9 @@ func TestWriteContents(t *testing.T) {
 				return len(b), nil
 			},
 		}
-		read, err := partition.writeContents(f, 512, 512, reader)
-		if read != 0 {
-			t.Errorf("Returned %d bytes read instead of 0", read)
+		written, err := partition.writeContents(f, 512, 512, reader)
+		if written != 512 {
+			t.Errorf("Returned %d bytes written instead of 512", written)
 		}
 		if err == nil {
 			t.Errorf("Returned nil error instead of actual errors")
@@ -305,6 +305,7 @@ func TestWriteContents(t *testing.T) {
 
 	t.Run("successful write", func(t *testing.T) {
 		size := 512000
+		sectorSize := size / 512
 		partition := Partition{
 			Bootable:      false,
 			StartHead:     0,
@@ -315,7 +316,7 @@ func TestWriteContents(t *testing.T) {
 			EndSector:     2,
 			EndCylinder:   0,
 			Start:         partitionStart,
-			Size:          uint32(size),
+			Size:          uint32(sectorSize),
 		}
 		b := make([]byte, size, size)
 		rand.Read(b)
@@ -332,7 +333,7 @@ func TestWriteContents(t *testing.T) {
 			t.Errorf("Returned %d bytes written instead of %d", written, size)
 		}
 		if err != nil {
-			t.Errorf("Returned error instead of nil")
+			t.Errorf("Returned error instead of nil: %v", err)
 			return
 		}
 		if bytes.Compare(b2, b) != 0 {
