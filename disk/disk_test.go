@@ -403,7 +403,7 @@ func TestCreateFilesystem(t *testing.T) {
 			Info:              fileInfo,
 		}
 		expected := fmt.Errorf("cannot create filesystem on a partition without a partition table")
-		fs, err := d.CreateFilesystem(1, filesystem.TypeFat32)
+		fs, err := d.CreateFilesystem(disk.FilesystemSpec{Partition: 1, FSType: filesystem.TypeFat32})
 		if err == nil || err.Error() != expected.Error() {
 			t.Errorf("Mismatched error: actual %v expected %v", err, expected)
 		}
@@ -436,7 +436,7 @@ func TestCreateFilesystem(t *testing.T) {
 			Info:              fileInfo,
 			Size:              fileInfo.Size(),
 		}
-		fs, err := d.CreateFilesystem(0, filesystem.TypeFat32)
+		fs, err := d.CreateFilesystem(disk.FilesystemSpec{Partition: 0, FSType: filesystem.TypeFat32})
 		if err != nil {
 			t.Errorf("Error unexpectedly not nil:  %v", err)
 		}
@@ -478,7 +478,7 @@ func TestCreateFilesystem(t *testing.T) {
 			Size:              fileInfo.Size(),
 			Table:             table,
 		}
-		fs, err := d.CreateFilesystem(1, filesystem.TypeFat32)
+		fs, err := d.CreateFilesystem(disk.FilesystemSpec{Partition: 1, FSType: filesystem.TypeFat32})
 		if err != nil {
 			t.Errorf("Error unexpectedly not nil:  %v", err)
 		}

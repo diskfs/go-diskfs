@@ -84,7 +84,10 @@ func (fs *FileSystem) Equal(a *FileSystem) bool {
 //
 // If the provided blocksize is 0, it will use the default of 512 bytes. If it is any number other than 0
 // or 512, it will return an error.
-func Create(f util.File, size int64, start int64, blocksize int64) (*FileSystem, error) {
+func Create(f util.File, size int64, start int64, blocksize int64, volumeLabel string) (*FileSystem, error) {
+	if volumeLabel == "" {
+		volumeLabel = "NO NAME"
+	}
 	// blocksize must be <=0 or exactly SectorSize512 or error
 	if blocksize != int64(SectorSize512) && blocksize > 0 {
 		return nil, fmt.Errorf("blocksize for FAT32 must be either 512 bytes or 0, not %d", blocksize)
@@ -190,7 +193,7 @@ func Create(f util.File, size int64, start int64, blocksize int64) (*FileSystem,
 		bootFileName:          [12]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 		extendedBootSignature: longDos71EBPB,
 		volumeSerialNumber:    volid,
-		volumeLabel:           "NO NAME    ",
+		volumeLabel:           fmt.Sprintf("%-11.11s", volumeLabel), // "NO NAME    "
 		fileSystemType:        fileSystemTypeFAT32,
 		mirrorFlags:           0,
 		reservedFlags:         0,
