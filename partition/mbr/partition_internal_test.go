@@ -277,7 +277,7 @@ func TestWriteContents(t *testing.T) {
 			EndHead:       0,
 			EndSector:     2,
 			EndCylinder:   0,
-			Start:         partitionStart / 512,
+			Start:         partitionStart,
 			Size:          1,
 		}
 		// make a byte array that is too big
@@ -290,6 +290,9 @@ func TestWriteContents(t *testing.T) {
 				return len(b), nil
 			},
 		}
+		// We have a size of 1 sector, or 512 bytes, but are trying to write 2*512.
+		// It should write the first and fail on the second so we expect an error,
+		// along with 512 bytes successfully written
 		written, err := partition.writeContents(f, 512, 512, reader)
 		if written != 512 {
 			t.Errorf("Returned %d bytes written instead of 512", written)
