@@ -106,11 +106,8 @@ package diskfs
 import (
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
-	"path"
-	"strconv"
-	"strings"
 
 	"golang.org/x/sys/unix"
 
@@ -146,37 +143,28 @@ func initDisk(f *os.File) (*disk.Disk, error) {
 	if err != nil {
 		return nil, fmt.Errorf("could not get info for device %s: %x", f.Name(), err)
 	}
-	if devInfo.Size() <= 0 {
-		return nil, fmt.Errorf("could not get file size for device %s", f.Name())
-	}
 	mode := devInfo.Mode()
 	switch {
 	case mode.IsRegular():
 		diskType = disk.File
 		size = devInfo.Size()
+		if size <= 0 {
+			return nil, fmt.Errorf("could not get file size for device %s", f.Name())
+		}
 	case mode&os.ModeDevice != 0:
 		diskType = disk.Device
-		// until we find a better way, like using ioctl()
-		devSizePath := fmt.Sprintf("/sys/class/block/%s/size", path.Base(f.Name()))
-		sizeBytes, err := ioutil.ReadFile(devSizePath)
+		file, err := os.Open(f.Name())
 		if err != nil {
-			return nil, fmt.Errorf("could not get size of device %s from kernel", f.Name())
+			return nil, fmt.Errorf("error opening block device %s: %s\n", f.Name(), err)
 		}
-		// convert to integer and multiply by 512
-		sizeString := strings.TrimSuffix(string(sizeBytes), "\n")
-		size, err = strconv.ParseInt(sizeString, 10, 64)
+		size, err = file.Seek(0, io.SeekEnd)
 		if err != nil {
-			return nil, fmt.Errorf("Invalid size passed: %s", sizeString)
+			return nil, fmt.Errorf("error seeking to end of block device %s: %s\n", f.Name(), err)
 		}
 		lblksize, pblksize, err = getSectorSizes(f)
 		if err != nil {
 			return nil, fmt.Errorf("Unable to get block sizes for device %s: %v", f.Name(), err)
 		}
-		/* ioctl method
-		var stat syscall.Statfs_t
-		syscall.Statfs(f.Name(), &stat)
-		size = stat.Bsize * stat.Blocks
-		*/
 	default:
 		return nil, fmt.Errorf("device %s is neither a block device nor a regular file", f.Name())
 	}
