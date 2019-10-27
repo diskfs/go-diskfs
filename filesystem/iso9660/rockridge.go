@@ -7,6 +7,8 @@ import (
 	"sort"
 	"syscall"
 	"time"
+
+	"gopkg.in/djherbis/times.v1"
 )
 
 const (
@@ -103,20 +105,24 @@ func (r rockRidgeExtension) GetFileExtensions(fp string, isSelf, isParent bool) 
 	if err != nil {
 		return nil, fmt.Errorf("Error reading file %s: %v", fp, err)
 	}
+
+	t, err := times.Lstat(fp)
+	if err != nil {
+		return nil, fmt.Errorf("Error reading times %s: %v", fp, err)
+	}
+
 	// PX
 	nlink := uint32(0)
 	uid := uint32(0)
 	gid := uint32(0)
 	mtime := fi.ModTime()
-	// as a fallback, just use the modtime
-	atime := mtime
-	ctime := mtime
+	atime := t.AccessTime()
+	ctime := t.ChangeTime()
 	if sys := fi.Sys(); sys != nil {
 		if stat, ok := sys.(*syscall.Stat_t); ok {
 			nlink = uint32(stat.Nlink)
 			uid = uint32(stat.Uid)
 			gid = uint32(stat.Gid)
-			ctime, atime = getFileTimes(stat)
 		}
 	}
 	ret = append(ret, rockRidgePosixAttributes{
