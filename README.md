@@ -83,7 +83,10 @@ Some filesystem types are intended to be created once, after which they are read
 * You can `GetFilesystem()` a read-only filesystem and do all read activities, but cannot write to them. Any attempt to `Mkdir()` or `OpenFile()` in write/append/create modes or `Write()` to the file will result in an error.
 * You can `CreateFilesystem()` a read-only filesystem and write anything to it that you want. It will do all of its work in a "scratch" area, or temporary "workspace" directory on your local filesystem. When you are ready to complete it, you call `Finalize()`, after which it becomes read-only. If you forget to `Finalize()` it, you get... nothing. The `Finalize()` function exists only on read-only filesystems.
 
-### Examples
+### Example
+
+There are examples in the [examples/](./examples/) directory. Here is one to get you started.
+
 The following example will create a fully bootable EFI disk image. It assumes you have a bootable EFI file (any modern Linux kernel compiled with `CONFIG_EFI_STUB=y` will work) available.
 
 ```go
