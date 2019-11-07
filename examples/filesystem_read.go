@@ -3,6 +3,9 @@
 package example
 
 import (
+	"fmt"
+	"log"
+
 	diskfs "github.com/diskfs/go-diskfs"
 )
 
