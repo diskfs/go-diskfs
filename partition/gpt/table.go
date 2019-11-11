@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/diskfs/go-diskfs/util"
-	uuid "github.com/satori/go.uuid"
+	uuid "github.com/google/uuid"
 )
 
 // gptSize max potential size for partition array reserved 16384
@@ -79,7 +79,8 @@ func (t *Table) initTable(size int64) {
 		t.primaryHeader = 1
 	}
 	if t.GUID == "" {
-		t.GUID = uuid.NewV4().String()
+		guid, _ := uuid.NewRandom()
+		t.GUID = guid.String()
 	}
 	if t.partitionArraySize == 0 {
 		t.partitionArraySize = 128
@@ -280,15 +281,15 @@ func (t *Table) toGPTBytes(primary bool) ([]byte, error) {
 	// 16 bytes disk GUID
 	var guid uuid.UUID
 	if t.GUID == "" {
-		guid = uuid.NewV4()
+		guid, _ = uuid.NewRandom()
 	} else {
 		var err error
-		guid, err = uuid.FromString(t.GUID)
+		guid, err = uuid.Parse(t.GUID)
 		if err != nil {
 			return nil, fmt.Errorf("Invalid UUID: %s", t.GUID)
 		}
 	}
-	copy(b[56:72], bytesToUUIDBytes(guid.Bytes()))
+	copy(b[56:72], bytesToUUIDBytes(guid[0:16]))
 
 	// starting LBA of array of partition entries
 	binary.LittleEndian.PutUint64(b[72:80], t.partitionArraySector(primary))

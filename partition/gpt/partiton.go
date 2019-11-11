@@ -9,7 +9,7 @@ import (
 	"unicode/utf16"
 
 	"github.com/diskfs/go-diskfs/util"
-	uuid "github.com/satori/go.uuid"
+	uuid "github.com/google/uuid"
 )
 
 // PartitionEntrySize fixed size of a GPT partition entry
@@ -44,18 +44,18 @@ func (p *Partition) toBytes() ([]byte, error) {
 	}
 
 	// partition type GUID is first 16 bytes
-	typeGUID, err := uuid.FromString(string(p.Type))
+	typeGUID, err := uuid.Parse(string(p.Type))
 	if err != nil {
 		return nil, fmt.Errorf("Unable to parse partition type GUID: %v", err)
 	}
-	copy(b[0:16], bytesToUUIDBytes(typeGUID.Bytes()))
+	copy(b[0:16], bytesToUUIDBytes(typeGUID[0:16]))
 
 	// partition identifier GUID is next 16 bytes
-	idGUID, err := uuid.FromString(p.GUID)
+	idGUID, err := uuid.Parse(p.GUID)
 	if err != nil {
 		return nil, fmt.Errorf("Unable to parse partition identifier GUID: %v", err)
 	}
-	copy(b[16:32], bytesToUUIDBytes(idGUID.Bytes()))
+	copy(b[16:32], bytesToUUIDBytes(idGUID[0:16]))
 
 	// next is first LBA and last LBA, uint64 = 8 bytes each
 	binary.LittleEndian.PutUint64(b[32:40], p.Start)
@@ -215,10 +215,10 @@ func (p *Partition) initEntry(blocksize uint64, starting uint64) error {
 	var guid uuid.UUID
 
 	if part.GUID == "" {
-		guid = uuid.NewV4()
+		guid, _ = uuid.NewRandom()
 	} else {
 		var err error
-		guid, err = uuid.FromString(part.GUID)
+		guid, err = uuid.Parse(part.GUID)
 		if err != nil {
 			return fmt.Errorf("Invalid UUID: %s", part.GUID)
 		}
