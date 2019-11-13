@@ -173,7 +173,7 @@ func TestISO9660Read(t *testing.T) {
 	}{
 		{500, 6000, -1, nil, fmt.Errorf("blocksize for ISO9660 must be")},
 		{513, 6000, -1, nil, fmt.Errorf("blocksize for ISO9660 must be")},
-		{512, iso9660.MaxBlocks*2048 + 10000, -1, nil, fmt.Errorf("requested size is larger than maximum allowed ISO9660 size")},
+		{512, iso9660.MaxBlocks*2048 + 10000, -1, nil, fmt.Errorf("blocksize for ISO9660 must be")},
 		{2048, 10000000, -1, &iso9660.FileSystem{}, nil},
 	}
 	for _, tt := range tests {
