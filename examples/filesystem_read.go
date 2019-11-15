@@ -1,6 +1,6 @@
 // The following example will read a filesystem, assuming it to cover the entire image
 
-package example
+package examples
 
 import (
 	"fmt"
@@ -9,8 +9,8 @@ import (
 	diskfs "github.com/diskfs/go-diskfs"
 )
 
-func main() {
-	disk, err := diskfs.Open("./disk.raw")
+func ReadFilesystem(p string) {
+	disk, err := diskfs.Open(p)
 	if err != nil {
 		log.Panic(err)
 	}

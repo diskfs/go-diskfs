@@ -1,6 +1,6 @@
 // The following example will create a fully bootable EFI disk image. It assumes you have a bootable EFI file (any modern Linux kernel compiled with `CONFIG_EFI_STUB=y` will work) available.
 
-package example
+package examples
 
 import (
 	"fmt"
@@ -10,11 +10,11 @@ import (
 
 	diskfs "github.com/diskfs/go-diskfs"
 	diskpkg "github.com/diskfs/go-diskfs/disk"
-	"github.com/diskfs/go-diskfs/partition/gpt"
 	"github.com/diskfs/go-diskfs/filesystem"
+	"github.com/diskfs/go-diskfs/partition/gpt"
 )
 
-func main() {
+func CreateEfi(diskImg string) {
 
 	var (
 		espSize          int64 = 100 * 1024 * 1024     // 100 MB
@@ -26,13 +26,12 @@ func main() {
 	)
 
 	// create a disk image
-	diskImg := "/tmp/disk.img"
 	disk, err := diskfs.Create(diskImg, diskSize, diskfs.Raw)
 	if err != nil {
 		log.Panic(err)
 	}
 	// create a partition table
-	table := gpt.Table{
+	table := &gpt.Table{
 		Partitions: []*gpt.Partition{
 			&gpt.Partition{Start: uint64(partitionStart), End: uint64(partitionEnd), Type: gpt.EFISystemPartition, Name: "EFI System"},
 		},
