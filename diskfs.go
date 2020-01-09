@@ -130,7 +130,33 @@ const (
 	Raw Format = iota
 )
 
-func initDisk(f *os.File) (*disk.Disk, error) {
+// OpenModeOption represents file open modes
+type OpenModeOption int
+
+const (
+	// ReadOnly open file in read only mode
+	ReadOnly OpenModeOption = iota
+	// ReadWriteExclusive open file in read-write exclusive mode
+	ReadWriteExclusive
+)
+
+var openModeOptions = map[OpenModeOption]int{
+	ReadOnly:           os.O_RDONLY,
+	ReadWriteExclusive: os.O_RDWR | os.O_EXCL,
+}
+
+func writableMode(mode OpenModeOption) bool {
+	m, ok := openModeOptions[mode]
+	if ok {
+		if m&os.O_RDWR != 0 || m&os.O_WRONLY != 0 {
+			return true
+		}
+	}
+
+	return false
+}
+
+func initDisk(f *os.File, openMode OpenModeOption) (*disk.Disk, error) {
 	var (
 		diskType disk.Type
 		size     int64
@@ -173,25 +199,66 @@ func initDisk(f *os.File) (*disk.Disk, error) {
 	//var goodBlocks, orphanedBlocks int
 	//goodBlocks = size / lblksize
 
-	return &disk.Disk{File: f, Info: devInfo, Type: diskType, Size: size, LogicalBlocksize: lblksize, PhysicalBlocksize: pblksize}, nil
+	writable := writableMode(openMode)
+
+	return &disk.Disk{
+		File:              f,
+		Info:              devInfo,
+		Type:              diskType,
+		Size:              size,
+		LogicalBlocksize:  lblksize,
+		PhysicalBlocksize: pblksize,
+		Writable:          writable,
+	}, nil
 }
 
-// Open a Disk from a path to a device
+func checkDevice(device string) error {
+	if device == "" {
+		return errors.New("must pass device name")
+	}
+	if _, err := os.Stat(device); os.IsNotExist(err) {
+		return fmt.Errorf("provided device %s does not exist", device)
+	}
+
+	return nil
+}
+
+// Open a Disk from a path to a device in read-write exclusive mode
 // Should pass a path to a block device e.g. /dev/sda or a path to a file /tmp/foo.img
 // The provided device must exist at the time you call Open()
 func Open(device string) (*disk.Disk, error) {
-	if device == "" {
-		return nil, errors.New("must pass device name")
-	}
-	if _, err := os.Stat(device); os.IsNotExist(err) {
-		return nil, fmt.Errorf("provided device %s does not exist", device)
+	err := checkDevice(device)
+	if err != nil {
+		return nil, err
 	}
 	f, err := os.OpenFile(device, os.O_RDWR|os.O_EXCL, 0600)
 	if err != nil {
 		return nil, fmt.Errorf("Could not open device %s exclusively for writing", device)
 	}
 	// return our disk
-	return initDisk(f)
+	return initDisk(f, ReadWriteExclusive)
+}
+
+// OpenWithMode open a Disk from a path to a device with a given open mode
+// If the device is open in read-only mode, operations to change disk partitioning will
+// return an error
+// Should pass a path to a block device e.g. /dev/sda or a path to a file /tmp/foo.img
+// The provided device must exist at the time you call OpenWithMode()
+func OpenWithMode(device string, mode OpenModeOption) (*disk.Disk, error) {
+	err := checkDevice(device)
+	if err != nil {
+		return nil, err
+	}
+	m, ok := openModeOptions[mode]
+	if !ok {
+		return nil, errors.New("unsupported file open mode")
+	}
+	f, err := os.OpenFile(device, m, 0600)
+	if err != nil {
+		return nil, fmt.Errorf("Could not open device %s exclusively for writing", device)
+	}
+	// return our disk
+	return initDisk(f, mode)
 }
 
 // Create a Disk from a path to a device
@@ -213,7 +280,7 @@ func Create(device string, size int64, format Format) (*disk.Disk, error) {
 		return nil, fmt.Errorf("Could not expand device %s to size %d", device, size)
 	}
 	// return our disk
-	return initDisk(f)
+	return initDisk(f, ReadWriteExclusive)
 }
 
 // to get the logical and physical sector sizes

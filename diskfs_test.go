@@ -66,16 +66,31 @@ func TestOpen(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		disk, err := diskfs.Open(tt.path)
+		d, err := diskfs.Open(tt.path)
 		msg := fmt.Sprintf("Open(%s)", tt.path)
 		switch {
 		case (err == nil && tt.err != nil) || (err != nil && tt.err == nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
 			t.Errorf("%s: mismatched errors, actual %v expected %v", msg, err, tt.err)
-		case (disk == nil && tt.disk != nil) || (disk != nil && tt.disk == nil):
-			t.Errorf("%s: mismatched disk, actual %v expected %v", msg, disk, tt.disk)
-		case disk != nil && (disk.LogicalBlocksize != tt.disk.LogicalBlocksize || disk.PhysicalBlocksize != tt.disk.PhysicalBlocksize || disk.Size != tt.disk.Size || disk.Type != tt.disk.Type):
+		case (d == nil && tt.disk != nil) || (d != nil && tt.disk == nil):
+			t.Errorf("%s: mismatched disk, actual %v expected %v", msg, d, tt.disk)
+		case d != nil && (d.LogicalBlocksize != tt.disk.LogicalBlocksize || d.PhysicalBlocksize != tt.disk.PhysicalBlocksize || d.Size != tt.disk.Size || d.Type != tt.disk.Type):
 			t.Errorf("%s: mismatched disk, actual then expected", msg)
-			t.Logf("%v", disk)
+			t.Logf("%v", d)
+			t.Logf("%v", tt.disk)
+		}
+	}
+
+	for _, tt := range tests {
+		d, err := diskfs.OpenWithMode(tt.path, diskfs.ReadOnly)
+		msg := fmt.Sprintf("Open(%s)", tt.path)
+		switch {
+		case (err == nil && tt.err != nil) || (err != nil && tt.err == nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
+			t.Errorf("%s: mismatched errors, actual %v expected %v", msg, err, tt.err)
+		case (d == nil && tt.disk != nil) || (d != nil && tt.disk == nil):
+			t.Errorf("%s: mismatched disk, actual %v expected %v", msg, d, tt.disk)
+		case d != nil && (d.LogicalBlocksize != tt.disk.LogicalBlocksize || d.PhysicalBlocksize != tt.disk.PhysicalBlocksize || d.Size != tt.disk.Size || d.Type != tt.disk.Type):
+			t.Errorf("%s: mismatched disk, actual then expected", msg)
+			t.Logf("%v", d)
 			t.Logf("%v", tt.disk)
 		}
 	}
