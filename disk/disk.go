@@ -25,6 +25,7 @@ type Disk struct {
 	LogicalBlocksize  int64
 	PhysicalBlocksize int64
 	Table             partition.Table
+	Writable          bool
 }
 
 // Type represents the type of disk this is
@@ -35,6 +36,10 @@ const (
 	File Type = iota
 	// Device is an OS-managed block device
 	Device
+)
+
+var (
+	errIncorrectOpenMode = errors.New("disk file or device not open for write")
 )
 
 // GetPartitionTable retrieves a PartitionTable for a Disk
@@ -51,6 +56,9 @@ func (d *Disk) GetPartitionTable() (partition.Table, error) {
 //
 // Actual writing of the table is delegated to the individual implementation
 func (d *Disk) Partition(table partition.Table) error {
+	if !d.Writable {
+		return errIncorrectOpenMode
+	}
 	// fill in the uuid
 	err := table.Write(d.File, d.Info.Size())
 	if err != nil {
@@ -67,6 +75,9 @@ func (d *Disk) Partition(table partition.Table) error {
 // returns an error if there was an error writing to the disk, reading from the reader, the table
 // is invalid, or the partition is invalid
 func (d *Disk) WritePartitionContents(partition int, reader io.Reader) (int64, error) {
+	if !d.Writable {
+		return -1, errIncorrectOpenMode
+	}
 	if d.Table == nil {
 		return -1, fmt.Errorf("cannot write contents of a partition on a disk without a partition table")
 	}
@@ -122,6 +133,8 @@ func (d *Disk) CreateFilesystem(spec FilesystemSpec) (filesystem.FileSystem, err
 		err         error
 	)
 	switch {
+	case !d.Writable:
+		return nil, errIncorrectOpenMode
 	case spec.Partition == 0:
 		size = d.Size
 		start = 0

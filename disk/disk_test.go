@@ -69,6 +69,7 @@ func TestGetPartitionTable(t *testing.T) {
 		File:              f,
 		LogicalBlocksize:  512,
 		PhysicalBlocksize: 512,
+		Writable:          false,
 	}
 	table, err := d.GetPartitionTable()
 
@@ -109,6 +110,7 @@ func TestPartition(t *testing.T) {
 			LogicalBlocksize:  512,
 			PhysicalBlocksize: 512,
 			Info:              fileInfo,
+			Writable:          true,
 		}
 		// this is partition start and end in sectors, not bytes
 		sectorSize := 512
@@ -150,6 +152,7 @@ func TestPartition(t *testing.T) {
 			LogicalBlocksize:  512,
 			PhysicalBlocksize: 512,
 			Info:              fileInfo,
+			Writable:          true,
 		}
 		// this is partition start and end in sectors, not bytes
 		sectorSize := 512
@@ -167,71 +170,94 @@ func TestPartition(t *testing.T) {
 			t.Errorf("Unexpected err: %v", err)
 		}
 	})
+	t.Run("readonly", func(t *testing.T) {
+		d := &disk.Disk{
+			Writable: false,
+		}
+		expectedErr := fmt.Errorf("disk file or device not open for write")
+		err := d.Partition(&mbr.Table{})
+		if err.Error() != expectedErr.Error() {
+			t.Errorf("Mismatched error, actual '%v', expected '%v'", err, expectedErr)
+		}
+	})
 }
 
 func TestWritePartitionContents(t *testing.T) {
-	oneMB := uint64(1024 * 1024)
-	partitionStart := uint64(2048)
-	partitionSize := uint64(5) * oneMB
-	partitionEnd := partitionStart + partitionSize/512 - 1
-	table := &gpt.Table{
-		Partitions: []*gpt.Partition{
-			{Start: 2048, End: partitionEnd, Type: gpt.EFISystemPartition, Name: "EFI System"},
-		},
-		LogicalSectorSize: 512,
-	}
-	tests := []struct {
-		table     partition.Table
-		partition int
-		err       error
-	}{
-		// various invalid table scenarios
-		{nil, 1, fmt.Errorf("cannot write contents of a partition on a disk without a partition table")},
-		{nil, 0, fmt.Errorf("cannot write contents of a partition on a disk without a partition table")},
-		{nil, -1, fmt.Errorf("cannot write contents of a partition on a disk without a partition table")},
-		// invalid partition number scenarios
-		{table, -1, fmt.Errorf("cannot write contents of a partition without specifying a partition")},
-		{table, 5, fmt.Errorf("Requested partition %d but only have %d partitions", 5, 1)},
-		{table, 1, nil},
-	}
-	for _, tt := range tests {
-		f, err := tmpDisk("")
-		if err != nil {
-			t.Fatalf("Error creating new temporary disk: %v", err)
+	t.Run("gpt", func(t *testing.T) {
+		oneMB := uint64(1024 * 1024)
+		partitionStart := uint64(2048)
+		partitionSize := uint64(5) * oneMB
+		partitionEnd := partitionStart + partitionSize/512 - 1
+		table := &gpt.Table{
+			Partitions: []*gpt.Partition{
+				{Start: 2048, End: partitionEnd, Type: gpt.EFISystemPartition, Name: "EFI System"},
+			},
+			LogicalSectorSize: 512,
 		}
-		defer f.Close()
-
-		if keepTmpFiles {
-			defer os.Remove(f.Name())
-		} else {
-			fmt.Println(f.Name())
+		tests := []struct {
+			table     partition.Table
+			partition int
+			err       error
+		}{
+			// various invalid table scenarios
+			{nil, 1, fmt.Errorf("cannot write contents of a partition on a disk without a partition table")},
+			{nil, 0, fmt.Errorf("cannot write contents of a partition on a disk without a partition table")},
+			{nil, -1, fmt.Errorf("cannot write contents of a partition on a disk without a partition table")},
+			// invalid partition number scenarios
+			{table, -1, fmt.Errorf("cannot write contents of a partition without specifying a partition")},
+			{table, 5, fmt.Errorf("Requested partition %d but only have %d partitions", 5, 1)},
+			{table, 1, nil},
 		}
+		for _, tt := range tests {
+			f, err := tmpDisk("")
+			if err != nil {
+				t.Fatalf("Error creating new temporary disk: %v", err)
+			}
+			defer f.Close()
 
-		fileInfo, err := f.Stat()
-		if err != nil {
-			t.Fatalf("Error reading info on temporary disk: %v", err)
+			if keepTmpFiles {
+				defer os.Remove(f.Name())
+			} else {
+				fmt.Println(f.Name())
+			}
+
+			fileInfo, err := f.Stat()
+			if err != nil {
+				t.Fatalf("Error reading info on temporary disk: %v", err)
+			}
+
+			d := &disk.Disk{
+				File:              f,
+				LogicalBlocksize:  512,
+				PhysicalBlocksize: 512,
+				Info:              fileInfo,
+				Table:             tt.table,
+				Writable:          true,
+			}
+			b := make([]byte, partitionSize, partitionSize)
+			rand.Read(b)
+			reader := bytes.NewReader(b)
+			written, err := d.WritePartitionContents(tt.partition, reader)
+			switch {
+			case (err == nil && tt.err != nil) || (err != nil && tt.err == nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
+				t.Errorf("mismatched error, actual then expected")
+				t.Logf("%v", err)
+				t.Logf("%v", tt.err)
+			case tt.err != nil && written > 0:
+				t.Errorf("Unexpectedly wrote %d bytes, expected 0", written)
+			}
 		}
-
+	})
+	t.Run("readonly", func(t *testing.T) {
 		d := &disk.Disk{
-			File:              f,
-			LogicalBlocksize:  512,
-			PhysicalBlocksize: 512,
-			Info:              fileInfo,
-			Table:             tt.table,
+			Writable: false,
 		}
-		b := make([]byte, partitionSize, partitionSize)
-		rand.Read(b)
-		reader := bytes.NewReader(b)
-		written, err := d.WritePartitionContents(tt.partition, reader)
-		switch {
-		case (err == nil && tt.err != nil) || (err != nil && tt.err == nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
-			t.Errorf("mismatched error, actual then expected")
-			t.Logf("%v", err)
-			t.Logf("%v", tt.err)
-		case tt.err != nil && written > 0:
-			t.Errorf("Unexpectedly wrote %d bytes, expected 0", written)
+		expectedErr := fmt.Errorf("disk file or device not open for write")
+		_, err := d.WritePartitionContents(0, nil)
+		if err.Error() != expectedErr.Error() {
+			t.Errorf("mismatched error, actual '%v' expected '%v'", err, expectedErr)
 		}
-	}
+	})
 }
 
 func TestReadPartitionContents(t *testing.T) {
@@ -286,6 +312,7 @@ func TestReadPartitionContents(t *testing.T) {
 				PhysicalBlocksize: 512,
 				Info:              fileInfo,
 				Table:             tt.table,
+				Writable:          false,
 			}
 			var writer bytes.Buffer
 			read, err := d.ReadPartitionContents(tt.partition, &writer)
@@ -356,6 +383,7 @@ func TestReadPartitionContents(t *testing.T) {
 				PhysicalBlocksize: 512,
 				Info:              fileInfo,
 				Table:             tt.table,
+				Writable:          false,
 			}
 			var writer bytes.Buffer
 			read, err := d.ReadPartitionContents(tt.partition, &writer)
@@ -401,6 +429,7 @@ func TestCreateFilesystem(t *testing.T) {
 			LogicalBlocksize:  512,
 			PhysicalBlocksize: 512,
 			Info:              fileInfo,
+			Writable:          true,
 		}
 		expected := fmt.Errorf("cannot create filesystem on a partition without a partition table")
 		fs, err := d.CreateFilesystem(disk.FilesystemSpec{Partition: 1, FSType: filesystem.TypeFat32})
@@ -435,6 +464,7 @@ func TestCreateFilesystem(t *testing.T) {
 			PhysicalBlocksize: 512,
 			Info:              fileInfo,
 			Size:              fileInfo.Size(),
+			Writable:          true,
 		}
 		fs, err := d.CreateFilesystem(disk.FilesystemSpec{Partition: 0, FSType: filesystem.TypeFat32})
 		if err != nil {
@@ -477,6 +507,7 @@ func TestCreateFilesystem(t *testing.T) {
 			Info:              fileInfo,
 			Size:              fileInfo.Size(),
 			Table:             table,
+			Writable:          true,
 		}
 		fs, err := d.CreateFilesystem(disk.FilesystemSpec{Partition: 1, FSType: filesystem.TypeFat32})
 		if err != nil {
@@ -486,7 +517,16 @@ func TestCreateFilesystem(t *testing.T) {
 			t.Errorf("Returned filesystem was unexpectedly nil")
 		}
 	})
-
+	t.Run("readonly", func(t *testing.T) {
+		d := &disk.Disk{
+			Writable: false,
+		}
+		expectedErr := fmt.Errorf("disk file or device not open for write")
+		_, err := d.CreateFilesystem(disk.FilesystemSpec{})
+		if err.Error() != expectedErr.Error() {
+			t.Errorf("Mismatched error, actual '%v', expected '%v'", err, expectedErr)
+		}
+	})
 }
 
 func TestGetFilesystem(t *testing.T) {
@@ -513,6 +553,7 @@ func TestGetFilesystem(t *testing.T) {
 			LogicalBlocksize:  512,
 			PhysicalBlocksize: 512,
 			Info:              fileInfo,
+			Writable:          false,
 		}
 		expected := fmt.Errorf("cannot read filesystem on a partition without a partition table")
 		fs, err := d.GetFilesystem(1)
@@ -547,6 +588,7 @@ func TestGetFilesystem(t *testing.T) {
 			PhysicalBlocksize: 512,
 			Info:              fileInfo,
 			Size:              fileInfo.Size(),
+			Writable:          false,
 		}
 		fs, err := d.GetFilesystem(0)
 		if err != nil {
@@ -589,6 +631,7 @@ func TestGetFilesystem(t *testing.T) {
 			Info:              fileInfo,
 			Size:              fileInfo.Size(),
 			Table:             table,
+			Writable:          false,
 		}
 		fs, err := d.GetFilesystem(1)
 		if err != nil {
