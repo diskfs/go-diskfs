@@ -141,8 +141,8 @@ const (
 )
 
 // OpenModeOption.String()
-func (d OpenModeOption) String() string {
-	switch d {
+func (m OpenModeOption) String() string {
+	switch m {
 	case ReadOnly:
 		return "read-only"
 	case ReadWriteExclusive:
