@@ -140,6 +140,18 @@ const (
 	ReadWriteExclusive
 )
 
+// OpenModeOption.String()
+func (m OpenModeOption) String() string {
+	switch m {
+	case ReadOnly:
+		return "read-only"
+	case ReadWriteExclusive:
+		return "read-write exclusive"
+	default:
+		return "unknown"
+	}
+}
+
 var openModeOptions = map[OpenModeOption]int{
 	ReadOnly:           os.O_RDONLY,
 	ReadWriteExclusive: os.O_RDWR | os.O_EXCL,
@@ -255,7 +267,7 @@ func OpenWithMode(device string, mode OpenModeOption) (*disk.Disk, error) {
 	}
 	f, err := os.OpenFile(device, m, 0600)
 	if err != nil {
-		return nil, fmt.Errorf("Could not open device %s exclusively for writing", device)
+		return nil, fmt.Errorf("Could not open device %s with mode %v: %v", device, mode, err)
 	}
 	// return our disk
 	return initDisk(f, mode)
