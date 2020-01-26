@@ -281,7 +281,7 @@ func Create(f util.File, size int64, start int64, blocksize int64, volumeLabel s
 
 	// create root directory
 	// there is nothing in there
-	return &FileSystem{
+	fs := &FileSystem{
 		bootSector:      bs,
 		fsis:            fsis,
 		table:           fat,
@@ -290,7 +290,23 @@ func Create(f util.File, size int64, start int64, blocksize int64, volumeLabel s
 		start:           start,
 		size:            size,
 		file:            f,
-	}, nil
+	}
+
+	// be sure to zero out the root cluster, so we do not pick up phantom
+	// entries.
+	clusterStart := uint32(fs.start) + fs.dataStart
+	// length of cluster in bytes
+	tmpb := make([]byte, fs.bytesPerCluster)
+	// zero out the root directory cluster
+	written, err := f.WriteAt(tmpb, int64(clusterStart))
+	if err != nil {
+		return nil, fmt.Errorf("failed to zero out root directory: %v", err)
+	}
+	if written != len(tmpb) || written != fs.bytesPerCluster {
+		return nil, fmt.Errorf("incomplete zero out of root directory, wrote %d bytes instead of expected %d for cluster size %d", written, len(b), fs.bytesPerCluster)
+	}
+
+	return fs, nil
 }
 
 // Read reads a filesystem from a given disk.
