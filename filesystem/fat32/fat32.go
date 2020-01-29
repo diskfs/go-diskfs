@@ -88,6 +88,8 @@ func Create(f util.File, size int64, start int64, blocksize int64, volumeLabel s
 	if volumeLabel == "" {
 		volumeLabel = "NO NAME"
 	}
+	// ensure the volumeLabel is proper sized
+	volumeLabel = fmt.Sprintf("%-11.11s", volumeLabel)
 	// blocksize must be <=0 or exactly SectorSize512 or error
 	if blocksize != int64(SectorSize512) && blocksize > 0 {
 		return nil, fmt.Errorf("blocksize for FAT32 must be either 512 bytes or 0, not %d", blocksize)
@@ -304,6 +306,24 @@ func Create(f util.File, size int64, start int64, blocksize int64, volumeLabel s
 	}
 	if written != len(tmpb) || written != fs.bytesPerCluster {
 		return nil, fmt.Errorf("incomplete zero out of root directory, wrote %d bytes instead of expected %d for cluster size %d", written, len(b), fs.bytesPerCluster)
+	}
+
+	// create a volumelabel entry in the root directory
+	rootDir := &Directory{
+		directoryEntry: directoryEntry{
+			clusterLocation: uint32(fs.table.rootDirCluster),
+			isSubdirectory:  true,
+			filesystem:      fs,
+		},
+	}
+	_, err = fs.mkLabel(rootDir, volumeLabel)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create volume label root directory entry '%s': %v", volumeLabel, err)
+	}
+	// write the root directory entries to disk
+	err = fs.writeDirectoryEntries(rootDir)
+	if err != nil {
+		return nil, fmt.Errorf("Error writing root directory to disk: %v", err)
 	}
 
 	return fs, nil
@@ -624,7 +644,7 @@ func (fs *FileSystem) writeDirectoryEntries(dir *Directory) error {
 	return nil
 }
 
-// make a file
+// mkFile make a file in a directory
 func (fs *FileSystem) mkFile(parent *Directory, name string) (*directoryEntry, error) {
 	// get a cluster chain for the file
 	clusters, err := fs.allocateSpace(1, 0)
@@ -633,6 +653,12 @@ func (fs *FileSystem) mkFile(parent *Directory, name string) (*directoryEntry, e
 	}
 	// create a directory entry for the file
 	return parent.createEntry(name, clusters[0], false)
+}
+
+// mkLabel make a volume label in a directory
+func (fs *FileSystem) mkLabel(parent *Directory, name string) (*directoryEntry, error) {
+	// create a directory entry for the file
+	return parent.createVolumeLabel(name)
 }
 
 // readDirWithMkdir - walks down a directory tree to the last entry

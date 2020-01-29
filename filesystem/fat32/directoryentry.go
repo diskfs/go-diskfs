@@ -85,6 +85,9 @@ func (de *directoryEntry) toBytes() ([]byte, error) {
 	dosBytes[21] = clusterLocation[3]
 
 	// set the flags
+	if de.isVolumeLabel {
+		dosBytes[11] = dosBytes[11] | 0x08
+	}
 	if de.isSubdirectory {
 		dosBytes[11] = dosBytes[11] | 0x10
 	}
