@@ -69,3 +69,26 @@ func (d *Directory) createEntry(name string, cluster uint32, dir bool) (*directo
 	d.entries = append(d.entries, &entry)
 	return &entry, nil
 }
+
+// createVolumeLabel create a volume label entry in the given directory, and return the handle to it
+func (d *Directory) createVolumeLabel(name string) (*directoryEntry, error) {
+	// allocate a slot for the new filename in the existing directory
+	entry := directoryEntry{
+		filenameLong:      "",
+		longFilenameSlots: -1, // indicate that we do not know how many slots, which will force a recalculation
+		filenameShort:     name[:8],
+		fileExtension:     name[8:11],
+		fileSize:          uint32(0),
+		clusterLocation:   0,
+		filesystem:        d.filesystem,
+		createTime:        time.Now(),
+		modifyTime:        time.Now(),
+		accessTime:        time.Now(),
+		isSubdirectory:    false,
+		isNew:             true,
+		isVolumeLabel:     true,
+	}
+
+	d.entries = append(d.entries, &entry)
+	return &entry, nil
+}
