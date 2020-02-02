@@ -296,11 +296,11 @@ func Create(f util.File, size int64, start int64, blocksize int64, volumeLabel s
 
 	// be sure to zero out the root cluster, so we do not pick up phantom
 	// entries.
-	clusterStart := uint32(fs.start) + fs.dataStart
+	clusterStart := fs.start + int64(fs.dataStart)
 	// length of cluster in bytes
 	tmpb := make([]byte, fs.bytesPerCluster)
 	// zero out the root directory cluster
-	written, err := f.WriteAt(tmpb, int64(clusterStart))
+	written, err := f.WriteAt(tmpb, clusterStart)
 	if err != nil {
 		return nil, fmt.Errorf("failed to zero out root directory: %v", err)
 	}
@@ -581,11 +581,11 @@ func (fs *FileSystem) readDirectory(dir *Directory) ([]*directoryEntry, error) {
 	b := make([]byte, 0, byteCount)
 	for _, cluster := range clusterList {
 		// bytes where the cluster starts
-		clusterStart := uint32(fs.start) + fs.dataStart + (cluster-2)*uint32(fs.bytesPerCluster)
+		clusterStart := fs.start + int64(fs.dataStart) + int64(cluster-2)*int64(fs.bytesPerCluster)
 		// length of cluster in bytes
 		tmpb := make([]byte, fs.bytesPerCluster, fs.bytesPerCluster)
 		// read the entire cluster
-		fs.file.ReadAt(tmpb, int64(clusterStart))
+		fs.file.ReadAt(tmpb, clusterStart)
 		b = append(b, tmpb...)
 	}
 	// get the directory
@@ -631,9 +631,9 @@ func (fs *FileSystem) writeDirectoryEntries(dir *Directory) error {
 	// read the data from all of the cluster entries in the list
 	for i, cluster := range clusterList {
 		// bytes where the cluster starts
-		clusterStart := uint32(fs.start) + fs.dataStart + (cluster-2)*uint32(fs.bytesPerCluster)
+		clusterStart := fs.start + int64(fs.dataStart) + int64(cluster-2)*int64(fs.bytesPerCluster)
 		bStart := i * fs.bytesPerCluster
-		written, err := fs.file.WriteAt(b[bStart:bStart+fs.bytesPerCluster], int64(clusterStart))
+		written, err := fs.file.WriteAt(b[bStart:bStart+fs.bytesPerCluster], clusterStart)
 		if err != nil {
 			return fmt.Errorf("Error writing directory entries: %v", err)
 		}
