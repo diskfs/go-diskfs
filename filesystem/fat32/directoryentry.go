@@ -153,6 +153,7 @@ byteLoop:
 		extension := re.ReplaceAllString(string(b[i+8:i+11]), "")
 		isSubdirectory := b[i+11]&0x10 == 0x10
 		isArchiveDirty := b[i+11]&0x20 == 0x20
+		isVolumeLabel := b[i+11]&0x08 == 0x08
 		lowercaseShortname := b[i+12]&0x08 == 0x08
 		lowercaseExtension := b[i+12]&0x04 == 0x04
 
@@ -168,6 +169,7 @@ byteLoop:
 			accessTime:         dateTimeToTime(accessDate, 0),
 			isSubdirectory:     isSubdirectory,
 			isArchiveDirty:     isArchiveDirty,
+			isVolumeLabel:      isVolumeLabel,
 			lowercaseShortname: lowercaseShortname,
 			lowercaseExtension: lowercaseExtension,
 		}
