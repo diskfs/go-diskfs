@@ -60,7 +60,7 @@ func (d *Disk) Partition(table partition.Table) error {
 		return errIncorrectOpenMode
 	}
 	// fill in the uuid
-	err := table.Write(d.File, d.Info.Size())
+	err := table.Write(d.File, d.Size)
 	if err != nil {
 		return fmt.Errorf("Failed to write partition table: %v", err)
 	}

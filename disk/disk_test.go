@@ -111,6 +111,7 @@ func TestPartition(t *testing.T) {
 			PhysicalBlocksize: 512,
 			Info:              fileInfo,
 			Writable:          true,
+			Size:              fileInfo.Size(),
 		}
 		// this is partition start and end in sectors, not bytes
 		sectorSize := 512
