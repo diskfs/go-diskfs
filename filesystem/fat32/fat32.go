@@ -563,7 +563,7 @@ func (fs *FileSystem) getClusterList(firstCluster uint32) ([]uint32, error) {
 		case fs.table.isEoc(newCluster):
 			complete = true
 		case cluster <= 2:
-			return nil, fmt.Errorf("Invalid cluster chain at %d", cluster)
+			fmt.Println("Invalid cluster chain at:", cluster)
 		}
 		cluster = newCluster
 	}
