@@ -7,7 +7,6 @@ package disk
 import (
 	"errors"
 	"fmt"
-	"golang.org/x/sys/unix"
 	"io"
 	"os"
 
@@ -72,7 +71,9 @@ func (d *Disk) Partition(table partition.Table) error {
 	// the disk file is an actual block device
 	if d.Type == Device {
 		err = d.ReReadPartitionTable()
-		return fmt.Errorf("Unable to re-read the partition table. Kernel still uses old partition table: %v", err)
+		if err != nil {
+			return fmt.Errorf("Unable to re-read the partition table. Kernel still uses old partition table: %v", err)
+		}
 	}
 	return nil
 }
@@ -212,17 +213,4 @@ func (d *Disk) GetFilesystem(partition int) (filesystem.FileSystem, error) {
 		return iso9660FS, nil
 	}
 	return nil, fmt.Errorf("Unknown filesystem on partition %d", partition)
-}
-
-// ReReadPartitionTable forces the kernel to re-read the partition table
-// on the disk.
-//
-// It is done via an ioctl call with request as BLKRRPART.
-func (d *Disk) ReReadPartitionTable() error {
-	fd := d.File.Fd()
-	_, err := unix.IoctlGetInt(int(fd), blkRRPart)
-	if err != nil {
-		return fmt.Errorf("Unable to re-read partition table: %v", err)
-	}
-	return nil
 }
