@@ -36,8 +36,6 @@ const (
 	File Type = iota
 	// Device is an OS-managed block device
 	Device
-	// blkRRPart is the ioctl request to re-read the partition table
-	blkRRPart = 0x0000125F
 )
 
 var (
