@@ -65,6 +65,14 @@ func (d *Disk) Partition(table partition.Table) error {
 		return fmt.Errorf("Failed to write partition table: %v", err)
 	}
 	d.Table = table
+	// the partition table needs to be re-read only if
+	// the disk file is an actual block device
+	if d.Type == Device {
+		err = d.ReReadPartitionTable()
+		if err != nil {
+			return fmt.Errorf("Unable to re-read the partition table. Kernel still uses old partition table: %v", err)
+		}
+	}
 	return nil
 }
 
