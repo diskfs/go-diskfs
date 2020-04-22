@@ -532,6 +532,7 @@ func timeToBytes(t time.Time) []byte {
 
 // convert a string to ascii bytes, but only accept valid d-characters
 func validateFilename(s string, isDir bool) error {
+	lim := 150
 	var err error
 	// 		return nil, fmt.Errorf("Invalid d-character")
 	if isDir {
@@ -546,7 +547,7 @@ func validateFilename(s string, isDir bool) error {
 		switch {
 		case !re.MatchString(s):
 			err = fmt.Errorf("File name must be of characters from A-Z0-9_, followed by an optional '.' and an extension of the same characters")
-		case len(strings.Replace(s, ".", "", -1)) > 30:
+		case len(strings.Replace(s, ".", "", -1)) > lim:
 			err = fmt.Errorf("File name must be at most 30 characters, not including the separator '.'")
 		}
 	}
