@@ -330,13 +330,22 @@ func parseSupplementaryVolumeDescriptor(b []byte) (*supplementaryVolumeDescripto
 	if err != nil {
 		return nil, fmt.Errorf("Unable to convert modification date/time from bytes: %v", err)
 	}
-	expiration, err := decBytesToTime(b[847 : 847+17])
-	if err != nil {
-		return nil, fmt.Errorf("Unable to convert expiration date/time from bytes: %v", err)
+	// expiration can be never
+	nullBytes := []byte{48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 0}
+	var expiration, effective time.Time
+	expirationBytes := b[847 : 847+17]
+	effectiveBytes := b[864 : 864+17]
+	if bytes.Compare(expirationBytes, nullBytes) != 0 {
+		expiration, err = decBytesToTime(expirationBytes)
+		if err != nil {
+			return nil, fmt.Errorf("Unable to convert expiration date/time from bytes: %v", err)
+		}
 	}
-	effective, err := decBytesToTime(b[864 : 864+17])
-	if err != nil {
-		return nil, fmt.Errorf("Unable to convert effective date/time from bytes: %v", err)
+	if bytes.Compare(effectiveBytes, nullBytes) != 0 {
+		effective, err = decBytesToTime(effectiveBytes)
+		if err != nil {
+			return nil, fmt.Errorf("Unable to convert effective date/time from bytes: %v", err)
+		}
 	}
 
 	// no susp extensions for the dir entry in the volume descriptor

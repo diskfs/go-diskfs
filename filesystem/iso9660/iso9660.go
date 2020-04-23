@@ -471,3 +471,10 @@ func validateBlocksize(blocksize int64) error {
 		return fmt.Errorf("blocksize for ISO9660 must be one of 2048, 4096, 8192")
 	}
 }
+
+func (fs *FileSystem) Label() string {
+	if fs.volumes.primary == nil {
+		return ""
+	}
+	return fs.volumes.primary.volumeIdentifier
+}

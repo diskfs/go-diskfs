@@ -120,3 +120,40 @@ func TestRockRidgeReadDirectory(t *testing.T) {
 		}
 	}
 }
+
+func TestLabel(t *testing.T) {
+	t.Run("no primary volume descriptor", func(t *testing.T) {
+		expected := ""
+		fs := FileSystem{}
+		label := fs.Label()
+		if label != expected {
+			t.Errorf("mismatched labels, actual '%s' expected '%s'", label, expected)
+		}
+	})
+	t.Run("primary volume descriptor no label", func(t *testing.T) {
+		expected := ""
+		fs := FileSystem{
+			volumes: volumeDescriptors{
+				primary: &primaryVolumeDescriptor{},
+			},
+		}
+		label := fs.Label()
+		if label != expected {
+			t.Errorf("mismatched labels, actual '%s' expected '%s'", label, expected)
+		}
+	})
+	t.Run("primary volume descriptor with label", func(t *testing.T) {
+		expected := "myisolabel"
+		fs := FileSystem{
+			volumes: volumeDescriptors{
+				primary: &primaryVolumeDescriptor{
+					volumeIdentifier: expected,
+				},
+			},
+		}
+		label := fs.Label()
+		if label != expected {
+			t.Errorf("mismatched labels, actual '%s' expected '%s'", label, expected)
+		}
+	})
+}
