@@ -170,10 +170,11 @@ func writableMode(mode OpenModeOption) bool {
 
 func initDisk(f *os.File, openMode OpenModeOption) (*disk.Disk, error) {
 	var (
-		diskType disk.Type
-		size     int64
-		lblksize = int64(defaultBlocksize)
-		pblksize = int64(defaultBlocksize)
+		diskType      disk.Type
+		size          int64
+		lblksize      = int64(defaultBlocksize)
+		pblksize      = int64(defaultBlocksize)
+		defaultBlocks = true
 	)
 
 	// get device information
@@ -200,6 +201,7 @@ func initDisk(f *os.File, openMode OpenModeOption) (*disk.Disk, error) {
 			return nil, fmt.Errorf("error seeking to end of block device %s: %s\n", f.Name(), err)
 		}
 		lblksize, pblksize, err = getSectorSizes(f)
+		defaultBlocks = false
 		if err != nil {
 			return nil, fmt.Errorf("Unable to get block sizes for device %s: %v", f.Name(), err)
 		}
@@ -221,6 +223,7 @@ func initDisk(f *os.File, openMode OpenModeOption) (*disk.Disk, error) {
 		LogicalBlocksize:  lblksize,
 		PhysicalBlocksize: pblksize,
 		Writable:          writable,
+		DefaultBlocks:     defaultBlocks,
 	}, nil
 }
 

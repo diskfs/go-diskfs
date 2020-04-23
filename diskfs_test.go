@@ -80,9 +80,9 @@ func TestOpen(t *testing.T) {
 		}
 	}
 
-	for _, tt := range tests {
+	for i, tt := range tests {
 		d, err := diskfs.OpenWithMode(tt.path, diskfs.ReadOnly)
-		msg := fmt.Sprintf("Open(%s)", tt.path)
+		msg := fmt.Sprintf("%d: Open(%s)", i, tt.path)
 		switch {
 		case (err == nil && tt.err != nil) || (err != nil && tt.err == nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
 			t.Errorf("%s: mismatched errors, actual %v expected %v", msg, err, tt.err)
@@ -111,9 +111,9 @@ func TestCreate(t *testing.T) {
 		{"/tmp/disk.img", 10 * oneMB, diskfs.Raw, &disk.Disk{LogicalBlocksize: 512, PhysicalBlocksize: 512, Size: 10 * oneMB, Type: disk.File}, nil},
 	}
 
-	for _, tt := range tests {
+	for i, tt := range tests {
 		disk, err := diskfs.Create(tt.path, tt.size, tt.format)
-		msg := fmt.Sprintf("Create(%s, %d, %v)", tt.path, tt.size, tt.format)
+		msg := fmt.Sprintf("%d: Create(%s, %d, %v)", i, tt.path, tt.size, tt.format)
 		switch {
 		case (err == nil && tt.err != nil) || (err != nil && tt.err == nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
 			t.Errorf("%s: mismatched errors, actual %v expected %v", msg, err, tt.err)
@@ -121,8 +121,8 @@ func TestCreate(t *testing.T) {
 			t.Errorf("%s: mismatched disk, actual %v expected %v", msg, disk, tt.disk)
 		case disk != nil && (disk.LogicalBlocksize != tt.disk.LogicalBlocksize || disk.PhysicalBlocksize != tt.disk.PhysicalBlocksize || disk.Size != tt.disk.Size || disk.Type != tt.disk.Type):
 			t.Errorf("%s: mismatched disk, actual then expected", msg)
-			t.Logf("%v", disk)
-			t.Logf("%v", tt.disk)
+			t.Logf("%#v", disk)
+			t.Logf("%#v", tt.disk)
 		}
 		if disk != nil {
 			os.Remove(tt.path)

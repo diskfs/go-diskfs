@@ -351,3 +351,40 @@ func TestFat32ReadDirWithMkdir(t *testing.T) {
 		}
 	}
 }
+
+func TestFat32Label(t *testing.T) {
+	t.Run("no bpb", func(t *testing.T) {
+		expected := ""
+		fs := &FileSystem{}
+		label := fs.Label()
+		if label != expected {
+			t.Errorf("returned '%s' instead of expected '%s'", label, expected)
+		}
+	})
+	t.Run("bpb no label", func(t *testing.T) {
+		expected := ""
+		fs := &FileSystem{
+			bootSector: msDosBootSector{
+				biosParameterBlock: &dos71EBPB{},
+			},
+		}
+		label := fs.Label()
+		if label != expected {
+			t.Errorf("returned '%s' instead of expected '%s'", label, expected)
+		}
+	})
+	t.Run("label", func(t *testing.T) {
+		expected := "mylabel"
+		fs := &FileSystem{
+			bootSector: msDosBootSector{
+				biosParameterBlock: &dos71EBPB{
+					volumeLabel: expected,
+				},
+			},
+		}
+		label := fs.Label()
+		if label != expected {
+			t.Errorf("returned '%s' instead of expected '%s'", label, expected)
+		}
+	})
+}

@@ -52,12 +52,19 @@ func ucs2StringToBytes(s string) []byte {
 	return b
 }
 
+// bytesToUCS2String convert bytes to UCS-2. We aren't 100% sure that this is right,
+// as it is possible to pass it an odd number of characters. But good enough for now.
 func bytesToUCS2String(b []byte) string {
 	r := make([]rune, 0, 30)
-	// now we can iterate
+	// now we can iterate - be careful in case we were given an odd number of bytes
 	for i := 0; i < len(b); {
 		// little endian
-		val := uint16(b[i])<<8 + uint16(b[i+1])
+		var val uint16
+		if i >= len(b)-1 {
+			val = uint16(b[i])
+		} else {
+			val = uint16(b[i])<<8 + uint16(b[i+1])
+		}
 		r = append(r, rune(val))
 		i += 2
 	}

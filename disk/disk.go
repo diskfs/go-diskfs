@@ -26,6 +26,7 @@ type Disk struct {
 	PhysicalBlocksize int64
 	Table             partition.Table
 	Writable          bool
+	DefaultBlocks     bool
 }
 
 // Type represents the type of disk this is
@@ -214,7 +215,11 @@ func (d *Disk) GetFilesystem(partition int) (filesystem.FileSystem, error) {
 	if err == nil {
 		return fat32FS, nil
 	}
-	iso9660FS, err := iso9660.Read(d.File, size, start, d.LogicalBlocksize)
+	lbs := d.LogicalBlocksize
+	if d.DefaultBlocks {
+		lbs = 0
+	}
+	iso9660FS, err := iso9660.Read(d.File, size, start, lbs)
 	if err == nil {
 		return iso9660FS, nil
 	}

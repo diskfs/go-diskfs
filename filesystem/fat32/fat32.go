@@ -540,6 +540,16 @@ func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 	}, nil
 }
 
+// Label get the label of the filesystem
+func (fs *FileSystem) Label() string {
+	// be sane about everything existing
+	bpb := fs.bootSector.biosParameterBlock
+	if bpb == nil {
+		return ""
+	}
+	return bpb.volumeLabel
+}
+
 // read directory entries for a given cluster
 func (fs *FileSystem) getClusterList(firstCluster uint32) ([]uint32, error) {
 	// first, get the chain of clusters
