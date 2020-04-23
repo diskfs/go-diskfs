@@ -17,13 +17,15 @@ const PartitionEntrySize = 128
 
 // Partition represents the structure of a single partition on the disk
 type Partition struct {
-	Start      uint64 // start sector for the partition
-	End        uint64 // end sector for the partition
-	Size       uint64 // size of the partition in bytes
-	Type       Type   // parttype for the partition
-	Name       string // name for the partition
-	GUID       string // partition GUID, can be left blank to auto-generate
-	Attributes uint64 // Attributes flags
+	Start              uint64 // start sector for the partition
+	End                uint64 // end sector for the partition
+	Size               uint64 // size of the partition in bytes
+	Type               Type   // parttype for the partition
+	Name               string // name for the partition
+	GUID               string // partition GUID, can be left blank to auto-generate
+	Attributes         uint64 // Attributes flags
+	logicalSectorSize  int
+	physicalSectorSize int
 }
 
 func reverseSlice(s interface{}) {
@@ -83,7 +85,7 @@ func (p *Partition) toBytes() ([]byte, error) {
 }
 
 // FromBytes create a partition entry from bytes
-func partitionFromBytes(b []byte) (*Partition, error) {
+func partitionFromBytes(b []byte, logicalSectorSize, physicalSectorSize int) (*Partition, error) {
 	if len(b) != PartitionEntrySize {
 		return nil, fmt.Errorf("Data for partition was %d bytes instead of expected %d", len(b), PartitionEntrySize)
 	}
@@ -116,26 +118,39 @@ func partitionFromBytes(b []byte) (*Partition, error) {
 	name := string(r)
 
 	return &Partition{
-		Start:      firstLBA,
-		End:        lastLBA,
-		Name:       name,
-		GUID:       strings.ToUpper(uuid.String()),
-		Attributes: attribs,
-		Type:       Type(strings.ToUpper(typeString)),
+		Start:              firstLBA,
+		End:                lastLBA,
+		Name:               name,
+		GUID:               strings.ToUpper(uuid.String()),
+		Attributes:         attribs,
+		Type:               Type(strings.ToUpper(typeString)),
+		logicalSectorSize:  logicalSectorSize,
+		physicalSectorSize: physicalSectorSize,
 	}, nil
 }
 
-// writeContents fills the partition with the contents provided
+func (p *Partition) GetSize() int64 {
+	// size already is in Bytes
+	return int64(p.Size)
+}
+
+func (p *Partition) GetStart() int64 {
+	_, lss := p.sectorSizes()
+	return int64(p.Start) * int64(lss)
+}
+
+// WriteContents fills the partition with the contents provided
 // reads from beginning of reader to exactly size of partition in bytes
-func (p *Partition) writeContents(f util.File, logicalSectorSize, physicalSectorSize int, contents io.Reader) (uint64, error) {
+func (p *Partition) WriteContents(f util.File, contents io.Reader) (uint64, error) {
+	pss, lss := p.sectorSizes()
 	total := uint64(0)
 	// validate start/end/size
-	calculatedSize := (p.End - p.Start + 1) * uint64(logicalSectorSize)
+	calculatedSize := (p.End - p.Start + 1) * uint64(lss)
 	switch {
 	case p.Size <= 0 && p.End > p.Start:
 		p.Size = calculatedSize
 	case p.Size > 0 && p.End <= p.Start:
-		p.End = p.Start + p.Size/uint64(logicalSectorSize)
+		p.End = p.Start + p.Size/uint64(lss)
 	case p.Size > 0 && p.Size == calculatedSize:
 		// all is good
 	default:
@@ -143,9 +158,9 @@ func (p *Partition) writeContents(f util.File, logicalSectorSize, physicalSector
 	}
 
 	// chunks of physical sector size for efficient writing
-	b := make([]byte, physicalSectorSize, physicalSectorSize)
+	b := make([]byte, pss, pss)
 	// we start at the correct byte location
-	start := p.Start * uint64(logicalSectorSize)
+	start := p.Start * uint64(lss)
 	// loop in physical sector sizes
 	for {
 		read, err := contents.Read(b)
@@ -177,15 +192,16 @@ func (p *Partition) writeContents(f util.File, logicalSectorSize, physicalSector
 	return total, nil
 }
 
-// readContents reads the contents of the partition into a writer
+// ReadContents reads the contents of the partition into a writer
 // streams the entire partition to the writer
-func (p *Partition) readContents(f util.File, logicalSectorSize, physicalSectorSize int, out io.Writer) (int64, error) {
+func (p *Partition) ReadContents(f util.File, out io.Writer) (int64, error) {
+	pss, lss := p.sectorSizes()
 	total := int64(0)
 	// chunks of physical sector size for efficient writing
-	b := make([]byte, physicalSectorSize, physicalSectorSize)
+	b := make([]byte, pss, pss)
 	// we start at the correct byte location
-	start := p.Start * uint64(logicalSectorSize)
-	size := p.Size * uint64(logicalSectorSize)
+	start := p.Start * uint64(lss)
+	size := p.Size * uint64(lss)
 
 	// loop in physical sector sizes
 	for {
@@ -250,4 +266,15 @@ func (p *Partition) initEntry(blocksize uint64, starting uint64) error {
 		return fmt.Errorf("Invalid partition entry, size %d bytes does not match start sector %d and end sector %d", size, start, end)
 	}
 	return nil
+}
+
+func (p *Partition) sectorSizes() (physical, logical int) {
+	physical, logical = p.physicalSectorSize, p.logicalSectorSize
+	if physical == 0 {
+		physical = physicalSectorSize
+	}
+	if logical == 0 {
+		logical = logicalSectorSize
+	}
+	return physical, logical
 }

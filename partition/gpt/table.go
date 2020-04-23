@@ -5,9 +5,9 @@ import (
 	"encoding/binary"
 	"fmt"
 	"hash/crc32"
-	"io"
 	"strings"
 
+	"github.com/diskfs/go-diskfs/partition/part"
 	"github.com/diskfs/go-diskfs/util"
 	uuid "github.com/google/uuid"
 )
@@ -18,6 +18,9 @@ const (
 	mbrPartitionEntriesStart = 446
 	mbrPartitionEntriesCount = 4
 	mbrpartitionEntrySize    = 16
+	// just defaults
+	physicalSectorSize = 512
+	logicalSectorSize  = 512
 )
 
 // Table represents a partition table to be applied to a disk or read from a disk
@@ -403,7 +406,7 @@ func tableFromBytes(b []byte, logicalBlockSize, physicalBlockSize int) (*Table, 
 		start := i * int(partitionEntrySize)
 		end := start + int(partitionEntrySize)
 		// skip all 0s
-		p, err := partitionFromBytes(bpart[start:end])
+		p, err := partitionFromBytes(bpart[start:end], table.LogicalSectorSize, table.PhysicalSectorSize)
 		if err != nil {
 			return nil, fmt.Errorf("Error reading partition entry %d: %v", i, err)
 		}
@@ -513,73 +516,12 @@ func Read(f util.File, logicalBlockSize, physicalBlockSize int) (*Table, error) 
 	return tableFromBytes(b, logicalBlockSize, physicalBlockSize)
 }
 
-// GetPartitionSize returns the size in bytes of a single partition
-func (t *Table) GetPartitionSize(partition int) (int64, error) {
-	if partition > len(t.Partitions) {
-		return 0, fmt.Errorf("Requested partition %d but only have %d partitions in table", partition, len(t.Partitions))
+// GetPartitions get the partitions
+func (t *Table) GetPartitions() []part.Partition {
+	// each Partition matches the part.Partition interface, but golang does not accept passing them in a slice
+	parts := make([]part.Partition, len(t.Partitions), len(t.Partitions))
+	for i, p := range t.Partitions {
+		parts[i] = p
 	}
-
-	// size already is in Bytes
-	return int64(t.Partitions[partition-1].Size), nil
-}
-
-// GetPartitionStart returns the start position in bytes of a single partition
-func (t *Table) GetPartitionStart(partition int) (int64, error) {
-	if partition > len(t.Partitions) {
-		return 0, fmt.Errorf("Requested partition %d but only have %d partitions in table", partition, len(t.Partitions))
-	}
-
-	return int64(t.Partitions[partition-1].Start) * int64(t.LogicalSectorSize), nil
-}
-
-// ReadPartitionContents read the contents of a partition into an io.Writer
-//
-// Requires the partition to which to write, the util.File to which to write, and the io.Writer
-//
-// if successful, returns number of bytes read
-//
-// returns error if there are any errors reading the file, writing to the writer or the partition number is invalid
-func (t *Table) ReadPartitionContents(partition int, f util.File, writer io.Writer) (int64, error) {
-	if partition > len(t.Partitions) {
-		return 0, fmt.Errorf("Requested partition %d but only have %d partitions in table", partition, len(t.Partitions))
-	}
-	if partition < 1 {
-		return 0, fmt.Errorf("Requested partition %d but first potential partition is %d", partition, 1)
-	}
-	logicalSectorSize := t.LogicalSectorSize
-	if logicalSectorSize == 0 {
-		logicalSectorSize = 512
-	}
-	physicalSectorSize := t.PhysicalSectorSize
-	if physicalSectorSize == 0 {
-		physicalSectorSize = 512
-	}
-	return t.Partitions[partition-1].readContents(f, logicalSectorSize, physicalSectorSize, writer)
-}
-
-// WritePartitionContents fill a partition with the available data from an io.Reader
-//
-// requires the partition to which to write, the util.File on which the partition exists, and the io.Reader from
-// which to read the bytes
-//
-// if successful, returns number of bytes written
-//
-// returns error if there are any issues writing to the util.File, reading from the io.Reader, or the partition number is
-// invalid
-func (t *Table) WritePartitionContents(partition int, f util.File, reader io.Reader) (uint64, error) {
-	if partition > len(t.Partitions) {
-		return 0, fmt.Errorf("Requested partition %d but only have %d partitions in table", partition, len(t.Partitions))
-	}
-	if partition < 1 {
-		return 0, fmt.Errorf("Requested partition %d but first potential partition is %d", partition, 1)
-	}
-	logicalSectorSize := t.LogicalSectorSize
-	if logicalSectorSize == 0 {
-		logicalSectorSize = 512
-	}
-	physicalSectorSize := t.PhysicalSectorSize
-	if physicalSectorSize == 0 {
-		physicalSectorSize = 512
-	}
-	return t.Partitions[partition-1].writeContents(f, logicalSectorSize, physicalSectorSize, reader)
+	return parts
 }

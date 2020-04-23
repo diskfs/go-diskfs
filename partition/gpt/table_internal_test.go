@@ -28,13 +28,15 @@ func GetValidTable() *Table {
 	}
 	parts := []*Partition{
 		{
-			Start:      2048,
-			End:        3048,
-			Size:       (3048 - 2048 + 1) * 512,
-			Name:       "EFI System",
-			GUID:       "5CA3360B-5DE6-4FCF-B4CE-419CEE433B51",
-			Attributes: 0,
-			Type:       EFISystemPartition,
+			Start:              2048,
+			End:                3048,
+			Size:               (3048 - 2048 + 1) * 512,
+			Name:               "EFI System",
+			GUID:               "5CA3360B-5DE6-4FCF-B4CE-419CEE433B51",
+			Attributes:         0,
+			Type:               EFISystemPartition,
+			logicalSectorSize:  512,
+			physicalSectorSize: 512,
 		},
 	}
 	// add 127 Unused partitions to the table
@@ -184,7 +186,7 @@ func TestTableFromBytes(t *testing.T) {
 		}
 		expected := GetValidTable()
 		if table == nil || !table.Equal(expected) {
-			t.Errorf("actual table was %v instead of expected %v", table, expected)
+			t.Errorf("mismatched\nactual: %#v\nexpected %#v", table, expected)
 		}
 	})
 }
