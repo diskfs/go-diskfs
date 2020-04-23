@@ -22,7 +22,7 @@ func TestFromBytes(t *testing.T) {
 	t.Run("Short byte slice", func(t *testing.T) {
 		b := make([]byte, PartitionEntrySize-1, PartitionEntrySize-1)
 		rand.Read(b)
-		partition, err := partitionFromBytes(b)
+		partition, err := partitionFromBytes(b, 2048, 2048)
 		if partition != nil {
 			t.Error("should return nil partition")
 		}
@@ -37,7 +37,7 @@ func TestFromBytes(t *testing.T) {
 	t.Run("Long byte slice", func(t *testing.T) {
 		b := make([]byte, PartitionEntrySize+1, PartitionEntrySize+1)
 		rand.Read(b)
-		partition, err := partitionFromBytes(b)
+		partition, err := partitionFromBytes(b, 2048, 2048)
 		if partition != nil {
 			t.Error("should return nil partition")
 		}
@@ -54,7 +54,7 @@ func TestFromBytes(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Unable to read test fixture file %s: %v", gptPartitionFile, err)
 		}
-		partition, err := partitionFromBytes(b)
+		partition, err := partitionFromBytes(b, 0, 0)
 		if partition == nil {
 			t.Error("should not return nil partition")
 		}
@@ -320,7 +320,7 @@ func TestWriteContents(t *testing.T) {
 		reader := bufio.NewReader(&b)
 		expected := "Cannot reconcile partition size"
 		f := &testhelper.FileImpl{}
-		written, err := partition.writeContents(f, 512, 512, reader)
+		written, err := partition.WriteContents(f, reader)
 		if written != 0 {
 			t.Errorf("Returned %d bytes written instead of 0", written)
 		}
@@ -351,7 +351,7 @@ func TestWriteContents(t *testing.T) {
 				return 0, fmt.Errorf(expected)
 			},
 		}
-		written, err := partition.writeContents(f, 512, 512, reader)
+		written, err := partition.WriteContents(f, reader)
 		if written != 0 {
 			t.Errorf("Returned %d bytes written instead of 0", written)
 		}
@@ -383,7 +383,7 @@ func TestWriteContents(t *testing.T) {
 				return len(b), nil
 			},
 		}
-		read, err := partition.writeContents(f, 512, 512, reader)
+		read, err := partition.WriteContents(f, reader)
 		if read != 0 {
 			t.Errorf("Returned %d bytes read instead of 0", read)
 		}
@@ -417,7 +417,7 @@ func TestWriteContents(t *testing.T) {
 				return len(b), nil
 			},
 		}
-		written, err := partition.writeContents(f, 512, 512, reader)
+		written, err := partition.WriteContents(f, reader)
 		if written != uint64(size) {
 			t.Errorf("Returned %d bytes written instead of %d", written, size)
 		}
@@ -451,7 +451,7 @@ func TestReadContents(t *testing.T) {
 				return 0, fmt.Errorf(expected)
 			},
 		}
-		read, err := partition.readContents(f, 512, 512, writer)
+		read, err := partition.ReadContents(f, writer)
 		if read != 0 {
 			t.Errorf("Returned %d bytes read instead of 0", read)
 		}
@@ -482,7 +482,7 @@ func TestReadContents(t *testing.T) {
 				return size, io.EOF
 			},
 		}
-		read, err := partition.readContents(f, 512, 512, writer)
+		read, err := partition.ReadContents(f, writer)
 		if read != int64(size) {
 			t.Errorf("Returned %d bytes read instead of %d", read, size)
 		}

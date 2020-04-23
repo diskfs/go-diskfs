@@ -204,9 +204,6 @@ func TestWritePartitionContents(t *testing.T) {
 			{nil, 1, fmt.Errorf("cannot write contents of a partition on a disk without a partition table")},
 			{nil, 0, fmt.Errorf("cannot write contents of a partition on a disk without a partition table")},
 			{nil, -1, fmt.Errorf("cannot write contents of a partition on a disk without a partition table")},
-			// invalid partition number scenarios
-			{table, -1, fmt.Errorf("cannot write contents of a partition without specifying a partition")},
-			{table, 5, fmt.Errorf("Requested partition %d but only have %d partitions", 5, 1)},
 			{table, 1, nil},
 		}
 		for _, tt := range tests {
@@ -282,7 +279,7 @@ func TestReadPartitionContents(t *testing.T) {
 			{nil, -1, fmt.Errorf("cannot read contents of a partition on a disk without a partition table")},
 			// invalid partition number scenarios
 			{table, -1, fmt.Errorf("cannot read contents of a partition without specifying a partition")},
-			{table, 5, fmt.Errorf("Requested partition %d but only have %d partitions", 5, 1)},
+			{table, 5, fmt.Errorf("cannot read contents of partition %d which is greater than max partition %d", 5, 1)},
 			{table, 1, nil},
 		}
 		for _, tt := range tests {
@@ -353,7 +350,7 @@ func TestReadPartitionContents(t *testing.T) {
 			{nil, -1, fmt.Errorf("cannot read contents of a partition on a disk without a partition table")},
 			// invalid partition number scenarios
 			{table, -1, fmt.Errorf("cannot read contents of a partition without specifying a partition")},
-			{table, 5, fmt.Errorf("Requested partition %d but only have %d partitions", 5, 1)},
+			{table, 5, fmt.Errorf("cannot read contents of partition %d which is greater than max partition %d", 5, 1)},
 			{table, 1, nil},
 		}
 		for _, tt := range tests {

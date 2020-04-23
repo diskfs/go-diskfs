@@ -92,7 +92,12 @@ func (d *Disk) WritePartitionContents(partition int, reader io.Reader) (int64, e
 	if partition < 0 {
 		return -1, fmt.Errorf("cannot write contents of a partition without specifying a partition")
 	}
-	written, err := d.Table.WritePartitionContents(partition, d.File, reader)
+	partitions := d.Table.GetPartitions()
+	// API indexes from 1, but slice from 0
+	if partition > len(partitions) {
+		return -1, fmt.Errorf("cannot write contents of partition %d which is greater than max partition %d", partition, len(partitions))
+	}
+	written, err := partitions[partition-1].WriteContents(d.File, reader)
 	return int64(written), err
 }
 
@@ -109,7 +114,12 @@ func (d *Disk) ReadPartitionContents(partition int, writer io.Writer) (int64, er
 	if partition < 0 {
 		return -1, fmt.Errorf("cannot read contents of a partition without specifying a partition")
 	}
-	return d.Table.ReadPartitionContents(partition, d.File, writer)
+	partitions := d.Table.GetPartitions()
+	// API indexes from 1, but slice from 0
+	if partition > len(partitions) {
+		return -1, fmt.Errorf("cannot read contents of partition %d which is greater than max partition %d", partition, len(partitions))
+	}
+	return partitions[partition-1].ReadContents(d.File, writer)
 }
 
 // FilesystemSpec represents the specification of a filesystem to be created
@@ -138,7 +148,6 @@ func (d *Disk) CreateFilesystem(spec FilesystemSpec) (filesystem.FileSystem, err
 	// find out where the partition starts and ends, or if it is the entire disk
 	var (
 		size, start int64
-		err         error
 	)
 	switch {
 	case !d.Writable:
@@ -149,14 +158,14 @@ func (d *Disk) CreateFilesystem(spec FilesystemSpec) (filesystem.FileSystem, err
 	case d.Table == nil:
 		return nil, fmt.Errorf("cannot create filesystem on a partition without a partition table")
 	default:
-		size, err = d.Table.GetPartitionSize(spec.Partition)
-		if err != nil {
-			return nil, fmt.Errorf("error getting size of partition %d: %v", spec.Partition, err)
+		partitions := d.Table.GetPartitions()
+		// API indexes from 1, but slice from 0
+		partition := spec.Partition - 1
+		if spec.Partition > len(partitions) {
+			return nil, fmt.Errorf("cannot create filesystem on partition %d greater than maximum partition %d", spec.Partition, len(partitions))
 		}
-		start, err = d.Table.GetPartitionStart(spec.Partition)
-		if err != nil {
-			return nil, fmt.Errorf("error getting start of partition %d: %v", spec.Partition, err)
-		}
+		size = partitions[partition].GetSize()
+		start = partitions[partition].GetStart()
 	}
 
 	switch spec.FSType {
@@ -191,14 +200,13 @@ func (d *Disk) GetFilesystem(partition int) (filesystem.FileSystem, error) {
 	case d.Table == nil:
 		return nil, fmt.Errorf("cannot read filesystem on a partition without a partition table")
 	default:
-		size, err = d.Table.GetPartitionSize(partition)
-		if err != nil {
-			return nil, fmt.Errorf("error getting size of partition %d: %v", partition, err)
+		partitions := d.Table.GetPartitions()
+		// API indexes from 1, but slice from 0
+		if partition > len(partitions) {
+			return nil, fmt.Errorf("cannot get filesystem on partition %d greater than maximum partition %d", partition, len(partitions))
 		}
-		start, err = d.Table.GetPartitionStart(partition)
-		if err != nil {
-			return nil, fmt.Errorf("error getting start of partition %d: %v", partition, err)
-		}
+		size = partitions[partition-1].GetSize()
+		start = partitions[partition-1].GetStart()
 	}
 
 	// just try each type

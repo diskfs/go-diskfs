@@ -338,160 +338,78 @@ func TestTableWrite(t *testing.T) {
 	})
 }
 func TestGetPartitionSize(t *testing.T) {
-	t.Run("outside size", func(t *testing.T) {
-		table := mbr.GetValidTable()
-		maxPart := len(table.Partitions)
-		request := maxPart + 1
-		size, err := table.GetPartitionSize(request)
-		if size > 0 {
-			t.Errorf("Received size %d instead of 0", size)
-		}
-		if err == nil {
-			t.Errorf("Error was nil instead of expected")
-		}
-		expected := fmt.Sprintf("Requested partition %d but only have %d partitions in table", request, maxPart)
-		if !strings.HasPrefix(err.Error(), expected) {
-			t.Errorf("Error type %s instead of expected %s", err.Error(), expected)
-		}
-	})
-	t.Run("valid", func(t *testing.T) {
-		table := mbr.GetValidTable()
-		maxPart := len(table.Partitions)
-		request := maxPart - 1
-		size, err := table.GetPartitionSize(request)
-		if err != nil {
-			t.Errorf("Error was not nil")
-		}
-		expected := table.Partitions[request].Size
-		if size != int64(expected) {
-			t.Errorf("Received size %d instead of %d", size, expected)
-		}
-	})
+	table := mbr.GetValidTable()
+	maxPart := len(table.Partitions)
+	request := maxPart - 1
+	size := table.Partitions[request].GetSize()
+	expected := table.Partitions[request].Size
+	if size != int64(expected) {
+		t.Errorf("Received size %d instead of %d", size, expected)
+	}
 }
 func TestGetPartitionStart(t *testing.T) {
-	t.Run("outside size", func(t *testing.T) {
-		table := mbr.GetValidTable()
-		maxPart := len(table.Partitions)
-		request := maxPart + 1
-		start, err := table.GetPartitionStart(request)
-		if start > 0 {
-			t.Errorf("Received size %d instead of 0", start)
-		}
-		if err == nil {
-			t.Errorf("Error was nil instead of expected")
-		}
-		expected := fmt.Sprintf("Requested partition %d but only have %d partitions in table", request, maxPart)
-		if !strings.HasPrefix(err.Error(), expected) {
-			t.Errorf("Error type %s instead of expected %s", err.Error(), expected)
-		}
-	})
-	t.Run("valid", func(t *testing.T) {
-		table := mbr.GetValidTable()
-		maxPart := len(table.Partitions)
-		request := maxPart - 1
-		start, err := table.GetPartitionStart(request)
-		if err != nil {
-			t.Errorf("Error was not nil")
-		}
-		expected := table.Partitions[request].Start
-		if start != int64(expected) {
-			t.Errorf("Received start %d instead of %d", start, expected)
-		}
-	})
+	table := mbr.GetValidTable()
+	maxPart := len(table.Partitions)
+	request := maxPart - 1
+	start := table.Partitions[request].GetStart()
+	expected := table.Partitions[request].Start
+	if start != int64(expected) {
+		t.Errorf("Received start %d instead of %d", start, expected)
+	}
 }
 func TestReadPartitionContents(t *testing.T) {
-	t.Run("outside size", func(t *testing.T) {
-		table := mbr.GetValidTable()
-		maxPart := len(table.Partitions)
-		request := maxPart + 1
-		var b bytes.Buffer
-		writer := bufio.NewWriter(&b)
-		read, err := table.ReadPartitionContents(request, &testhelper.FileImpl{}, writer)
-		if read > 0 {
-			t.Errorf("Read %d instead of 0", read)
-		}
-		if err == nil {
-			t.Errorf("Error was nil instead of expected")
-		}
-		expected := fmt.Sprintf("Requested partition %d but only have %d partitions in table", request, maxPart)
-		if !strings.HasPrefix(err.Error(), expected) {
-			t.Errorf("Error type %s instead of expected %s", err.Error(), expected)
-		}
-	})
-	t.Run("valid", func(t *testing.T) {
-		table := mbr.GetValidTable()
-		maxPart := len(table.Partitions)
-		request := maxPart - 1
-		var b bytes.Buffer
-		writer := bufio.NewWriter(&b)
-		size := 100
-		b2 := make([]byte, size, size)
-		rand.Read(b2)
-		f := &testhelper.FileImpl{
-			Reader: func(b []byte, offset int64) (int, error) {
-				copy(b, b2)
-				return size, io.EOF
-			},
-		}
-		read, err := table.ReadPartitionContents(request, f, writer)
-		if read != int64(size) {
-			t.Errorf("Returned %d bytes read instead of %d", read, size)
-		}
-		if err != nil {
-			t.Errorf("Error was not nil")
-		}
-		writer.Flush()
-		if bytes.Compare(b.Bytes(), b2) != 0 {
-			t.Errorf("Mismatched bytes data")
-			t.Log(b.Bytes())
-			t.Log(b2)
-		}
-	})
+	table := mbr.GetValidTable()
+	maxPart := len(table.Partitions)
+	request := maxPart - 1
+	var b bytes.Buffer
+	writer := bufio.NewWriter(&b)
+	size := 100
+	b2 := make([]byte, size, size)
+	rand.Read(b2)
+	f := &testhelper.FileImpl{
+		Reader: func(b []byte, offset int64) (int, error) {
+			copy(b, b2)
+			return size, io.EOF
+		},
+	}
+	read, err := table.Partitions[request].ReadContents(f, writer)
+	if read != int64(size) {
+		t.Errorf("Returned %d bytes read instead of %d", read, size)
+	}
+	if err != nil {
+		t.Errorf("Error was not nil")
+	}
+	writer.Flush()
+	if bytes.Compare(b.Bytes(), b2) != 0 {
+		t.Errorf("Mismatched bytes data")
+		t.Log(b.Bytes())
+		t.Log(b2)
+	}
 }
 func TestWritePartitionContents(t *testing.T) {
-	t.Run("outside size", func(t *testing.T) {
-		table := mbr.GetValidTable()
-		maxPart := len(table.Partitions)
-		request := maxPart + 1
-		var b bytes.Buffer
-		reader := bufio.NewReader(&b)
-		written, err := table.WritePartitionContents(request, &testhelper.FileImpl{}, reader)
-		if written > 0 {
-			t.Errorf("Read %d instead of 0", written)
-		}
-		if err == nil {
-			t.Errorf("Error was nil instead of expected")
-		}
-		expected := fmt.Sprintf("Requested partition %d but only have %d partitions in table", request, maxPart)
-		if !strings.HasPrefix(err.Error(), expected) {
-			t.Errorf("Error type %s instead of expected %s", err.Error(), expected)
-		}
-	})
-	t.Run("valid", func(t *testing.T) {
-		table := mbr.GetValidTable()
-		request := 0
-		size := table.Partitions[request].Size * uint32(table.LogicalSectorSize)
-		b := make([]byte, size, size)
-		rand.Read(b)
-		reader := bytes.NewReader(b)
-		b2 := make([]byte, 0, size)
-		f := &testhelper.FileImpl{
-			Writer: func(b []byte, offset int64) (int, error) {
-				b2 = append(b2, b...)
-				return len(b), nil
-			},
-		}
-		written, err := table.WritePartitionContents(request+1, f, reader)
-		if written != uint64(size) {
-			t.Errorf("Returned %d bytes written instead of %d", written, size)
-		}
-		if err != nil {
-			t.Errorf("Error was not nil: %v", err)
-		}
-		if bytes.Compare(b2, b) != 0 {
-			t.Errorf("Bytes mismatch")
-			t.Log(b)
-			t.Log(b2)
-		}
-	})
+	table := mbr.GetValidTable()
+	request := 0
+	size := table.Partitions[request].Size * uint32(table.LogicalSectorSize)
+	b := make([]byte, size, size)
+	rand.Read(b)
+	reader := bytes.NewReader(b)
+	b2 := make([]byte, 0, size)
+	f := &testhelper.FileImpl{
+		Writer: func(b []byte, offset int64) (int, error) {
+			b2 = append(b2, b...)
+			return len(b), nil
+		},
+	}
+	written, err := table.Partitions[request].WriteContents(f, reader)
+	if written != uint64(size) {
+		t.Errorf("Returned %d bytes written instead of %d", written, size)
+	}
+	if err != nil {
+		t.Errorf("Error was not nil: %v", err)
+	}
+	if bytes.Compare(b2, b) != 0 {
+		t.Errorf("Bytes mismatch")
+		t.Log(b)
+		t.Log(b2)
+	}
 }

@@ -184,8 +184,8 @@ func TestFat32Create(t *testing.T) {
 	}{
 		{500, 6000, nil, fmt.Errorf("blocksize for FAT32 must be")},
 		{513, 6000, nil, fmt.Errorf("blocksize for FAT32 must be")},
-		{512, fat32.Fat32MaxSize + 100000, nil, fmt.Errorf("requested size is larger than maximum allowed FAT32 size")},
-		{512, 0, nil, fmt.Errorf("requested size is smaller than minimum allowed FAT32 size")},
+		{512, fat32.Fat32MaxSize + 100000, nil, fmt.Errorf("requested size is larger than maximum allowed FAT32")},
+		{512, 0, nil, fmt.Errorf("requested size is smaller than minimum allowed FAT32")},
 		{512, 10000000, &fat32.FileSystem{}, nil},
 	}
 	runTest := func(t *testing.T, pre, post int64) {
@@ -200,11 +200,9 @@ func TestFat32Create(t *testing.T) {
 			fs, err := fat32.Create(f, tt.filesize-pre-post, pre, tt.blocksize, "")
 			switch {
 			case (err == nil && tt.err != nil) || (err != nil && tt.err == nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
-				t.Errorf("Create(%s, %d, %d, %d): mismatched errors, actual %v expected %v", f.Name(), tt.filesize, 0, tt.blocksize, err, tt.err)
+				t.Errorf("Create(%s, %d, %d, %d): mismatched errors\nactual %v\nexpected %v", f.Name(), tt.filesize, 0, tt.blocksize, err, tt.err)
 			case (fs == nil && tt.fs != nil) || (fs != nil && tt.fs == nil):
-				t.Errorf("Create(%s, %d, %d, %d): mismatched fs, actual then expected", f.Name(), tt.filesize, 0, tt.blocksize)
-				t.Logf("%v", fs)
-				t.Logf("%v", tt.fs)
+				t.Errorf("Create(%s, %d, %d, %d): mismatched fs\nactual %v\nexpected %v", f.Name(), tt.filesize, 0, tt.blocksize, fs, tt.fs)
 			}
 			// we do not match the filesystems here, only check functional accuracy
 		}
