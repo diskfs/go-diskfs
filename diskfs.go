@@ -109,6 +109,7 @@ import (
 	"io"
 	"os"
 
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 
 	"github.com/diskfs/go-diskfs/disk"
@@ -176,6 +177,7 @@ func initDisk(f *os.File, openMode OpenModeOption) (*disk.Disk, error) {
 		pblksize      = int64(defaultBlocksize)
 		defaultBlocks = true
 	)
+	log.Debug("initDisk(): start")
 
 	// get device information
 	devInfo, err := f.Stat()
@@ -185,12 +187,14 @@ func initDisk(f *os.File, openMode OpenModeOption) (*disk.Disk, error) {
 	mode := devInfo.Mode()
 	switch {
 	case mode.IsRegular():
+		log.Debug("initDisk(): regular file")
 		diskType = disk.File
 		size = devInfo.Size()
 		if size <= 0 {
 			return nil, fmt.Errorf("could not get file size for device %s", f.Name())
 		}
 	case mode&os.ModeDevice != 0:
+		log.Debug("initDisk(): block device")
 		diskType = disk.Device
 		file, err := os.Open(f.Name())
 		if err != nil {
@@ -201,6 +205,7 @@ func initDisk(f *os.File, openMode OpenModeOption) (*disk.Disk, error) {
 			return nil, fmt.Errorf("error seeking to end of block device %s: %s\n", f.Name(), err)
 		}
 		lblksize, pblksize, err = getSectorSizes(f)
+		log.Debugf("initDisk(): logical block size %d, physical block size %d", lblksize, pblksize)
 		defaultBlocks = false
 		if err != nil {
 			return nil, fmt.Errorf("Unable to get block sizes for device %s: %v", f.Name(), err)
