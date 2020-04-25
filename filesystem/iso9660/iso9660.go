@@ -101,7 +101,7 @@ func Create(f util.File, size int64, start int64, blocksize int64) (*FileSystem,
 //
 // requires the util.File where to read the filesystem, size is the size of the filesystem in bytes,
 // start is how far in bytes from the beginning of the util.File the filesystem is expected to begin,
-// and blocksize is is the logical blocksize to use for creating the filesystem
+// and blocksize is is the physical blocksize to use for reading the filesystem
 //
 // note that you are *not* required to read a filesystem on the entire disk. You could have a disk of size
 // 20GB, and a small filesystem of size 50MB that begins 2GB into the disk.

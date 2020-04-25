@@ -10,6 +10,8 @@ import (
 	"io"
 	"os"
 
+	log "github.com/sirupsen/logrus"
+
 	"github.com/diskfs/go-diskfs/filesystem"
 	"github.com/diskfs/go-diskfs/filesystem/fat32"
 	"github.com/diskfs/go-diskfs/filesystem/iso9660"
@@ -211,17 +213,21 @@ func (d *Disk) GetFilesystem(partition int) (filesystem.FileSystem, error) {
 	}
 
 	// just try each type
+	log.Debug("trying fat32")
 	fat32FS, err := fat32.Read(d.File, size, start, d.LogicalBlocksize)
 	if err == nil {
 		return fat32FS, nil
 	}
-	lbs := d.LogicalBlocksize
+	log.Debugf("fat32 failed: %v", err)
+	pbs := d.PhysicalBlocksize
 	if d.DefaultBlocks {
-		lbs = 0
+		pbs = 0
 	}
-	iso9660FS, err := iso9660.Read(d.File, size, start, lbs)
+	log.Debugf("trying iso9660 with physical block size %d", pbs)
+	iso9660FS, err := iso9660.Read(d.File, size, start, pbs)
 	if err == nil {
 		return iso9660FS, nil
 	}
+	log.Debugf("iso9660 failed: %v", err)
 	return nil, fmt.Errorf("Unknown filesystem on partition %d", partition)
 }
