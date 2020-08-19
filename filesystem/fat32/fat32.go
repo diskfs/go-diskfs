@@ -41,8 +41,8 @@ type SectorSize uint16
 const (
 	// SectorSize512 is a sector size of 512 bytes, used as the logical size for all FAT filesystems
 	SectorSize512        SectorSize = 512
-	maxClusterSize       int        = 128
-	minClusterSize       int        = 65529
+	minClusterSize       int        = 128
+	maxClusterSize       int        = 65529
 	bytesPerSlot         int        = 32
 	maxCharsLongFilename int        = 13
 )
