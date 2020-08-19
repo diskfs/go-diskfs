@@ -516,6 +516,72 @@ func TestFat32OpenFile(t *testing.T) {
 		})
 	})
 
+	// write many files to exceed the first cluster, then read back
+	t.Run("Write Many", func(t *testing.T) {
+		runTest := func(t *testing.T, pre, post int64) {
+			f, err := tmpFat32(false, pre, post)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if keepTmpFiles == "" {
+				defer os.Remove(f.Name())
+			} else {
+				fmt.Println(f.Name())
+			}
+			fileInfo, err := f.Stat()
+			if err != nil {
+				t.Fatalf("Error getting file info for tmpfile %s: %v", f.Name(), err)
+			}
+			fs, err := fat32.Create(f, fileInfo.Size()-pre-post, pre, 512, " NO NAME")
+			if err != nil {
+				t.Fatalf("Error reading fat32 filesystem from %s: %v", f.Name(), err)
+			}
+
+			pathPrefix := "/f"
+			fileCount := 32
+			for fileNumber := 1; fileNumber <= fileCount; fileNumber++ {
+				fileName := fmt.Sprintf("%s%d", pathPrefix, fileNumber)
+				fileContent := []byte(fileName)
+				readWriter, err := fs.OpenFile(fileName, os.O_RDWR|os.O_CREATE)
+				switch {
+				case err != nil:
+					t.Errorf("write many: unexpected error writing %s: %v", fileName, err)
+				case readWriter == nil:
+					t.Errorf("write many: unexpected nil output writing %s", fileName)
+				default:
+					readWriter.Seek(0, 0)
+					written, writeErr := readWriter.Write(fileContent)
+					readWriter.Seek(0, 0)
+					readFileContent, readErr := ioutil.ReadAll(readWriter)
+					switch {
+					case readErr != nil:
+						t.Errorf("write many: ioutil.ReadAll() unexpected error on %s: %v", fileName, readErr)
+					case writeErr != nil:
+						t.Errorf("write many: readWriter.Write(b) error on %s: %v", fileName, writeErr)
+					case written != len(fileContent):
+						t.Errorf("write many: readWriter.Write(b) wrote %d bytes instead of expected %d on %s", written, len(fileContent), fileName)
+					case string(readFileContent) != fileName:
+						t.Errorf("write many: mismatched contents on %s, expected: %s, got: %s", fileName, fileName, string(readFileContent))
+					}
+				}
+			}
+
+			dir, err := fs.ReadDir("/")
+			if err != nil {
+				t.Errorf("write many: error reading /: %v", err)
+			}
+			if len(dir) != fileCount+1 {
+				t.Errorf("write many: entry count mismatch on /: expected %d, got %d -- %v", fileCount, len(dir), dir)
+			}
+		}
+		t.Run("entire image", func(t *testing.T) {
+			runTest(t, 0, 0)
+		})
+		t.Run("embedded filesystem", func(t *testing.T) {
+			runTest(t, 500, 1000)
+		})
+	})
+
 	// large file should cross multiple clusters
 	// out cluster size is 512 bytes, so make it 10+ clusters
 	t.Run("Large File", func(t *testing.T) {
