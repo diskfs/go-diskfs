@@ -228,6 +228,17 @@ func Create(f util.File, size int64, start int64, blocksize int64, volumeLabel s
 		return nil, fmt.Errorf("Wrote %d bytes of MS-DOS Boot Sector to disk instead of expected %d", count, SectorSize512)
 	}
 
+	// write backup to the file
+	if fsisBackupSector > 0 {
+		count, err = f.WriteAt(b, int64(fsisBackupSector)*int64(SectorSize512)+int64(start))
+		if err != nil {
+			return nil, fmt.Errorf("Error writing MS-DOS Boot Sector to disk: %v", err)
+		}
+		if count != int(SectorSize512) {
+			return nil, fmt.Errorf("Wrote %d bytes of MS-DOS Boot Sector to disk instead of expected %d", count, SectorSize512)
+		}
+	}
+
 	// boot sector is in place
 
 	// create and allocate FAT32 FSInformationSector
@@ -241,10 +252,11 @@ func Create(f util.File, size int64, start int64, blocksize int64, volumeLabel s
 		return nil, fmt.Errorf("Could not create a valid byte stream for a FAT32 Filesystem Information Sector: %v", err)
 	}
 	fsisPrimary := int64(fsisPrimarySector * uint16(SectorSize512))
-	fsisBackup := int64(fsisBackupSector * uint16(SectorSize512))
 
 	f.WriteAt(fsisBytes, fsisPrimary+int64(start))
-	f.WriteAt(fsisBytes, fsisBackup+int64(start))
+	if fsisBackupSector > 0 {
+		f.WriteAt(fsisBytes, int64(fsisBackupSector+1)*int64(SectorSize512)+int64(start))
+	}
 
 	// write FAT tables
 	eocMarker := uint32(0x0fffffff)
@@ -833,7 +845,11 @@ func (fs *FileSystem) allocateSpace(size uint64, previous uint32) ([]uint32, err
 	if err != nil {
 		return nil, fmt.Errorf("Error converting FAT table to bytes: %v", err)
 	}
-	fs.file.WriteAt(b, int64(fs.bootSector.biosParameterBlock.dos331BPB.dos20BPB.reservedSectors)*int64(SectorSize512)+fs.start)
+	fatPrimary := int64(fs.bootSector.biosParameterBlock.dos331BPB.dos20BPB.reservedSectors) * int64(SectorSize512)
+	fatSize := int64(fs.bootSector.biosParameterBlock.sectorsPerFat) * int64(SectorSize512)
+	fatBackup := fatPrimary + fatSize
+	fs.file.WriteAt(b, fatPrimary+fs.start)
+	fs.file.WriteAt(b, fatBackup+fs.start)
 
 	fsisBytes, err := fs.fsis.toBytes()
 	if err != nil {
@@ -843,7 +859,9 @@ func (fs *FileSystem) allocateSpace(size uint64, previous uint32) ([]uint32, err
 	fsisBackup := fs.bootSector.biosParameterBlock.backupFSInfoSector
 
 	fs.file.WriteAt(fsisBytes, int64(fsisPrimary)*int64(SectorSize512)+fs.start)
-	fs.file.WriteAt(fsisBytes, int64(fsisBackup)*int64(SectorSize512)+fs.start)
+	if fsisBackup > 0 {
+		fs.file.WriteAt(fsisBytes, int64(fsisBackup+1)*int64(SectorSize512)+fs.start)
+	}
 
 	// return all of the clusters
 	return append(clusters, allocated...), nil
