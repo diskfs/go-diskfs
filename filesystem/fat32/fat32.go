@@ -789,6 +789,8 @@ func (fs *FileSystem) allocateSpace(size uint64, previous uint32) ([]uint32, err
 		}
 		originalClusterCount := len(clusters)
 		extraClusterCount = count - originalClusterCount
+		// make sure that previous is the last cluster of the previous chain
+		previous = clusters[len(clusters)-1]
 	}
 
 	// what id we do not need to allocate any?
