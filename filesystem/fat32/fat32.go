@@ -584,7 +584,7 @@ func (fs *FileSystem) getClusterList(firstCluster uint32) ([]uint32, error) {
 		switch {
 		case fs.table.isEoc(newCluster):
 			complete = true
-		case cluster <= 2:
+		case cluster < 2:
 			return nil, fmt.Errorf("Invalid cluster chain at %d", cluster)
 		}
 		cluster = newCluster
@@ -641,9 +641,9 @@ func (fs *FileSystem) writeDirectoryEntries(dir *Directory) error {
 	if err != nil {
 		return fmt.Errorf("Unable to get clusters for directory: %v", err)
 	}
-	extraClusters := len(b)/(int(fs.bootSector.biosParameterBlock.dos331BPB.dos20BPB.sectorsPerCluster)*fs.bytesPerCluster) - len(clusterList)
-	if extraClusters > 0 {
-		clusters, err := fs.allocateSpace(uint64(extraClusters), clusterList[len(clusterList)-1])
+
+	if len(b) > len(clusterList)*fs.bytesPerCluster {
+		clusters, err := fs.allocateSpace(uint64(len(b)), clusterList[0])
 		if err != nil {
 			return fmt.Errorf("Unable to allocate space for directory entries: %v", err)
 		}
