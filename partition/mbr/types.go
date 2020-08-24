@@ -26,7 +26,7 @@ const (
 	MacOSXBoot    Type = 0xab
 	HFS           Type = 0xaf
 	Solaris8Boot  Type = 0xbe
-	GPTProtective Type = 0xef
+	GPTProtective Type = 0xee
 	EFISystem     Type = 0xef
 	VMWareFS      Type = 0xfb
 	VMWareSwap    Type = 0xfc
