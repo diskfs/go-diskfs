@@ -42,7 +42,7 @@ type dos71EBPB struct {
 	version               fatVersion // Version is the version of the FAT, must be 0
 	rootDirectoryCluster  uint32     // RootDirectoryCluster is the cluster containing the filesystem root directory, normally 2
 	fsInformationSector   uint16     // FSInformationSector holds the sector which contains the primary DOS 7.1 Filesystem Information Cluster
-	backupFSInfoSector    uint16     // BackupFSInfoSector holds the sector which contains the backup DOS 7.1 Filesystem Information Cluster
+	backupBootSector      uint16     // BackupBootSector holds the sector which contains the backup boot sector and following FSIS sectors
 	bootFileName          [12]byte   // BootFileName is reserved and should be all 0x00
 	driveNumber           uint8      // DriveNumber is the code for the relative position and type of this drive in the system
 	reservedFlags         uint8      // ReservedFlags are flags used by the operating system and/or BIOS for various purposes, e.g. Windows NT CHKDSK status, OS/2 desired drive letter, etc.
@@ -65,7 +65,7 @@ func (bpb *dos71EBPB) equal(a *dos71EBPB) bool {
 		bpb.version == a.version &&
 		bpb.rootDirectoryCluster == a.rootDirectoryCluster &&
 		bpb.fsInformationSector == a.fsInformationSector &&
-		bpb.backupFSInfoSector == a.backupFSInfoSector &&
+		bpb.backupBootSector == a.backupBootSector &&
 		bpb.bootFileName == a.bootFileName &&
 		bpb.driveNumber == a.driveNumber &&
 		bpb.reservedFlags == a.reservedFlags &&
@@ -101,7 +101,7 @@ func dos71EBPBFromBytes(b []byte) (*dos71EBPB, int, error) {
 	bpb.version = fatVersion0
 	bpb.rootDirectoryCluster = binary.LittleEndian.Uint32(b[33:37])
 	bpb.fsInformationSector = binary.LittleEndian.Uint16(b[37:39])
-	bpb.backupFSInfoSector = binary.LittleEndian.Uint16(b[39:41])
+	bpb.backupBootSector = binary.LittleEndian.Uint16(b[39:41])
 	bootFileName := b[41:53]
 	copy(bpb.bootFileName[:], bootFileName)
 	bpb.driveNumber = uint8(b[53])
@@ -173,7 +173,7 @@ func (bpb *dos71EBPB) toBytes() ([]byte, error) {
 	binary.LittleEndian.PutUint16(b[31:33], uint16(bpb.version))
 	binary.LittleEndian.PutUint32(b[33:37], bpb.rootDirectoryCluster)
 	binary.LittleEndian.PutUint16(b[37:39], bpb.fsInformationSector)
-	binary.LittleEndian.PutUint16(b[39:41], bpb.backupFSInfoSector)
+	binary.LittleEndian.PutUint16(b[39:41], bpb.backupBootSector)
 	copy(b[41:53], bpb.bootFileName[:])
 	b[53] = bpb.driveNumber
 	b[54] = bpb.reservedFlags

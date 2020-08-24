@@ -17,7 +17,7 @@ func getValidDos71EBPB() *dos71EBPB {
 		version:               0,
 		rootDirectoryCluster:  2,
 		fsInformationSector:   1,
-		backupFSInfoSector:    6,
+		backupBootSector:      6,
 		bootFileName:          [12]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
 		driveNumber:           128,
 		reservedFlags:         0x00,

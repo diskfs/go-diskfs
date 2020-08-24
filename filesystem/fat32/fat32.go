@@ -106,7 +106,7 @@ func Create(f util.File, size int64, start int64, blocksize int64, volumeLabel s
 	volid := uint32(now.Unix()<<20 | (now.UnixNano() / 1000000))
 
 	fsisPrimarySector := uint16(1)
-	fsisBackupSector := uint16(6)
+	backupBootSector := uint16(6)
 
 	/*
 		size calculations
@@ -191,7 +191,7 @@ func Create(f util.File, size int64, start int64, blocksize int64, volumeLabel s
 		version:               fatVersion0,
 		rootDirectoryCluster:  2,
 		fsInformationSector:   fsisPrimarySector,
-		backupFSInfoSector:    fsisBackupSector,
+		backupBootSector:      backupBootSector,
 		bootFileName:          [12]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 		extendedBootSignature: longDos71EBPB,
 		volumeSerialNumber:    volid,
@@ -229,8 +229,8 @@ func Create(f util.File, size int64, start int64, blocksize int64, volumeLabel s
 	}
 
 	// write backup to the file
-	if fsisBackupSector > 0 {
-		count, err = f.WriteAt(b, int64(fsisBackupSector)*int64(SectorSize512)+int64(start))
+	if backupBootSector > 0 {
+		count, err = f.WriteAt(b, int64(backupBootSector)*int64(SectorSize512)+int64(start))
 		if err != nil {
 			return nil, fmt.Errorf("Error writing MS-DOS Boot Sector to disk: %v", err)
 		}
@@ -254,8 +254,8 @@ func Create(f util.File, size int64, start int64, blocksize int64, volumeLabel s
 	fsisPrimary := int64(fsisPrimarySector * uint16(SectorSize512))
 
 	f.WriteAt(fsisBytes, fsisPrimary+int64(start))
-	if fsisBackupSector > 0 {
-		f.WriteAt(fsisBytes, int64(fsisBackupSector+1)*int64(SectorSize512)+int64(start))
+	if backupBootSector > 0 {
+		f.WriteAt(fsisBytes, int64(backupBootSector+1)*int64(SectorSize512)+int64(start))
 	}
 
 	// write FAT tables
@@ -856,11 +856,11 @@ func (fs *FileSystem) allocateSpace(size uint64, previous uint32) ([]uint32, err
 		return nil, fmt.Errorf("Could not create a valid byte stream for a FAT32 Filesystem Information Sector: %v", err)
 	}
 	fsisPrimary := fs.bootSector.biosParameterBlock.fsInformationSector
-	fsisBackup := fs.bootSector.biosParameterBlock.backupFSInfoSector
+	backupBootSector := fs.bootSector.biosParameterBlock.backupBootSector
 
 	fs.file.WriteAt(fsisBytes, int64(fsisPrimary)*int64(SectorSize512)+fs.start)
-	if fsisBackup > 0 {
-		fs.file.WriteAt(fsisBytes, int64(fsisBackup+1)*int64(SectorSize512)+fs.start)
+	if backupBootSector > 0 {
+		fs.file.WriteAt(fsisBytes, int64(backupBootSector+1)*int64(SectorSize512)+fs.start)
 	}
 
 	// return all of the clusters
