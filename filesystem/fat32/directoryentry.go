@@ -3,7 +3,10 @@ package fat32
 import (
 	"encoding/binary"
 	"fmt"
+	"hash/fnv"
+	"math/rand"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -382,7 +385,7 @@ func calculateSlots(s string) int {
 // returns shortName, extension, isLFN, isTruncated
 //   isLFN : was there an LFN that had to be converted
 //   isTruncated : was the shortname longer than 8 chars and had to be converted?
-func convertLfnSfn(name string) (string, string, bool, bool) {
+func convertLfnSfn(name string, cache map[string]bool) (string, string, bool, bool) {
 	isLFN, isTruncated := false, false
 	// get last period in name
 	lastDot := strings.LastIndex(name, ".")
@@ -413,11 +416,47 @@ func convertLfnSfn(name string) (string, string, bool, bool) {
 		isLFN = true
 	}
 
+	truncate := func(name string, n int) string {
+		return name[0:6] + "~" + strconv.Itoa(n)
+	}
+
+	hash := func(shortName string, n int) string {
+		h := fnv.New32a()
+		// the input name may have more information than the short name
+		h.Write([]byte(name))
+		return shortName[0:2] + fmt.Sprintf("%04X", (h.Sum32()%0x10000)) + "~" + strconv.Itoa(n)
+	}
+
+	random := func() string {
+		return fmt.Sprintf("%06X", (rand.Int63()%0x1000000)) + "~" + strconv.Itoa(1+rand.Intn(8))
+	}
+
 	// convert shortName to 8 chars
 	if len(shortName) > 8 {
 		isLFN = true
 		isTruncated = true
-		shortName = shortName[:6] + "~" + "1"
+		if !cache[truncate(shortName, 9)+"."+extension] {
+			i := 1
+			for i < 9 && cache[truncate(shortName, i)+"."+extension] {
+				i++
+			}
+			shortName = truncate((shortName), i)
+		} else {
+			i := 0
+			for i <= 9 && cache[hash(shortName, i)+"."+extension] {
+				i++
+			}
+			if i <= 9 {
+				shortName = hash(shortName, i)
+			} else {
+				rnd := random()
+				for i < 1000 && cache[rnd+"."+extension] {
+					i++
+					rnd = random()
+				}
+				shortName = rnd
+			}
+		}
 	}
 	return shortName, extension, isLFN, isTruncated
 }

@@ -464,6 +464,7 @@ func TestDirectoryEntryCalculateSlots(t *testing.T) {
 }
 
 func TestDirectoryEntryConvertLfnSfn(t *testing.T) {
+	emptyCache := make(map[string]bool)
 	tests := []struct {
 		input       string
 		sfn         string
@@ -481,12 +482,26 @@ func TestDirectoryEntryConvertLfnSfn(t *testing.T) {
 		{"VeryLongName.ft", "VERYLO~1", "FT", true, true},
 	}
 	for _, tt := range tests {
-		sfn, extension, isLfn, isTruncated := convertLfnSfn(tt.input)
+		sfn, extension, isLfn, isTruncated := convertLfnSfn(tt.input, emptyCache)
 		if sfn != tt.sfn || extension != tt.extension || isLfn != tt.isLfn || isTruncated != tt.isTruncated {
 			t.Errorf("convertLfnSfn(%s) expected %s / %s / %t / %t ; actual %s / %s / %t / %t", tt.input, tt.sfn, tt.extension, tt.isLfn, tt.isTruncated, sfn, extension, isLfn, isTruncated)
 		}
 	}
-
+	// try filling a cache with 100000 long filenames
+	// The hashing adds 16 bits of entry, thus 64k entries at most (with the same 2 letter prefix)
+	// Overall we can't reach such a directory without using all collision avoidance methods
+	cache := make(map[string]bool)
+	for i := 0; i < 100000; i++ {
+		filename := fmt.Sprintf("FinalVersion%d.doc", i)
+		sfn, extension, _, _ := convertLfnSfn(filename, cache)
+		if len(sfn) != 8 || len(extension) != 3 {
+			t.Errorf("convertLfnSfn(%s) expected 8+3, got %s.%s", filename, sfn, extension)
+		}
+		cache[sfn+"."+extension] = true
+	}
+	if len(cache) != 100000 {
+		t.Errorf("created 100000 files, got %d entries", len(cache))
+	}
 }
 
 func TestDirectoryEntryUCaseValid(t *testing.T) {
