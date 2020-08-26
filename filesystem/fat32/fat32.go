@@ -41,8 +41,8 @@ type SectorSize uint16
 const (
 	// SectorSize512 is a sector size of 512 bytes, used as the logical size for all FAT filesystems
 	SectorSize512        SectorSize = 512
-	maxClusterSize       int        = 128
-	minClusterSize       int        = 65529
+	minClusterSize       int        = 128
+	maxClusterSize       int        = 65529
 	bytesPerSlot         int        = 32
 	maxCharsLongFilename int        = 13
 )
@@ -584,7 +584,7 @@ func (fs *FileSystem) getClusterList(firstCluster uint32) ([]uint32, error) {
 		switch {
 		case fs.table.isEoc(newCluster):
 			complete = true
-		case cluster <= 2:
+		case cluster < 2:
 			return nil, fmt.Errorf("Invalid cluster chain at %d", cluster)
 		}
 		cluster = newCluster
@@ -641,9 +641,9 @@ func (fs *FileSystem) writeDirectoryEntries(dir *Directory) error {
 	if err != nil {
 		return fmt.Errorf("Unable to get clusters for directory: %v", err)
 	}
-	extraClusters := len(b)/(int(fs.bootSector.biosParameterBlock.dos331BPB.dos20BPB.sectorsPerCluster)*fs.bytesPerCluster) - len(clusterList)
-	if extraClusters > 0 {
-		clusters, err := fs.allocateSpace(uint64(extraClusters), clusterList[len(clusterList)-1])
+
+	if len(b) > len(clusterList)*fs.bytesPerCluster {
+		clusters, err := fs.allocateSpace(uint64(len(b)), clusterList[0])
 		if err != nil {
 			return fmt.Errorf("Unable to allocate space for directory entries: %v", err)
 		}
