@@ -19,7 +19,8 @@ type File struct {
 // It returns the number of bytes read and any error encountered.
 // At end of file, Read returns 0, io.EOF
 // reads from the last known offset in the file from last read or write
-// use Seek() to set at a particular point
+// and increments the offset by the number of bytes read.
+// Use Seek() to set at a particular point
 func (fl *File) Read(b []byte) (int, error) {
 	// we have the DirectoryEntry, so we can get the starting cluster location
 	// we then get a list of the clusters, and read the data from all of those clusters
@@ -94,7 +95,8 @@ func (fl *File) Read(b []byte) (int, error) {
 // It returns the number of bytes written and an error, if any.
 // returns a non-nil error when n != len(b)
 // writes to the last known offset in the file from last read or write
-// use Seek() to set at a particular point
+// and increments the offset by the number of bytes read.
+// Use Seek() to set at a particular point
 func (fl *File) Write(p []byte) (int, error) {
 	totalWritten := 0
 	fs := fl.filesystem
@@ -154,6 +156,9 @@ func (fl *File) Write(p []byte) (int, error) {
 		file.WriteAt(p[totalWritten:totalWritten+toWrite], int64(offset)+fs.start)
 		totalWritten += toWrite
 	}
+
+	fl.offset = fl.offset + int64(totalWritten)
+
 	// update the parent that we have changed the file size
 	err = fs.writeDirectoryEntries(fl.parent)
 	if err != nil {

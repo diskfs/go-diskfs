@@ -579,4 +579,79 @@ func TestFat32OpenFile(t *testing.T) {
 		})
 	})
 
+	// large files are often written in multiple passes
+	t.Run("Streaming Large File", func(t *testing.T) {
+		runTest := func(t *testing.T, pre, post int64) {
+			// get a temporary working file
+			f, err := tmpFat32(true, pre, post)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if keepTmpFiles == "" {
+				defer os.Remove(f.Name())
+			} else {
+				fmt.Println(f.Name())
+			}
+			fileInfo, err := f.Stat()
+			if err != nil {
+				t.Fatalf("Error getting file info for tmpfile %s: %v", f.Name(), err)
+			}
+			fs, err := fat32.Read(f, fileInfo.Size()-pre-post, pre, 512)
+			if err != nil {
+				t.Fatalf("Error reading fat32 filesystem from %s: %v", f.Name(), err)
+			}
+			path := "/abcdefghi"
+			mode := os.O_RDWR | os.O_CREATE
+			// each cluster is 512 bytes, so use 10 clusters and a bit of another
+			size := 10*512 + 22
+			bWrite := make([]byte, size, size)
+			header := fmt.Sprintf("OpenFile(%s, %s)", path, getOpenMode(mode))
+			readWriter, err := fs.OpenFile(path, mode)
+			switch {
+			case err != nil:
+				t.Errorf("%s: unexpected error: %v", header, err)
+			case readWriter == nil:
+				t.Errorf("%s: Unexpected nil output", header)
+			default:
+				// success
+			}
+
+			rand.Read(bWrite)
+			writeSizes := []int{512, 1024, 256}
+			low := 0
+			for i := 0; low < len(bWrite); i++ {
+				high := low + writeSizes[i % len(writeSizes)]
+				if high > len(bWrite) {
+					high = len(bWrite)
+				}
+				written, err := readWriter.Write(bWrite[low:high])
+				if err != nil {
+					t.Errorf("%s: readWriter.Write(b) unexpected error: %v", header, err)
+				}
+				if written != high - low {
+					t.Errorf("%s: readWriter.Write(b) wrote %d bytes instead of expected %d", header, written, high - low)
+				}
+				low = high
+			}
+			
+			readWriter.Seek(0, 0)
+			bRead, readErr := ioutil.ReadAll(readWriter)
+
+				switch {
+				case readErr != nil:
+					t.Errorf("%s: ioutil.ReadAll() unexpected error: %v", header, readErr)
+				case bytes.Compare(bWrite, bRead) != 0:
+					t.Errorf("%s: mismatched contents, read %d expected %d, actual data then expected:", header, len(bRead), len(bWrite))
+					//t.Log(bRead)
+					//t.Log(bWrite)
+				}
+		}
+
+		t.Run("entire image", func(t *testing.T) {
+			runTest(t, 0, 0)
+		})
+		t.Run("embedded filesystem", func(t *testing.T) {
+			runTest(t, 500, 1000)
+		})
+	})
 }
