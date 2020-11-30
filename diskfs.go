@@ -110,7 +110,6 @@ import (
 	"os"
 
 	log "github.com/sirupsen/logrus"
-	"golang.org/x/sys/unix"
 
 	"github.com/diskfs/go-diskfs/disk"
 )
@@ -301,22 +300,4 @@ func Create(device string, size int64, format Format) (*disk.Disk, error) {
 	}
 	// return our disk
 	return initDisk(f, ReadWriteExclusive)
-}
-
-// to get the logical and physical sector sizes
-func getSectorSizes(f *os.File) (int64, int64, error) {
-	/*
-		ioctl(fd, BLKBSZGET, &physicalsectsize);
-
-	*/
-	fd := f.Fd()
-	logicalSectorSize, err := unix.IoctlGetInt(int(fd), blksszGet)
-	if err != nil {
-		return 0, 0, fmt.Errorf("Unable to get device logical sector size: %v", err)
-	}
-	physicalSectorSize, err := unix.IoctlGetInt(int(fd), blkbszGet)
-	if err != nil {
-		return 0, 0, fmt.Errorf("Unable to get device physical sector size: %v", err)
-	}
-	return int64(logicalSectorSize), int64(physicalSectorSize), nil
 }
