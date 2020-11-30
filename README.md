@@ -90,7 +90,7 @@ There are examples in the [examples/](./examples/) directory. Here is one to get
 The following example will create a fully bootable EFI disk image. It assumes you have a bootable EFI file (any modern Linux kernel compiled with `CONFIG_EFI_STUB=y` will work) available.
 
 ```go
-import diskfs "github.com/diskfs/goi-diskfs"
+import diskfs "github.com/diskfs/go-diskfs"
 
 espSize int := 100*1024*1024 // 100 MB
 diskSize int := espSize + 4*1024*1024 // 104 MB
