@@ -2,6 +2,7 @@ package diskfs
 
 import (
 	"errors"
+	"os"
 )
 
 // getSectorSizes get the logical and physical sector sizes for a block device

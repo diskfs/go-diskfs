@@ -862,7 +862,7 @@ func TestDirectoryEntryGetLocation(t *testing.T) {
 		hasOwnerGroupPermissions: false,
 		hasMoreEntries:           false,
 		volumeSequence:           1,
-		filename:                 string(0x00),
+		filename:                 fmt.Sprintf("%x", 0x00),
 		filesystem:               &FileSystem{blocksize: 2048, file: f},
 	}
 
