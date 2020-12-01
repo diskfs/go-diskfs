@@ -219,7 +219,7 @@ func initDisk(f *os.File, openMode OpenModeOption) (*disk.Disk, error) {
 
 	writable := writableMode(openMode)
 
-	return &disk.Disk{
+	ret := &disk.Disk{
 		File:              f,
 		Info:              devInfo,
 		Type:              diskType,
@@ -228,7 +228,16 @@ func initDisk(f *os.File, openMode OpenModeOption) (*disk.Disk, error) {
 		PhysicalBlocksize: pblksize,
 		Writable:          writable,
 		DefaultBlocks:     defaultBlocks,
-	}, nil
+	}
+
+	// try to initialize the partition table.
+	// we ignore errors, because it is perfectly fine to open a disk
+	// and use it before it has a partition table. This is solely
+	// a convenience.
+	if table, err := ret.GetPartitionTable(); err == nil && table != nil {
+		ret.Table = table
+	}
+	return ret, nil
 }
 
 func checkDevice(device string) error {
