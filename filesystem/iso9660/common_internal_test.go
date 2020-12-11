@@ -46,3 +46,32 @@ func GetTestFile(t *testing.T) (*File, string) {
 		offset:         0,
 	}, "README\n"
 }
+
+func GetLargeTestFile(t *testing.T) (*File, uint32) {
+	// FileSystem implements the FileSystem interface
+	file, err := os.Open(ISO9660File)
+	if err != nil {
+		t.Errorf("Could not read ISO9660 test file %s: %v", ISO9660File, err)
+	}
+	fs := &FileSystem{
+		workspace: "",
+		size:      ISO9660Size,
+		start:     0,
+		file:      file,
+		blocksize: 2048,
+	}
+	de := &directoryEntry{
+		extAttrSize: 0,
+		location:    38,
+		size:        5242880,
+		creation:    time.Now(),
+		filesystem:  fs,
+		filename:    "LARGEFIL.;1",
+	}
+	return &File{
+		directoryEntry: de,
+		isReadWrite:    false,
+		isAppend:       false,
+		offset:         0,
+	}, de.size
+}

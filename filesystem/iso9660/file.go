@@ -46,7 +46,7 @@ func (fl *File) Read(b []byte) (int, error) {
 
 	fl.offset = fl.offset + int64(maxRead)
 	var retErr error
-	if fl.offset >= int64(size) {
+	if fl.offset >= int64(fl.size) {
 		retErr = io.EOF
 	}
 	return maxRead, retErr
