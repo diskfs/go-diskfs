@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	dataStartSector = 16
+	dataStartSector         = 16
 	defaultVolumeIdentifier = "ISOIMAGE"
 )
 
@@ -342,14 +342,6 @@ func (fi *finalizeFileInfo) addChild(entry *finalizeFileInfo) {
 	fi.children = append(fi.children, entry)
 }
 
-func finalizeFileInfoNames(fi []*finalizeFileInfo) []string {
-	ret := make([]string, len(fi))
-	for i, v := range fi {
-		ret[i] = v.name
-	}
-	return ret
-}
-
 // Finalize finalize a read-only filesystem by writing it out to a read-only format
 func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 	if fs.workspace == "" {
@@ -459,6 +451,70 @@ func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 	}
 	location := rootLocation
 
+	var (
+		catEntry    *finalizeFileInfo
+		bootcat     []byte
+		bootEntries []*finalizeFileInfo
+	)
+
+	if options.ElTorito != nil {
+		bootcat, err = options.ElTorito.generateCatalog()
+		if err != nil {
+			return fmt.Errorf("Unable to generate El Torito boot catalog: %v", err)
+		}
+		// figure out where to save it on disk
+		catname := options.ElTorito.BootCatalog
+		switch {
+		case catname == "" && options.RockRidge:
+			catname = elToritoDefaultCatalogRR
+		case catname == "":
+			catname = elToritoDefaultCatalog
+		}
+		shortname, extension := calculateShortnameExtension(path.Base(catname))
+		// break down the catalog basename from the parent dir
+		catSize := int64(len(bootcat))
+		catEntry = &finalizeFileInfo{
+			content:   bootcat,
+			size:      catSize,
+			path:      catname,
+			name:      path.Base(catname),
+			shortname: shortname,
+			extension: extension,
+			blocks:    calculateBlocks(catSize, fs.blocksize),
+		}
+		// make it the first file
+		files = append([]*finalizeFileInfo{catEntry}, files...)
+
+		// if we were not told to hide the catalog, add it to its parent
+		if !options.ElTorito.HideBootCatalog {
+			var parent *finalizeFileInfo
+			parent, err = root.findEntry(path.Dir(catname))
+			if err != nil {
+				return fmt.Errorf("Error finding parent for boot catalog %s: %v", catname, err)
+			}
+			parent.addChild(catEntry)
+		}
+		for _, e := range options.ElTorito.Entries {
+			var parent, child *finalizeFileInfo
+			parent, err = root.findEntry(path.Dir(e.BootFile))
+			if err != nil {
+				return fmt.Errorf("Error finding parent for boot image file %s: %v", e.BootFile, err)
+			}
+			// did we ask to hide any image files?
+			if e.HideBootFile {
+				child = parent.removeChild(path.Base(e.BootFile))
+			} else {
+				child, err = parent.findEntry(path.Base(e.BootFile))
+				if err != nil {
+					return fmt.Errorf("Unable to find image child %s: %v", e.BootFile, err)
+				}
+			}
+			// save the child so we can add location late
+			e.size = uint16(child.size)
+			bootEntries = append(bootEntries, child)
+		}
+	}
+
 	var size, ceBlocks int
 	for _, dir := range dirs {
 		dir.location = location
@@ -494,74 +550,21 @@ func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 
 	// if we asked for ElTorito, need to generate the boot catalog and save it
 	var (
-		catEntry *finalizeFileInfo
-		bootcat  []byte
 		volIdentifier string = defaultVolumeIdentifier
 	)
 	if options.VolumeIdentifier != "" {
 		volIdentifier = options.VolumeIdentifier
 	}
-	if options.ElTorito != nil {
-		bootcat, err = options.ElTorito.generateCatalog()
-		if err != nil {
-			return fmt.Errorf("Unable to generate El Torito boot catalog: %v", err)
-		}
-		// figure out where to save it on disk
-		catname := options.ElTorito.BootCatalog
-		switch {
-		case catname == "" && options.RockRidge:
-			catname = elToritoDefaultCatalogRR
-		case catname == "":
-			catname = elToritoDefaultCatalog
-		}
-		shortname, extension := calculateShortnameExtension(path.Base(catname))
-		// break down the catalog basename from the parent dir
-		catEntry = &finalizeFileInfo{
-			content:   bootcat,
-			size:      int64(len(bootcat)),
-			path:      catname,
-			name:      path.Base(catname),
-			shortname: shortname,
-			extension: extension,
-		}
-		catEntry.location = location
-		catEntry.blocks = calculateBlocks(catEntry.size, fs.blocksize)
-		location += catEntry.blocks
-		// make it the first file
-		files = append([]*finalizeFileInfo{catEntry}, files...)
-
-		// if we were not told to hide the catalog, add it to its parent
-		if !options.ElTorito.HideBootCatalog {
-			var parent *finalizeFileInfo
-			parent, err = root.findEntry(path.Dir(catname))
-			if err != nil {
-				return fmt.Errorf("Error finding parent for boot catalog %s: %v", catname, err)
-			}
-			parent.addChild(catEntry)
-		}
-		for _, e := range options.ElTorito.Entries {
-			var parent, child *finalizeFileInfo
-			parent, err = root.findEntry(path.Dir(e.BootFile))
-			if err != nil {
-				return fmt.Errorf("Error finding parent for boot image file %s: %v", e.BootFile, err)
-			}
-			// did we ask to hide any image files?
-			if e.HideBootFile {
-				child = parent.removeChild(path.Base(e.BootFile))
-			} else {
-				child, err = parent.findEntry(path.Base(e.BootFile))
-				if err != nil {
-					return fmt.Errorf("Unable to find image child %s: %v", e.BootFile, err)
-				}
-			}
-			e.size = uint16(child.size)
-			e.location = child.location
-		}
-	}
 
 	for _, e := range files {
 		e.location = location
 		location += e.blocks
+	}
+
+	if options.ElTorito != nil {
+		for i, ff := range bootEntries {
+			options.ElTorito.Entries[i].location = ff.location
+		}
 	}
 
 	// now that we have all of the files with their locations, we can rebuild the boot catalog using the correct data
