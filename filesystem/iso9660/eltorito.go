@@ -66,8 +66,10 @@ type ElToritoEntry struct {
 	LoadSegment  uint16
 	// SystemType type of system the partition is, accordinng to the MBR standard
 	SystemType mbr.Type
-	size       uint16
-	location   uint32
+	// LoadSize how many blocks of BootFile to load, equivalent to genisoimage option `-boot-load-size`
+	LoadSize uint16
+	size     uint16
+	location uint32
 }
 
 // generateCatalog generate the el torito boot catalog file
@@ -115,9 +117,12 @@ func (e *ElToritoEntry) headerBytes(last bool, entries uint16) []byte {
 
 // toBytes convert ElToritoEntry to appropriate entry bytes
 func (e *ElToritoEntry) entryBytes() []byte {
-	blocks := e.size / 512
-	if e.size%512 > 1 {
-		blocks++
+	blocks := e.LoadSize
+	if blocks == 0 {
+		blocks = e.size / 512
+		if e.size%512 > 1 {
+			blocks++
+		}
 	}
 	b := make([]byte, 0x20)
 	b[0] = 0x88
