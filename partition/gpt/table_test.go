@@ -299,13 +299,13 @@ func TestTableWrite(t *testing.T) {
 			Partition name: 'EFI System'
 			*/
 			partitionTypeMatcher := regexp.MustCompile(`Partition GUID code: ([A-F0-9\-]+) `)
-			partitionGuidMatcher := regexp.MustCompile(`Partition unique GUID: ([A-F0-9\-]+)\n`)
+			partitionGUIDMatcher := regexp.MustCompile(`Partition unique GUID: ([A-F0-9\-]+)\n`)
 			firstSectorMatcher := regexp.MustCompile(`First sector: (\d+) `)
 			lastSectorMatcher := regexp.MustCompile(`Last sector: (\d+) `)
 			partitionNameMatcher := regexp.MustCompile(`Partition name: '([^']+)'`)
 
 			partitionType := partitionTypeMatcher.FindStringSubmatch(outString)
-			partitionGuid := partitionGuidMatcher.FindStringSubmatch(outString)
+			partitionGUID := partitionGUIDMatcher.FindStringSubmatch(outString)
 			firstSector := firstSectorMatcher.FindStringSubmatch(outString)
 			lastSector := lastSectorMatcher.FindStringSubmatch(outString)
 			partitionName := partitionNameMatcher.FindStringSubmatch(outString)
@@ -318,10 +318,10 @@ func TestTableWrite(t *testing.T) {
 			}
 
 			switch {
-			case len(partitionGuid) < 2:
-				t.Errorf("Unable to retrieve partition guid %v", partitionGuid)
-			case len(partitionGuid[1]) < 36:
-				t.Errorf("Invalid partition GUID: %s", partitionGuid[1])
+			case len(partitionGUID) < 2:
+				t.Errorf("Unable to retrieve partition guid %v", partitionGUID)
+			case len(partitionGUID[1]) < 36:
+				t.Errorf("Invalid partition GUID: %s", partitionGUID[1])
 			}
 
 			switch {

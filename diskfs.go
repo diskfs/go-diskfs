@@ -197,11 +197,11 @@ func initDisk(f *os.File, openMode OpenModeOption) (*disk.Disk, error) {
 		diskType = disk.Device
 		file, err := os.Open(f.Name())
 		if err != nil {
-			return nil, fmt.Errorf("error opening block device %s: %s\n", f.Name(), err)
+			return nil, fmt.Errorf("error opening block device %s: %s", f.Name(), err)
 		}
 		size, err = file.Seek(0, io.SeekEnd)
 		if err != nil {
-			return nil, fmt.Errorf("error seeking to end of block device %s: %s\n", f.Name(), err)
+			return nil, fmt.Errorf("error seeking to end of block device %s: %s", f.Name(), err)
 		}
 		lblksize, pblksize, err = getSectorSizes(f)
 		log.Debugf("initDisk(): logical block size %d, physical block size %d", lblksize, pblksize)
