@@ -549,9 +549,7 @@ func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 	location += pathTableBlocks
 
 	// if we asked for ElTorito, need to generate the boot catalog and save it
-	var (
-		volIdentifier string = defaultVolumeIdentifier
-	)
+	volIdentifier := defaultVolumeIdentifier
 	if options.VolumeIdentifier != "" {
 		volIdentifier = options.VolumeIdentifier
 	}
