@@ -65,6 +65,7 @@ type finalizeFileInfo struct {
 	children           []*finalizeFileInfo
 	trueParent         *finalizeFileInfo
 	trueChild          *finalizeFileInfo
+	elToritoEntry      *ElToritoEntry
 	content            []byte
 }
 
@@ -452,9 +453,8 @@ func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 	location := rootLocation
 
 	var (
-		catEntry    *finalizeFileInfo
-		bootcat     []byte
-		bootEntries []*finalizeFileInfo
+		catEntry *finalizeFileInfo
+		bootcat  []byte
 	)
 
 	if options.ElTorito != nil {
@@ -511,7 +511,7 @@ func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 			}
 			// save the child so we can add location late
 			e.size = uint16(child.size)
-			bootEntries = append(bootEntries, child)
+			child.elToritoEntry = e
 		}
 	}
 
@@ -559,11 +559,8 @@ func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 	for _, e := range files {
 		e.location = location
 		location += e.blocks
-	}
-
-	if options.ElTorito != nil {
-		for i, ff := range bootEntries {
-			options.ElTorito.Entries[i].location = ff.location
+		if e.elToritoEntry != nil {
+			e.elToritoEntry.location = e.location
 		}
 	}
 
@@ -607,11 +604,11 @@ func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 	writeAt = int64(pathTableMLocation) * int64(blocksize)
 	f.WriteAt(pathTableMBytes, writeAt)
 
-	var (
-		from   *os.File
-		copied int
-	)
 	for _, e := range files {
+		var (
+			from   *os.File
+			copied int
+		)
 		writeAt := int64(e.location) * int64(blocksize)
 		if e.content == nil {
 			// for file, just copy the data across
@@ -620,9 +617,37 @@ func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 				return fmt.Errorf("failed to open file for reading %s: %v", e.path, err)
 			}
 			defer from.Close()
-			copied, err = copyFileData(from, f, 0, writeAt)
-			if err != nil {
-				return fmt.Errorf("failed to copy file to disk %s: %v", e.path, err)
+			if e.elToritoEntry != nil && e.elToritoEntry.BootTable {
+				// copy first 8 bytes, then insert the El Torito Boot Information Table, then the rest
+				var count int
+
+				// first 8 bytes
+				count, err = copyFileData(from, f, 0, writeAt, 8)
+				if err != nil {
+					return fmt.Errorf("failed to copy first bytes 0-8 of boot file to disk %s: %v", e.path, err)
+				}
+				copied += count
+				// insert El Torito Boot Information Table
+				bootTable, err := e.elToritoEntry.generateBootTable(dataStartSector, path.Join(fs.workspace, e.path))
+				if err != nil {
+					return fmt.Errorf("failed to generate boot table for %s: %v", e.path, err)
+				}
+				count, err = f.WriteAt(bootTable, writeAt+8)
+				if err != nil {
+					return fmt.Errorf("failed to write 56 byte boot table to disk %s: %v", e.path, err)
+				}
+				copied += count
+				// remainder of file
+				count, err = copyFileData(from, f, 64, writeAt+64, 0)
+				if err != nil {
+					return fmt.Errorf("failed to copy bytes 64 to end of boot file to disk %s: %v", e.path, err)
+				}
+				copied += count
+			} else {
+				copied, err = copyFileData(from, f, 0, writeAt, 0)
+				if err != nil {
+					return fmt.Errorf("failed to copy file to disk %s: %v", e.path, err)
+				}
 			}
 			if copied != int(e.Size()) {
 				return fmt.Errorf("error copying file %s to disk, copied %d bytes, expected %d", e.path, copied, e.Size())
@@ -695,7 +720,9 @@ func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 	return nil
 }
 
-func copyFileData(from, to util.File, fromOffset, toOffset int64) (int, error) {
+// copyFileData copy data from file `from` at offset `fromOffset` to file `to` at offset `toOffset`.
+// Copies `size` bytes. If `size` is 0, copies as many bytes as it can.
+func copyFileData(from, to util.File, fromOffset, toOffset int64, size int) (int, error) {
 	buf := make([]byte, 2048)
 	copied := 0
 	for {
@@ -703,6 +730,11 @@ func copyFileData(from, to util.File, fromOffset, toOffset int64) (int, error) {
 		if err != nil && err != io.EOF {
 			return copied, err
 		}
+
+		if size > 0 && n > (size-copied) {
+			n = size - copied
+		}
+
 		if n == 0 {
 			break
 		}
