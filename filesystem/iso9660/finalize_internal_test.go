@@ -38,7 +38,7 @@ func TestCopyFileData(t *testing.T) {
 	}
 	defer os.Remove(from.Name()) // clean up
 
-	copied, err := copyFileData(from, to, 0, 0)
+	copied, err := copyFileData(from, to, 0, 0, 0)
 	if err != nil {
 		t.Fatal("error copying data from/to", err)
 	}

@@ -2,6 +2,9 @@ package iso9660
 
 import (
 	"encoding/binary"
+	"fmt"
+	"io"
+	"os"
 
 	"github.com/diskfs/go-diskfs/partition/mbr"
 	"github.com/diskfs/go-diskfs/util"
@@ -64,6 +67,10 @@ type ElToritoEntry struct {
 	BootFile     string
 	HideBootFile bool
 	LoadSegment  uint16
+	// BootTable whether to insert a boot table into the entry, equivalent to genisoimage
+	// option `-boot-info-table`. Unlike genisoimage, does not modify the file in the
+	// filesystem, but inserts it on the fly.
+	BootTable bool
 	// SystemType type of system the partition is, accordinng to the MBR standard
 	SystemType mbr.Type
 	// LoadSize how many blocks of BootFile to load, equivalent to genisoimage option `-boot-load-size`
@@ -138,4 +145,40 @@ func (e *ElToritoEntry) entryBytes() []byte {
 	// b[0xc] is selection criteria type. We do not yet support it, so leave as 0.
 	// b[0xd:] is vendor unique selectiomn critiera. We do not yet support it, so leave as 0.
 	return b
+}
+
+// generateBootTable generate the el torito boot table for this entry
+func (e *ElToritoEntry) generateBootTable(pvdSector uint32, p string) ([]byte, error) {
+	b := make([]byte, 56)
+	binary.LittleEndian.PutUint32(b[0:4], pvdSector)
+	binary.LittleEndian.PutUint32(b[4:8], e.location)
+	binary.LittleEndian.PutUint32(b[8:12], uint32(e.size))
+	// Checksum - simply add up all 32-bit words beginning at byte position 64
+	f, err := os.Open(p)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open boot file for checksum reading %s: %v", p, err)
+	}
+	defer f.Close()
+
+	var (
+		checksum uint32
+	)
+
+	for offset := 64; offset <= int(e.size); offset += 4 {
+		buf := make([]byte, 4)
+		n, err := f.ReadAt(buf, int64(offset))
+		if err != nil && err != io.EOF {
+			return nil, err
+		}
+		if n == 0 {
+			break
+		}
+		checksum += binary.LittleEndian.Uint32(buf)
+		if err == io.EOF {
+			break
+		}
+	}
+
+	binary.LittleEndian.PutUint32(b[12:16], checksum)
+	return b, nil
 }
