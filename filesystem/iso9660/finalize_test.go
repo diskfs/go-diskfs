@@ -413,11 +413,14 @@ func validateIso(t *testing.T, f *os.File) {
 		return
 	}
 	output := new(bytes.Buffer)
-	f.Seek(0, 0)
 	/* to check file contents
 	7z l -ba file.iso
 	*/
-	err := testhelper.DockerRun(f, output, false, true, intImage, "7z", "l", "-ba", "/file.img")
+	mpath := "/file.iso"
+	mounts := map[string]string{
+		f.Name(): mpath,
+	}
+	err := testhelper.DockerRun(f, output, false, true, mounts, intImage, "7z", "l", "-ba", mpath)
 	outString := output.String()
 	if err != nil {
 		t.Errorf("Unexpected err: %v", err)
@@ -431,8 +434,11 @@ func validateElTorito(t *testing.T, f *os.File) {
 		return
 	}
 	output := new(bytes.Buffer)
-	f.Seek(0, 0)
-	err := testhelper.DockerRun(f, output, false, true, intImage, "isoinfo", "-d", "-i", "/file.img")
+	mpath := "/file.iso"
+	mounts := map[string]string{
+		f.Name(): mpath,
+	}
+	err := testhelper.DockerRun(f, output, false, true, mounts, intImage, "isoinfo", "-d", "-i", mpath)
 	outString := output.String()
 	if err != nil {
 		t.Errorf("Unexpected err: %v", err)

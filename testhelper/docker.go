@@ -10,7 +10,7 @@ import (
 
 // DockerRun run a docker container
 // thanks to moby/tool, which is licensed apache 2.0
-func DockerRun(input io.Reader, output io.Writer, trust bool, rm bool, img string, args ...string) error {
+func DockerRun(input io.Reader, output io.Writer, trust bool, rm bool, mounts map[string]string, img string, args ...string) error {
 	docker, err := exec.LookPath("docker")
 	if err != nil {
 		return errors.New("Docker does not seem to be installed")
@@ -24,6 +24,9 @@ func DockerRun(input io.Reader, output io.Writer, trust bool, rm bool, img strin
 	dArgs := []string{"run", "--network=none"}
 	if rm {
 		dArgs = append(dArgs, "--rm")
+	}
+	for k, v := range mounts {
+		dArgs = append(dArgs, "-v", fmt.Sprintf("%s:%s", k, v))
 	}
 	dArgs = append(dArgs, "-i", img)
 	dArgs = append(dArgs, args...)

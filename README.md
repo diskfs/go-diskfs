@@ -154,5 +154,5 @@ Future plans are to add the following:
 * `ext4` filesystem
 * `Joliet` extensions to `iso9660`
 * `Rock Ridge` sparse file support - supports the flag, but not yet reading or writing
-* `squashfs` filesystem
+* `squashfs` sparse file support - currently treats sparse files as regular files
 * `qcow` disk format

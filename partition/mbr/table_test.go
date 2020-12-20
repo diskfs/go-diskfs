@@ -281,8 +281,11 @@ func TestTableWrite(t *testing.T) {
 			}
 
 			output := new(bytes.Buffer)
-			f.Seek(0, 0)
-			err := testhelper.DockerRun(f, output, false, true, intImage, "sfdisk", "-l", "/file.img")
+			mpath := "/file.img"
+			mounts := map[string]string{
+				f.Name(): mpath,
+			}
+			err := testhelper.DockerRun(f, output, false, true, mounts, intImage, "sfdisk", "-l", mpath)
 			outString := output.String()
 			if err != nil {
 				t.Errorf("Unexpected err: %v", err)

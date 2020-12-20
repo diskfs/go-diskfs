@@ -144,8 +144,11 @@ func TestFat32Mkdir(t *testing.T) {
 			default:
 				// check that the directory actually was created
 				output := new(bytes.Buffer)
-				f.Seek(0, 0)
-				err := testhelper.DockerRun(f, output, false, true, intImage, "mdir", "-i", fmt.Sprintf("%s@@%d", "/file.img", pre), fmt.Sprintf("::%s", p))
+				mpath := "/file.img"
+				mounts := map[string]string{
+					f.Name(): mpath,
+				}
+				err := testhelper.DockerRun(f, output, false, true, mounts, intImage, "mdir", "-i", fmt.Sprintf("%s@@%d", mpath, pre), fmt.Sprintf("::%s", p))
 				if err != nil {
 					t.Errorf("Mkdir(%s): Unexpected err: %v", p, err)
 					t.Log(output.String())
@@ -686,7 +689,7 @@ func TestFat32OpenFile(t *testing.T) {
 			writeSizes := []int{512, 1024, 256}
 			low := 0
 			for i := 0; low < len(bWrite); i++ {
-				high := low + writeSizes[i % len(writeSizes)]
+				high := low + writeSizes[i%len(writeSizes)]
 				if high > len(bWrite) {
 					high = len(bWrite)
 				}
@@ -694,23 +697,23 @@ func TestFat32OpenFile(t *testing.T) {
 				if err != nil {
 					t.Errorf("%s: readWriter.Write(b) unexpected error: %v", header, err)
 				}
-				if written != high - low {
-					t.Errorf("%s: readWriter.Write(b) wrote %d bytes instead of expected %d", header, written, high - low)
+				if written != high-low {
+					t.Errorf("%s: readWriter.Write(b) wrote %d bytes instead of expected %d", header, written, high-low)
 				}
 				low = high
 			}
-			
+
 			readWriter.Seek(0, 0)
 			bRead, readErr := ioutil.ReadAll(readWriter)
 
-				switch {
-				case readErr != nil:
-					t.Errorf("%s: ioutil.ReadAll() unexpected error: %v", header, readErr)
-				case bytes.Compare(bWrite, bRead) != 0:
-					t.Errorf("%s: mismatched contents, read %d expected %d, actual data then expected:", header, len(bRead), len(bWrite))
-					//t.Log(bRead)
-					//t.Log(bWrite)
-				}
+			switch {
+			case readErr != nil:
+				t.Errorf("%s: ioutil.ReadAll() unexpected error: %v", header, readErr)
+			case bytes.Compare(bWrite, bRead) != 0:
+				t.Errorf("%s: mismatched contents, read %d expected %d, actual data then expected:", header, len(bRead), len(bWrite))
+				//t.Log(bRead)
+				//t.Log(bWrite)
+			}
 		}
 
 		t.Run("entire image", func(t *testing.T) {
