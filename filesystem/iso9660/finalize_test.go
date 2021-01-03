@@ -420,7 +420,7 @@ func validateIso(t *testing.T, f *os.File) {
 	mounts := map[string]string{
 		f.Name(): mpath,
 	}
-	err := testhelper.DockerRun(f, output, false, true, mounts, intImage, "7z", "l", "-ba", mpath)
+	err := testhelper.DockerRun(nil, output, false, true, mounts, intImage, "7z", "l", "-ba", mpath)
 	outString := output.String()
 	if err != nil {
 		t.Errorf("Unexpected err: %v", err)
@@ -438,7 +438,7 @@ func validateElTorito(t *testing.T, f *os.File) {
 	mounts := map[string]string{
 		f.Name(): mpath,
 	}
-	err := testhelper.DockerRun(f, output, false, true, mounts, intImage, "isoinfo", "-d", "-i", mpath)
+	err := testhelper.DockerRun(nil, output, false, true, mounts, intImage, "isoinfo", "-d", "-i", mpath)
 	outString := output.String()
 	if err != nil {
 		t.Errorf("Unexpected err: %v", err)

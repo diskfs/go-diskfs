@@ -148,7 +148,7 @@ func TestFat32Mkdir(t *testing.T) {
 				mounts := map[string]string{
 					f.Name(): mpath,
 				}
-				err := testhelper.DockerRun(f, output, false, true, mounts, intImage, "mdir", "-i", fmt.Sprintf("%s@@%d", mpath, pre), fmt.Sprintf("::%s", p))
+				err := testhelper.DockerRun(nil, output, false, true, mounts, intImage, "mdir", "-i", fmt.Sprintf("%s@@%d", mpath, pre), fmt.Sprintf("::%s", p))
 				if err != nil {
 					t.Errorf("Mkdir(%s): Unexpected err: %v", p, err)
 					t.Log(output.String())
