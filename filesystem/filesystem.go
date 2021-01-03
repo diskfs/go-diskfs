@@ -29,4 +29,6 @@ const (
 	TypeFat32 Type = iota
 	// TypeISO9660 is an iso filesystem
 	TypeISO9660
+	// TypeSquashfs is a squashfs filesystem
+	TypeSquashfs
 )

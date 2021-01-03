@@ -15,6 +15,7 @@ import (
 	"github.com/diskfs/go-diskfs/filesystem"
 	"github.com/diskfs/go-diskfs/filesystem/fat32"
 	"github.com/diskfs/go-diskfs/filesystem/iso9660"
+	"github.com/diskfs/go-diskfs/filesystem/squashfs"
 	"github.com/diskfs/go-diskfs/partition"
 )
 
@@ -229,5 +230,9 @@ func (d *Disk) GetFilesystem(partition int) (filesystem.FileSystem, error) {
 		return iso9660FS, nil
 	}
 	log.Debugf("iso9660 failed: %v", err)
+	squashFS, err := squashfs.Read(d.File, size, start, d.LogicalBlocksize)
+	if err == nil {
+		return squashFS, nil
+	}
 	return nil, fmt.Errorf("Unknown filesystem on partition %d", partition)
 }
