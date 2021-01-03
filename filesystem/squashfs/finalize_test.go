@@ -173,13 +173,13 @@ func validateSquashfs(t *testing.T, f *os.File) {
 	mounts := map[string]string{
 		f.Name(): mpath,
 	}
-	err := testhelper.DockerRun(f, output, false, true, mounts, intImage, "unsquashfs", "-ll", mpath)
+	err := testhelper.DockerRun(nil, output, false, true, mounts, intImage, "unsquashfs", "-ll", mpath)
 	outString := output.String()
 	if err != nil {
 		t.Errorf("Unexpected err: %v", err)
 		t.Log(outString)
 	}
-	err = testhelper.DockerRun(f, output, false, true, mounts, intImage, "unsquashfs", "-s", mpath)
+	err = testhelper.DockerRun(nil, output, false, true, mounts, intImage, "unsquashfs", "-s", mpath)
 	outString = output.String()
 	if err != nil {
 		t.Errorf("Unexpected err: %v", err)

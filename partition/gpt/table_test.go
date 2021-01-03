@@ -285,7 +285,7 @@ func TestTableWrite(t *testing.T) {
 			mounts := map[string]string{
 				f.Name(): mpath,
 			}
-			err := testhelper.DockerRun(f, output, false, true, mounts, intImage, "sgdisk", "-i", "1", mpath)
+			err := testhelper.DockerRun(nil, output, false, true, mounts, intImage, "sgdisk", "-i", "1", mpath)
 			outString := output.String()
 			if err != nil {
 				t.Errorf("Unexpected err: %v", err)
