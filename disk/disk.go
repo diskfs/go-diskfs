@@ -12,6 +12,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
+	"github.com/diskfs/go-diskfs/disk/formats"
 	"github.com/diskfs/go-diskfs/filesystem"
 	"github.com/diskfs/go-diskfs/filesystem/fat32"
 	"github.com/diskfs/go-diskfs/filesystem/iso9660"
@@ -21,7 +22,7 @@ import (
 
 // Disk is a reference to a single disk block device or image that has been Create() or Open()
 type Disk struct {
-	File              *os.File
+	Driver            Driver
 	Info              os.FileInfo
 	Type              Type
 	Size              int64
@@ -50,7 +51,7 @@ var (
 //
 // returns an error if the Disk is invalid or does not exist, or the partition table is unknown
 func (d *Disk) GetPartitionTable() (partition.Table, error) {
-	return partition.Read(d.File, int(d.LogicalBlocksize), int(d.PhysicalBlocksize))
+	return partition.Read(d.Driver, int(d.LogicalBlocksize), int(d.PhysicalBlocksize))
 }
 
 // Partition applies a partition.Table implementation to a Disk
@@ -64,7 +65,7 @@ func (d *Disk) Partition(table partition.Table) error {
 		return errIncorrectOpenMode
 	}
 	// fill in the uuid
-	err := table.Write(d.File, d.Size)
+	err := table.Write(d.Driver, d.Size)
 	if err != nil {
 		return fmt.Errorf("Failed to write partition table: %v", err)
 	}
@@ -101,7 +102,7 @@ func (d *Disk) WritePartitionContents(partition int, reader io.Reader) (int64, e
 	if partition > len(partitions) {
 		return -1, fmt.Errorf("cannot write contents of partition %d which is greater than max partition %d", partition, len(partitions))
 	}
-	written, err := partitions[partition-1].WriteContents(d.File, reader)
+	written, err := partitions[partition-1].WriteContents(d.Driver, reader)
 	return int64(written), err
 }
 
@@ -123,7 +124,7 @@ func (d *Disk) ReadPartitionContents(partition int, writer io.Writer) (int64, er
 	if partition > len(partitions) {
 		return -1, fmt.Errorf("cannot read contents of partition %d which is greater than max partition %d", partition, len(partitions))
 	}
-	return partitions[partition-1].ReadContents(d.File, writer)
+	return partitions[partition-1].ReadContents(d.Driver, writer)
 }
 
 // FilesystemSpec represents the specification of a filesystem to be created
@@ -175,7 +176,7 @@ func (d *Disk) CreateFilesystem(spec FilesystemSpec) (filesystem.FileSystem, err
 
 	switch spec.FSType {
 	case filesystem.TypeFat32:
-		return fat32.Create(d.File, size, start, d.LogicalBlocksize, spec.VolumeLabel)
+		return fat32.Create(d.Driver, size, start, d.LogicalBlocksize, spec.VolumeLabel)
 	case filesystem.TypeISO9660:
 		return iso9660.Create(d.File, size, start, d.LogicalBlocksize, spec.WorkDir)
 	default:
@@ -216,7 +217,7 @@ func (d *Disk) GetFilesystem(partition int) (filesystem.FileSystem, error) {
 
 	// just try each type
 	log.Debug("trying fat32")
-	fat32FS, err := fat32.Read(d.File, size, start, d.LogicalBlocksize)
+	fat32FS, err := fat32.Read(d.Driver, size, start, d.LogicalBlocksize)
 	if err == nil {
 		return fat32FS, nil
 	}
@@ -226,14 +227,18 @@ func (d *Disk) GetFilesystem(partition int) (filesystem.FileSystem, error) {
 		pbs = 0
 	}
 	log.Debugf("trying iso9660 with physical block size %d", pbs)
-	iso9660FS, err := iso9660.Read(d.File, size, start, pbs)
+	iso9660FS, err := iso9660.Read(d.Driver, size, start, pbs)
 	if err == nil {
 		return iso9660FS, nil
 	}
 	log.Debugf("iso9660 failed: %v", err)
-	squashFS, err := squashfs.Read(d.File, size, start, d.LogicalBlocksize)
+	squashFS, err := squashfs.Read(d.Driver, size, start, d.LogicalBlocksize)
 	if err == nil {
 		return squashFS, nil
 	}
 	return nil, fmt.Errorf("Unknown filesystem on partition %d", partition)
+}
+
+func (d Disk) Format() formats.Format {
+	return d.Driver.Format()
 }

@@ -112,6 +112,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/diskfs/go-diskfs/disk"
+	"github.com/diskfs/go-diskfs/disk/formats"
 )
 
 // when we use a disk image with a GPT, we cannot get the logical sector size from the disk via the kernel
@@ -120,14 +121,6 @@ const (
 	defaultBlocksize, firstblock int = 512, 2048
 	blksszGet                        = 0x1268
 	blkbszGet                        = 0x80081270
-)
-
-// Format represents the format of the disk
-type Format int
-
-const (
-	// Raw disk format for basic raw disk
-	Raw Format = iota
 )
 
 // OpenModeOption represents file open modes
@@ -168,13 +161,14 @@ func writableMode(mode OpenModeOption) bool {
 	return false
 }
 
-func initDisk(f *os.File, openMode OpenModeOption) (*disk.Disk, error) {
+func initDisk(driver disk.Driver, openMode OpenModeOption) (*disk.Disk, error) {
 	var (
 		diskType      disk.Type
 		size          int64
 		lblksize      = int64(defaultBlocksize)
 		pblksize      = int64(defaultBlocksize)
 		defaultBlocks = true
+		f             = driver.File()
 	)
 	log.Debug("initDisk(): start")
 
@@ -195,11 +189,7 @@ func initDisk(f *os.File, openMode OpenModeOption) (*disk.Disk, error) {
 	case mode&os.ModeDevice != 0:
 		log.Debug("initDisk(): block device")
 		diskType = disk.Device
-		file, err := os.Open(f.Name())
-		if err != nil {
-			return nil, fmt.Errorf("error opening block device %s: %s", f.Name(), err)
-		}
-		size, err = file.Seek(0, io.SeekEnd)
+		size, err = f.Seek(0, io.SeekEnd)
 		if err != nil {
 			return nil, fmt.Errorf("error seeking to end of block device %s: %s", f.Name(), err)
 		}
@@ -220,7 +210,7 @@ func initDisk(f *os.File, openMode OpenModeOption) (*disk.Disk, error) {
 	writable := writableMode(openMode)
 
 	ret := &disk.Disk{
-		File:              f,
+		Driver:            driver,
 		Info:              devInfo,
 		Type:              diskType,
 		Size:              size,
@@ -263,8 +253,12 @@ func Open(device string) (*disk.Disk, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Could not open device %s exclusively for writing", device)
 	}
+	driver, err := disk.GetDriver(f, false, 0, formats.Unknown)
+	if err != nil {
+		return nil, fmt.Errorf("Unable to get disk driver: %v", err)
+	}
 	// return our disk
-	return initDisk(f, ReadWriteExclusive)
+	return initDisk(driver, ReadWriteExclusive)
 }
 
 // OpenWithMode open a Disk from a path to a device with a given open mode
@@ -285,14 +279,18 @@ func OpenWithMode(device string, mode OpenModeOption) (*disk.Disk, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Could not open device %s with mode %v: %v", device, mode, err)
 	}
+	driver, err := disk.GetDriver(f, false, 0, formats.Unknown)
+	if err != nil {
+		return nil, fmt.Errorf("Unable to get disk driver: %v", err)
+	}
 	// return our disk
-	return initDisk(f, mode)
+	return initDisk(driver, mode)
 }
 
 // Create a Disk from a path to a device
 // Should pass a path to a block device e.g. /dev/sda or a path to a file /tmp/foo.img
 // The provided device must not exist at the time you call Create()
-func Create(device string, size int64, format Format) (*disk.Disk, error) {
+func Create(device string, size int64, format formats.Format) (*disk.Disk, error) {
 	if device == "" {
 		return nil, errors.New("must pass device name")
 	}
@@ -303,10 +301,10 @@ func Create(device string, size int64, format Format) (*disk.Disk, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Could not create device %s", device)
 	}
-	err = os.Truncate(device, size)
+	driver, err := disk.GetDriver(f, true, size, format)
 	if err != nil {
-		return nil, fmt.Errorf("Could not expand device %s to size %d", device, size)
+		return nil, fmt.Errorf("unable to get driver for %s: %v", device, err)
 	}
 	// return our disk
-	return initDisk(f, ReadWriteExclusive)
+	return initDisk(driver, ReadWriteExclusive)
 }

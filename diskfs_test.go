@@ -9,6 +9,7 @@ import (
 
 	"github.com/diskfs/go-diskfs"
 	"github.com/diskfs/go-diskfs/disk"
+	"github.com/diskfs/go-diskfs/disk/formats"
 )
 
 const oneMB = 10 * 1024 * 1024
@@ -100,15 +101,15 @@ func TestCreate(t *testing.T) {
 	tests := []struct {
 		path   string
 		size   int64
-		format diskfs.Format
+		format formats.Format
 		disk   *disk.Disk
 		err    error
 	}{
-		{"", 10 * oneMB, diskfs.Raw, nil, fmt.Errorf("must pass device name")},
-		{"/tmp/disk.img", 0, diskfs.Raw, nil, fmt.Errorf("must pass valid device size to create")},
-		{"/tmp/disk.img", -1, diskfs.Raw, nil, fmt.Errorf("must pass valid device size to create")},
-		{"/tmp/foo/bar/232323/23/2322/disk.img", 10 * oneMB, diskfs.Raw, nil, fmt.Errorf("Could not create device")},
-		{"/tmp/disk.img", 10 * oneMB, diskfs.Raw, &disk.Disk{LogicalBlocksize: 512, PhysicalBlocksize: 512, Size: 10 * oneMB, Type: disk.File}, nil},
+		{"", 10 * oneMB, formats.Raw, nil, fmt.Errorf("must pass device name")},
+		{"/tmp/disk.img", 0, formats.Raw, nil, fmt.Errorf("must pass valid device size to create")},
+		{"/tmp/disk.img", -1, formats.Raw, nil, fmt.Errorf("must pass valid device size to create")},
+		{"/tmp/foo/bar/232323/23/2322/disk.img", 10 * oneMB, formats.Raw, nil, fmt.Errorf("Could not create device")},
+		{"/tmp/disk.img", 10 * oneMB, formats.Raw, &disk.Disk{LogicalBlocksize: 512, PhysicalBlocksize: 512, Size: 10 * oneMB, Type: disk.File}, nil},
 	}
 
 	for i, tt := range tests {
