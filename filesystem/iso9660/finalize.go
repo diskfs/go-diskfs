@@ -713,6 +713,8 @@ func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 	b = terminator.toBytes()
 	f.WriteAt(b, int64(location)*int64(blocksize))
 
+	_ = os.RemoveAll(fs.workspace)
+
 	// finish by setting as finalized
 	fs.workspace = ""
 	return nil
