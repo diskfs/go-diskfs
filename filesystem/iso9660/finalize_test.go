@@ -328,10 +328,17 @@ func TestFinalizeRockRidge(t *testing.T) {
 			}
 		}
 
+		workspace := fs.Workspace()
+
 		err = fs.Finalize(iso9660.FinalizeOptions{RockRidge: true})
 		if err != nil {
 			t.Fatal("Unexpected error fs.Finalize({RockRidge: true})", err)
 		}
+
+		if _, err := os.Stat(workspace); !os.IsNotExist(err) {
+			t.Fatalf("Workspace dir %s should be removed after finalizing", workspace)
+		}
+
 		// now need to check contents
 		fi, err := f.Stat()
 		if err != nil {
