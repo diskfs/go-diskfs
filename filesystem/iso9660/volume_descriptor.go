@@ -234,13 +234,13 @@ func parsePrimaryVolumeDescriptor(b []byte) (*primaryVolumeDescriptor, error) {
 	var expiration, effective time.Time
 	expirationBytes := b[847 : 847+17]
 	effectiveBytes := b[864 : 864+17]
-	if bytes.Compare(expirationBytes, nullBytes) != 0 {
+	if bytes.Compare(expirationBytes, nullBytes) != 0 && bytes.Compare(expirationBytes, bytes.Repeat([]byte{0}, len(nullBytes))) != 0 {
 		expiration, err = decBytesToTime(expirationBytes)
 		if err != nil {
 			return nil, fmt.Errorf("Unable to convert expiration date/time from bytes: %v", err)
 		}
 	}
-	if bytes.Compare(effectiveBytes, nullBytes) != 0 {
+	if bytes.Compare(effectiveBytes, nullBytes) != 0 && bytes.Compare(expirationBytes, bytes.Repeat([]byte{0}, len(nullBytes))) != 0 {
 		effective, err = decBytesToTime(effectiveBytes)
 		if err != nil {
 			return nil, fmt.Errorf("Unable to convert effective date/time from bytes: %v", err)
@@ -335,13 +335,13 @@ func parseSupplementaryVolumeDescriptor(b []byte) (*supplementaryVolumeDescripto
 	var expiration, effective time.Time
 	expirationBytes := b[847 : 847+17]
 	effectiveBytes := b[864 : 864+17]
-	if bytes.Compare(expirationBytes, nullBytes) != 0 {
+	if bytes.Compare(expirationBytes, nullBytes) != 0 && bytes.Compare(expirationBytes, bytes.Repeat([]byte{0}, len(nullBytes))) != 0 {
 		expiration, err = decBytesToTime(expirationBytes)
 		if err != nil {
 			return nil, fmt.Errorf("Unable to convert expiration date/time from bytes: %v", err)
 		}
 	}
-	if bytes.Compare(effectiveBytes, nullBytes) != 0 {
+	if bytes.Compare(effectiveBytes, nullBytes) != 0 && bytes.Compare(expirationBytes, bytes.Repeat([]byte{0}, len(nullBytes))) != 0 {
 		effective, err = decBytesToTime(effectiveBytes)
 		if err != nil {
 			return nil, fmt.Errorf("Unable to convert effective date/time from bytes: %v", err)
