@@ -75,3 +75,7 @@ func (fl *File) Seek(offset int64, whence int) (int64, error) {
 	fl.offset = newOffset
 	return fl.offset, nil
 }
+
+func (fl *File) Location() uint32 {
+	return fl.location
+}
