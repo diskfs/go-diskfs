@@ -181,7 +181,7 @@ func initDisk(f *os.File, openMode OpenModeOption) (*disk.Disk, error) {
 	// get device information
 	devInfo, err := f.Stat()
 	if err != nil {
-		return nil, fmt.Errorf("could not get info for device %s: %x", f.Name(), err)
+		return nil, fmt.Errorf("could not get info for device %s: %v", f.Name(), err)
 	}
 	mode := devInfo.Mode()
 	switch {
