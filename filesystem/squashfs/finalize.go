@@ -8,7 +8,6 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/diskfs/go-diskfs/util"
@@ -460,18 +459,7 @@ func walkTree(workspace string) ([]*finalizeFileInfo, error) {
 			}
 			xattrs[name] = string(val)
 		}
-		var (
-			nlink uint32
-			uid   uint32
-			gid   uint32
-		)
-		if sys := fi.Sys(); sys != nil {
-			if stat, ok := sys.(*syscall.Stat_t); ok {
-				nlink = uint32(stat.Nlink)
-				uid = stat.Uid
-				gid = stat.Gid
-			}
-		}
+		nlink, uid, gid := getFileProperties(fi)
 
 		entry = &finalizeFileInfo{
 			path:     fp,
@@ -521,15 +509,6 @@ func getTableIdx(m map[uint32]uint16, index uint32) uint16 {
 	// if we made it this far it doesn't exist, so add it
 	m[index] = uint16(len(m))
 	return m[index]
-}
-
-func getDeviceNumbers(path string) (uint32, uint32, error) {
-	stat := syscall.Stat_t{}
-	err := syscall.Stat("/dev/sda", &stat)
-	if err != nil {
-		return 0, 0, err
-	}
-	return uint32(stat.Rdev / 256), uint32(stat.Rdev % 256), nil
 }
 
 func writeFileDataBlocks(e *finalizeFileInfo, to util.File, ws string, startBlock uint64, blocksize int, compressor Compressor, location int64) (int, int, error) {
