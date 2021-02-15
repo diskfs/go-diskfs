@@ -39,7 +39,18 @@ func getValidIso9660FSWorkspace() (*iso9660.FileSystem, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Failed to create iso9660 tmpfile: %v", err)
 	}
-	return iso9660.Create(f, 0, 0, 2048)
+	return iso9660.Create(f, 0, 0, 2048, "")
+}
+func getValidIso9660FSUserWorkspace() (*iso9660.FileSystem, error) {
+	f, err := tmpIso9660File()
+	if err != nil {
+		return nil, fmt.Errorf("Failed to create iso9660 tmpfile: %v", err)
+	}
+	dir, err := ioutil.TempDir("", "myIso9660")
+	if err != nil {
+		return nil, fmt.Errorf("Failed to create iso9660 tmpfile: %v", err)
+	}
+	return iso9660.Create(f, 0, 0, 2048, dir)
 }
 func getValidIso9660FSReadOnly() (*iso9660.FileSystem, error) {
 	f, err := os.Open(iso9660.ISO9660File)
@@ -127,17 +138,38 @@ func TestIso9660Mkdir(t *testing.T) {
 }
 
 func TestIso9660Create(t *testing.T) {
+	testFile, testError := ioutil.TempFile("", "iso9660_test")
+	if testError != nil {
+		t.Errorf("Failed to create workspace tmpfile: %v", testError)
+	}
+	defer os.RemoveAll(testFile.Name())
+	testDir, testError := ioutil.TempDir("", "iso9660_test")
+	if testError != nil {
+		t.Errorf("Failed to create workspace tmpdir: %v", testError)
+	}
+	defer os.RemoveAll(testDir)
+
+	missingDir, testError := ioutil.TempDir("", "iso9660_test")
+	if testError != nil {
+		t.Errorf("Failed to create workspace tmpdir: %v", testError)
+	}
+	os.RemoveAll(missingDir)
+
 	tests := []struct {
 		blocksize int64
 		filesize  int64
 		fs        *iso9660.FileSystem
 		err       error
+		workdir   string
 	}{
-		{500, 6000, nil, fmt.Errorf("blocksize for ISO9660 must be")},
-		{513, 6000, nil, fmt.Errorf("blocksize for ISO9660 must be")},
-		{2048, 2048*iso9660.MaxBlocks + 1, nil, fmt.Errorf("requested size is larger than maximum allowed ISO9660 size")},
-		{2048, 32*iso9660.KB + 3*2048 - 1, nil, fmt.Errorf("requested size is smaller than minimum allowed ISO9660 size")},
-		{2048, 10000000, &iso9660.FileSystem{}, nil},
+		{500, 6000, nil, fmt.Errorf("blocksize for ISO9660 must be"), ""},
+		{513, 6000, nil, fmt.Errorf("blocksize for ISO9660 must be"), ""},
+		{2048, 2048*iso9660.MaxBlocks + 1, nil, fmt.Errorf("requested size is larger than maximum allowed ISO9660 size"), ""},
+		{2048, 32*iso9660.KB + 3*2048 - 1, nil, fmt.Errorf("requested size is smaller than minimum allowed ISO9660 size"), ""},
+		{2048, 10000000, nil, fmt.Errorf("Provided workspace is not a directory"), testFile.Name()},
+		{2048, 10000000, nil, fmt.Errorf("Could not stat working directory"), missingDir},
+		{2048, 10000000, &iso9660.FileSystem{}, nil, testDir},
+		{2048, 10000000, &iso9660.FileSystem{}, nil, ""},
 	}
 	for _, tt := range tests {
 		// create the filesystem
@@ -145,7 +177,7 @@ func TestIso9660Create(t *testing.T) {
 		if err != nil {
 			t.Errorf("Failed to create iso9660 tmpfile: %v", err)
 		}
-		fs, err := iso9660.Create(f, tt.filesize, 0, tt.blocksize)
+		fs, err := iso9660.Create(f, tt.filesize, 0, tt.blocksize, tt.workdir)
 		defer os.Remove(f.Name())
 		switch {
 		case (err == nil && tt.err != nil) || (err != nil && tt.err == nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
@@ -415,10 +447,15 @@ func TestIso9660OpenFile(t *testing.T) {
 			}
 		})
 		t.Run("workspace", func(t *testing.T) {
-			fs, err := getValidIso9660FSWorkspace()
+			fsTemp, err := getValidIso9660FSWorkspace()
 			if err != nil {
 				t.Errorf("Failed to get workspace: %v", err)
 			}
+			fsUser, err := getValidIso9660FSUserWorkspace()
+			if err != nil {
+				t.Errorf("Failed to get workspace: %v", err)
+			}
+
 			baseContent := "INITIAL DATA GALORE\n"
 			editFile := "/EXISTS.TXT"
 			tests := []struct {
@@ -443,55 +480,57 @@ func TestIso9660OpenFile(t *testing.T) {
 				{editFile, os.O_APPEND | os.O_RDWR, true, "More", "INITIAL DATA GALORE\nMore", nil},
 			}
 			for i, tt := range tests {
-				filepath := path.Join(fs.Workspace(), tt.path)
-				// remove any old file if it exists - ignore errors
-				_ = os.Remove(filepath)
-				// if the file is supposed to exist, create it and add its contents
-				if tt.mode&os.O_CREATE != os.O_CREATE {
-					ioutil.WriteFile(filepath, []byte(baseContent), 0644)
-				}
-				header := fmt.Sprintf("%d: OpenFile(%s, %s, %t)", i, tt.path, getOpenMode(tt.mode), tt.beginning)
-				readWriter, err := fs.OpenFile(tt.path, tt.mode)
-				switch {
-				case err != nil:
-					t.Errorf("%s: unexpected error: %v", header, err)
-				case readWriter == nil:
-					t.Errorf("%s: Unexpected nil output", header)
-				default:
-					// read to the end of the file
-					var offset int64
-					_, err := readWriter.Seek(0, os.SEEK_END)
-					if err != nil {
-						t.Errorf("%s: Seek end of file gave unexpected error: %v", header, err)
-						continue
+				for _, fs := range []*iso9660.FileSystem{fsTemp, fsUser} {
+					filepath := path.Join(fs.Workspace(), tt.path)
+					// remove any old file if it exists - ignore errors
+					_ = os.Remove(filepath)
+					// if the file is supposed to exist, create it and add its contents
+					if tt.mode&os.O_CREATE != os.O_CREATE {
+						ioutil.WriteFile(filepath, []byte(baseContent), 0644)
 					}
-					if tt.beginning {
-						offset, err = readWriter.Seek(0, os.SEEK_SET)
-						if err != nil {
-							t.Errorf("%s: Seek(0,os.SEEK_SET) unexpected error: %v", header, err)
-							continue
-						}
-						if offset != 0 {
-							t.Errorf("%s: Seek(0,os.SEEK_SET) reset to %d instead of %d", header, offset, 0)
-							continue
-						}
-					}
-					bWrite := []byte(tt.contents)
-					written, writeErr := readWriter.Write(bWrite)
-					readWriter.Seek(0, os.SEEK_SET)
-					bRead, readErr := ioutil.ReadAll(readWriter)
-
+					header := fmt.Sprintf("%d: OpenFile(%s, %s, %t)", i, tt.path, getOpenMode(tt.mode), tt.beginning)
+					readWriter, err := fs.OpenFile(tt.path, tt.mode)
 					switch {
-					case readErr != nil:
-						t.Errorf("%s: ioutil.ReadAll() unexpected error: %v", header, readErr)
-					case (writeErr == nil && tt.err != nil) || (writeErr != nil && tt.err == nil) || (writeErr != nil && tt.err != nil && !strings.HasPrefix(writeErr.Error(), tt.err.Error())):
-						t.Errorf("%s: readWriter.Write(b) mismatched errors, actual: %v , expected: %v", header, writeErr, tt.err)
-					case written != len(bWrite) && tt.err == nil:
-						t.Errorf("%s: readWriter.Write(b) wrote %d bytes instead of expected %d", header, written, len(bWrite))
-					case string(bRead) != tt.expected && tt.err == nil:
-						t.Errorf("%s: mismatched contents, actual then expected", header)
-						t.Log(string(bRead))
-						t.Log(tt.expected)
+					case err != nil:
+						t.Errorf("%s: unexpected error: %v", header, err)
+					case readWriter == nil:
+						t.Errorf("%s: Unexpected nil output", header)
+					default:
+						// read to the end of the file
+						var offset int64
+						_, err := readWriter.Seek(0, os.SEEK_END)
+						if err != nil {
+							t.Errorf("%s: Seek end of file gave unexpected error: %v", header, err)
+							continue
+						}
+						if tt.beginning {
+							offset, err = readWriter.Seek(0, os.SEEK_SET)
+							if err != nil {
+								t.Errorf("%s: Seek(0,os.SEEK_SET) unexpected error: %v", header, err)
+								continue
+							}
+							if offset != 0 {
+								t.Errorf("%s: Seek(0,os.SEEK_SET) reset to %d instead of %d", header, offset, 0)
+								continue
+							}
+						}
+						bWrite := []byte(tt.contents)
+						written, writeErr := readWriter.Write(bWrite)
+						readWriter.Seek(0, os.SEEK_SET)
+						bRead, readErr := ioutil.ReadAll(readWriter)
+
+						switch {
+						case readErr != nil:
+							t.Errorf("%s: ioutil.ReadAll() unexpected error: %v", header, readErr)
+						case (writeErr == nil && tt.err != nil) || (writeErr != nil && tt.err == nil) || (writeErr != nil && tt.err != nil && !strings.HasPrefix(writeErr.Error(), tt.err.Error())):
+							t.Errorf("%s: readWriter.Write(b) mismatched errors, actual: %v , expected: %v", header, writeErr, tt.err)
+						case written != len(bWrite) && tt.err == nil:
+							t.Errorf("%s: readWriter.Write(b) wrote %d bytes instead of expected %d", header, written, len(bWrite))
+						case string(bRead) != tt.expected && tt.err == nil:
+							t.Errorf("%s: mismatched contents, actual then expected", header)
+							t.Log(string(bRead))
+							t.Log(tt.expected)
+						}
 					}
 				}
 			}

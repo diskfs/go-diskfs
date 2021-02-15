@@ -131,6 +131,7 @@ type FilesystemSpec struct {
 	Partition   int
 	FSType      filesystem.Type
 	VolumeLabel string
+	WorkDir     string
 }
 
 // CreateFilesystem creates a filesystem on a disk image, the equivalent of mkfs.
@@ -176,7 +177,7 @@ func (d *Disk) CreateFilesystem(spec FilesystemSpec) (filesystem.FileSystem, err
 	case filesystem.TypeFat32:
 		return fat32.Create(d.File, size, start, d.LogicalBlocksize, spec.VolumeLabel)
 	case filesystem.TypeISO9660:
-		return iso9660.Create(d.File, size, start, d.LogicalBlocksize)
+		return iso9660.Create(d.File, size, start, d.LogicalBlocksize, spec.WorkDir)
 	default:
 		return nil, errors.New("Unknown filesystem type requested")
 	}

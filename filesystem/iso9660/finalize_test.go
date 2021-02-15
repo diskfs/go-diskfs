@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"regexp"
 	"testing"
 
@@ -29,7 +30,7 @@ func TestFinalizeElTorito(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create tmpfile: %v", err)
 	}
-	fs, err := iso9660.Create(f, 0, 0, blocksize)
+	fs, err := iso9660.Create(f, 0, 0, blocksize, "")
 	if err != nil {
 		t.Fatalf("Failed to iso9660.Create: %v", err)
 	}
@@ -107,7 +108,7 @@ func TestFinalize9660(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create tmpfile: %v", err)
 		}
-		fs, err := iso9660.Create(f, 0, 0, blocksize)
+		fs, err := iso9660.Create(f, 0, 0, blocksize, "")
 		if err != nil {
 			t.Fatalf("Failed to iso9660.Create: %v", err)
 		}
@@ -130,7 +131,7 @@ func TestFinalize9660(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create tmpfile: %v", err)
 		}
-		fs, err := iso9660.Create(f, 0, 0, blocksize)
+		fs, err := iso9660.Create(f, 0, 0, blocksize, "")
 		if err != nil {
 			t.Fatalf("Failed to iso9660.Create: %v", err)
 		}
@@ -259,6 +260,81 @@ func TestFinalize9660(t *testing.T) {
 			t.Fatalf("Could not close iso file: %v", err)
 		}
 	})
+
+	t.Run("existing workspace", func(t *testing.T) {
+		// create a directory to bundle into an iso
+		dir, err := ioutil.TempDir("", "iso_finalize_test")
+		defer os.RemoveAll(dir)
+		if err != nil {
+			t.Fatalf("Failed to create tmpdir: %v", err)
+		}
+		err = os.MkdirAll(filepath.Join(dir, "a/b/c"), 0775)
+		if err != nil {
+			t.Fatalf("Failed to create test dirs: %v", err)
+		}
+		err = ioutil.WriteFile(filepath.Join(dir, "file"), []byte("somecontent"), 0644)
+		if err != nil {
+			t.Fatalf("Failed to write test file: %v", err)
+		}
+		err = ioutil.WriteFile(filepath.Join(dir, "a/b/c/foo"), []byte("someothercontent"), 0644)
+		if err != nil {
+			t.Fatalf("Failed to write test file: %v", err)
+		}
+
+		// create the iso directly from the existing directory
+		f, err := ioutil.TempFile("", "iso_finalize_test")
+		defer os.Remove(f.Name())
+		if err != nil {
+			t.Fatalf("Failed to create tmpfile: %v", err)
+		}
+		fs, err := iso9660.Create(f, 0, 0, blocksize, dir)
+		if err != nil {
+			t.Fatalf("Failed to iso9660.Create: %v", err)
+		}
+		err = fs.Finalize(iso9660.FinalizeOptions{})
+		if err != nil {
+			t.Fatal("Unexpected error fs.Finalize()", err)
+		}
+
+		// now check the contents
+		fs, err = iso9660.Read(f, 0, 0, 2048)
+		if err != nil {
+			t.Fatalf("error reading the tmpfile as iso: %v", err)
+		}
+		isoFile, err := fs.OpenFile("/FILE", os.O_RDONLY)
+		if err != nil {
+			t.Fatalf("Failed to open top-level file from iso: %v", err)
+		}
+		content, err := ioutil.ReadAll(isoFile)
+		if err != nil {
+			t.Fatalf("Failed to read top-level file from iso: %v", err)
+		}
+		actual := string(content)
+		if actual != "somecontent" {
+			t.Fatalf("Got unexpected content from '/file', got '%s', expected 'somecontent'", actual)
+		}
+
+		isoFile, err = fs.OpenFile("/A/B/C/FOO", os.O_RDONLY)
+		if err != nil {
+			t.Fatalf("Failed to open file from iso: %v", err)
+		}
+		content, err = ioutil.ReadAll(isoFile)
+		if err != nil {
+			t.Fatalf("Failed to read file from iso: %v", err)
+		}
+		actual = string(content)
+		if actual != "someothercontent" {
+			t.Fatalf("Got unexpected content from '/a/b/c/foo', got '%s', expected 'someothercontent'", actual)
+		}
+
+		validateIso(t, f)
+
+		// close the file
+		err = f.Close()
+		if err != nil {
+			t.Fatalf("Could not close iso file: %v", err)
+		}
+	})
 }
 
 func TestFinalizeRockRidge(t *testing.T) {
@@ -270,7 +346,7 @@ func TestFinalizeRockRidge(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create tmpfile: %v", err)
 		}
-		fs, err := iso9660.Create(f, 0, 0, blocksize)
+		fs, err := iso9660.Create(f, 0, 0, blocksize, "")
 		if err != nil {
 			t.Fatalf("Failed to iso9660.Create: %v", err)
 		}
