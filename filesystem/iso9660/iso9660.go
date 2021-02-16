@@ -61,7 +61,7 @@ func (fs *FileSystem) Workspace() string {
 // where a partition starts and ends.
 //
 // If the provided blocksize is 0, it will use the default of 2 KB.
-func Create(f util.File, size int64, start int64, blocksize int64) (*FileSystem, error) {
+func Create(f util.File, size int64, start int64, blocksize int64, workspace string) (*FileSystem, error) {
 	if blocksize == 0 {
 		blocksize = defaultSectorSize
 	}
@@ -78,17 +78,30 @@ func Create(f util.File, size int64, start int64, blocksize int64) (*FileSystem,
 		return nil, fmt.Errorf("requested size is smaller than minimum allowed ISO9660 size: system area (%d), one volume descriptor (%d), one volume descriptor set terminator (%d), and one block (%d)", systemAreaSize, volumeDescriptorSize, volumeDescriptorSize, blocksize)
 	}
 
-	// create a temporary working area where we can create the filesystem.
-	//  It is only on `Finalize()` that we write it out to the actual disk file
-	tmpdir, err := ioutil.TempDir("", "diskfs_iso")
-	if err != nil {
-		return nil, fmt.Errorf("Could not create working directory: %v", err)
+	var workdir string
+	if workspace != "" {
+		info, err := os.Stat(workspace)
+		if err != nil {
+			return nil, fmt.Errorf("Could not stat working directory: %v", err)
+		}
+		if !info.IsDir() {
+			return nil, fmt.Errorf("Provided workspace is not a directory: %s", workspace)
+		}
+		workdir = workspace
+	} else {
+		// create a temporary working area where we can create the filesystem.
+		//  It is only on `Finalize()` that we write it out to the actual disk file
+		var err error
+		workdir, err = ioutil.TempDir("", "diskfs_iso")
+		if err != nil {
+			return nil, fmt.Errorf("Could not create working directory: %v", err)
+		}
 	}
 
 	// create root directory
 	// there is nothing in there
 	return &FileSystem{
-		workspace: tmpdir,
+		workspace: workdir,
 		start:     start,
 		size:      size,
 		file:      f,
