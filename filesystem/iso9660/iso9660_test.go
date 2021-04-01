@@ -541,3 +541,19 @@ func TestIso9660OpenFile(t *testing.T) {
 func TestIso9660Finalize(t *testing.T) {
 
 }
+
+func TestParseDirEntryPanic(t *testing.T) {
+	f, err := os.Open("./testdata/mraerino.img")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fs, err := iso9660.Read(f, 0, 0, 4096)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if l := strings.TrimSpace(fs.Label()); l != "cidata" {
+		t.Errorf(`Expected "cidata", got %s`, l)
+	}
+}
