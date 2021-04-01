@@ -119,7 +119,7 @@ import (
 const (
 	defaultBlocksize, firstblock int = 512, 2048
 	blksszGet                        = 0x1268
-	blkbszGet                        = 0x80081270
+	blkpbszGet                       = 0x127b
 )
 
 // Format represents the format of the disk

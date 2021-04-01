@@ -12,7 +12,7 @@ import (
 // getSectorSizes get the logical and physical sector sizes for a block device
 func getSectorSizes(f *os.File) (int64, int64, error) {
 	/*
-		ioctl(fd, BLKBSZGET, &physicalsectsize);
+		ioctl(fd, BLKPBSZGET, &physicalsectsize);
 
 	*/
 	fd := f.Fd()
@@ -20,7 +20,7 @@ func getSectorSizes(f *os.File) (int64, int64, error) {
 	if err != nil {
 		return 0, 0, fmt.Errorf("Unable to get device logical sector size: %v", err)
 	}
-	physicalSectorSize, err := unix.IoctlGetInt(int(fd), blkbszGet)
+	physicalSectorSize, err := unix.IoctlGetInt(int(fd), blkpbszGet)
 	if err != nil {
 		return 0, 0, fmt.Errorf("Unable to get device physical sector size: %v", err)
 	}
