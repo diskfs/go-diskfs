@@ -542,12 +542,15 @@ func TestIso9660Finalize(t *testing.T) {
 
 }
 
+/// TestParseDirEntryPanic reproduces the issue from
+/// https://github.com/diskfs/go-diskfs/issues/103
 func TestParseDirEntryPanic(t *testing.T) {
-	f, err := os.Open("./testdata/mraerino.img")
+	f, err := os.Open("./testdata/repro-103.img")
 	if err != nil {
 		t.Fatal(err)
 	}
 
+	// the issue occured only with blocksize of 4096
 	fs, err := iso9660.Read(f, 0, 0, 4096)
 	if err != nil {
 		t.Fatal(err)
