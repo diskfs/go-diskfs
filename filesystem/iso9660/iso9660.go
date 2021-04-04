@@ -223,6 +223,9 @@ func Read(file util.File, size int64, start int64, blocksize int64) (*FileSystem
 	if read != len(b) {
 		return nil, fmt.Errorf("Root directory entry size, read %d bytes instead of expected %d", read, len(b))
 	}
+	if b[0] == 0 {
+		return nil, fmt.Errorf("Root directory entry size at location %d was zero, check header and blocksize, given as %d", location, blocksize)
+	}
 	// now read the whole entry
 	b = make([]byte, b[0])
 	read, err = file.ReadAt(b, location)

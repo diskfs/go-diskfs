@@ -2,6 +2,7 @@ package iso9660
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -278,6 +279,9 @@ func dirEntryFromBytes(b []byte, ext []suspExtension) (*directoryEntry, error) {
 // and parses it, including pulling in continuation entry bytes
 func parseDirEntry(b []byte, f *FileSystem) (*directoryEntry, error) {
 	// empty entry means nothing more to read - this might not actually be accurate, but work with it for now
+	if len(b) < 1 {
+		return nil, errors.New("cannot parse zero length directory entry")
+	}
 	entryLen := int(b[0])
 	if entryLen == 0 {
 		return nil, nil
