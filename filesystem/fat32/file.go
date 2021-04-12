@@ -36,7 +36,6 @@ func (fl *File) Read(b []byte) (int, error) {
 	if err != nil {
 		return totalRead, fmt.Errorf("Unable to get list of clusters for file: %v", err)
 	}
-	var lastCluster uint32
 	clusterIndex := 0
 
 	// if there is nothing left to read, just return EOF
@@ -54,11 +53,11 @@ func (fl *File) Read(b []byte) (int, error) {
 	// figure out which cluster we start with
 	if fl.offset > 0 {
 		clusterIndex = int(fl.offset / int64(bytesPerCluster))
-		lastCluster = clusters[clusterIndex]
+		lastCluster := clusters[clusterIndex]
 		// read any partials, if needed
 		remainder := fl.offset % int64(bytesPerCluster)
 		if remainder != 0 {
-			offset := int64(lastCluster)*int64(bytesPerCluster) + remainder
+			offset := int64(start) + int64(lastCluster-2)*int64(bytesPerCluster) + remainder
 			toRead := int64(bytesPerCluster) - remainder
 			if toRead > int64(len(b)) {
 				toRead = int64(len(b))
@@ -85,7 +84,7 @@ func (fl *File) Read(b []byte) (int, error) {
 
 	fl.offset = fl.offset + int64(totalRead)
 	var retErr error
-	if fl.offset >= int64(size) {
+	if fl.offset >= int64(fl.fileSize) {
 		retErr = io.EOF
 	}
 	return totalRead, retErr
