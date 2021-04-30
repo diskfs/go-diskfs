@@ -182,3 +182,13 @@ func (t *Table) GetPartitions() []part.Partition {
 	}
 	return parts
 }
+
+// Verify will attempt to evaluate the headers and repair mis-aligned
+func (t *Table) Verify(f util.File, diskSize uint64) error {
+	return nil
+}
+
+// Repair will attempt to repair a broken Master Boot Record
+func (t *Table) Repair(diskSize uint64) error {
+	return nil
+}

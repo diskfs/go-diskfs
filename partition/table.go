@@ -10,4 +10,6 @@ type Table interface {
 	Type() string
 	Write(util.File, int64) error
 	GetPartitions() []part.Partition
+	Repair(diskSize uint64) error
+	Verify(f util.File, diskSize uint64) error
 }
