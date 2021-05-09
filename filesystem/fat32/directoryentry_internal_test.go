@@ -95,7 +95,7 @@ func getValidDirectoryEntries() ([]*directoryEntry, [][]byte, error) {
 	t4, _ := time.Parse(time.RFC3339, "2017-11-26T08:01:44Z")
 	t40, _ := time.Parse(time.RFC3339, "2017-11-26T00:00:00Z")
 	entries := []*directoryEntry{
-		&directoryEntry{
+		{
 			filenameShort:      "FOO",
 			fileExtension:      "",
 			filenameLong:       "",
@@ -117,7 +117,7 @@ func getValidDirectoryEntries() ([]*directoryEntry, [][]byte, error) {
 			longFilenameSlots: 0,
 			isNew:             false,
 		},
-		&directoryEntry{
+		{
 			filenameShort:   "TERCER~1",
 			fileExtension:   "",
 			filenameLong:    "tercer_archivo",
@@ -138,7 +138,7 @@ func getValidDirectoryEntries() ([]*directoryEntry, [][]byte, error) {
 			longFilenameSlots: 2,
 			isNew:             false,
 		},
-		&directoryEntry{
+		{
 			filenameShort:   "CORTO1",
 			fileExtension:   "TXT",
 			filenameLong:    "",
@@ -159,7 +159,7 @@ func getValidDirectoryEntries() ([]*directoryEntry, [][]byte, error) {
 			longFilenameSlots: 0,
 			isNew:             false,
 		},
-		&directoryEntry{
+		{
 			filenameShort:   "UNARCH~1",
 			fileExtension:   "DAT",
 			filenameLong:    "Un archivo con nombre largo.dat",
@@ -499,7 +499,7 @@ func TestDirectoryEntryUCaseValid(t *testing.T) {
 		{"aBC", "ABC"},
 		{"a15D", "A15D"},
 		{"A BC", "ABC"},
-		{"A..-a*)82y12112bb", "A_A__82Y12112BB"},
+		{"A..-a*)82y12112bb", "A-A_)82Y12112BB"},
 	}
 	for _, tt := range tests {
 		output := uCaseValid(tt.input)
