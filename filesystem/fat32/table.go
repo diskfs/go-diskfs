@@ -9,6 +9,7 @@ import (
 type table struct {
 	fatID          uint32
 	eocMarker      uint32
+	unusedMarker   uint32
 	clusters       map[uint32]uint32
 	rootDirCluster uint32
 	size           uint32

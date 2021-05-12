@@ -5,5 +5,6 @@ func MakeTestFile(size uint64) *File {
 		extendedFile: &extendedFile{
 			fileSize: size,
 		},
+		filesystem: &FileSystem{},
 	}
 }

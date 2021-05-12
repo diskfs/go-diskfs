@@ -3,6 +3,7 @@ package fat32
 import (
 	"fmt"
 	"io"
+	"os"
 )
 
 // File represents a single file in a FAT32 filesystem
@@ -22,6 +23,9 @@ type File struct {
 // and increments the offset by the number of bytes read.
 // Use Seek() to set at a particular point
 func (fl *File) Read(b []byte) (int, error) {
+	if fl == nil || fl.filesystem == nil {
+		return 0, os.ErrClosed
+	}
 	// we have the DirectoryEntry, so we can get the starting cluster location
 	// we then get a list of the clusters, and read the data from all of those clusters
 	// write the content for the file
@@ -97,6 +101,9 @@ func (fl *File) Read(b []byte) (int, error) {
 // and increments the offset by the number of bytes read.
 // Use Seek() to set at a particular point
 func (fl *File) Write(p []byte) (int, error) {
+	if fl == nil || fl.filesystem == nil {
+		return 0, os.ErrClosed
+	}
 	totalWritten := 0
 	fs := fl.filesystem
 	// if the file was not opened RDWR, nothing we can do
@@ -169,6 +176,9 @@ func (fl *File) Write(p []byte) (int, error) {
 
 // Seek set the offset to a particular point in the file
 func (fl *File) Seek(offset int64, whence int) (int64, error) {
+	if fl == nil || fl.filesystem == nil {
+		return 0, os.ErrClosed
+	}
 	newOffset := int64(0)
 	switch whence {
 	case io.SeekStart:
@@ -183,4 +193,10 @@ func (fl *File) Seek(offset int64, whence int) (int64, error) {
 	}
 	fl.offset = newOffset
 	return fl.offset, nil
+}
+
+// Close close the file
+func (fl *File) Close() error {
+	fl.filesystem = nil
+	return nil
 }

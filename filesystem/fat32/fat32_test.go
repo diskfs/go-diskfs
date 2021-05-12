@@ -648,6 +648,72 @@ func TestFat32OpenFile(t *testing.T) {
 		})
 	})
 
+	// large file should cross multiple clusters
+	// out cluster size is 512 bytes, so make it 10+ clusters
+	t.Run("Truncate File", func(t *testing.T) {
+		// get a temporary working file
+		f, err := tmpFat32(true, 0, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if keepTmpFiles == "" {
+			defer os.Remove(f.Name())
+		} else {
+			fmt.Println(f.Name())
+		}
+		fileInfo, err := f.Stat()
+		if err != nil {
+			t.Fatalf("Error getting file info for tmpfile %s: %v", f.Name(), err)
+		}
+		fs, err := fat32.Read(f, fileInfo.Size(), 0, 512)
+		if err != nil {
+			t.Fatalf("Error reading fat32 filesystem from %s: %v", f.Name(), err)
+		}
+		path := "/abcdefghi"
+		mode := os.O_RDWR | os.O_CREATE
+		// each cluster is 512 bytes, so use 10 clusters and a bit of another
+		size := 10*512 + 22
+		bWrite := make([]byte, size, size)
+		header := fmt.Sprintf("OpenFile(%s, %s)", path, getOpenMode(mode))
+		readWriter, err := fs.OpenFile(path, mode)
+		switch {
+		case err != nil:
+			t.Fatalf("%s: unexpected error: %v", header, err)
+		case readWriter == nil:
+			t.Fatalf("%s: Unexpected nil output", header)
+		default:
+			// write and then read
+			rand.Read(bWrite)
+			written, writeErr := readWriter.Write(bWrite)
+			readWriter.Seek(0, 0)
+
+			switch {
+			case writeErr != nil:
+				t.Fatalf("%s: readWriter.Write(b) unexpected error: %v", header, writeErr)
+			case written != len(bWrite):
+				t.Fatalf("%s: readWriter.Write(b) wrote %d bytes instead of expected %d", header, written, len(bWrite))
+			}
+		}
+		// we now have written lots of data to the file. Close it, then reopen it to truncate
+		if err := readWriter.Close(); err != nil {
+			t.Fatalf("error closing file: %v", err)
+		}
+		// and open to truncate
+		mode = os.O_RDWR | os.O_TRUNC
+		readWriter, err = fs.OpenFile(path, mode)
+		if err != nil {
+			t.Fatalf("could not reopen file: %v", err)
+		}
+		// read the data
+		bRead, readErr := ioutil.ReadAll(readWriter)
+		switch {
+		case readErr != nil:
+			t.Fatalf("%s: ioutil.ReadAll() unexpected error: %v", header, readErr)
+		case len(bRead) != 0:
+			t.Fatalf("%s: readWriter.ReadAll(b) read %d bytes after truncate instead of expected %d", header, len(bRead), 0)
+		}
+	})
+
 	// large files are often written in multiple passes
 	t.Run("Streaming Large File", func(t *testing.T) {
 		runTest := func(t *testing.T, pre, post int64) {
