@@ -3,6 +3,7 @@ package squashfs
 import (
 	"fmt"
 	"io"
+	"os"
 )
 
 // File represents a single file in a squashfs filesystem
@@ -23,6 +24,9 @@ type File struct {
 // reads from the last known offset in the file from last read or write
 // use Seek() to set at a particular point
 func (fl *File) Read(b []byte) (int, error) {
+	if fl == nil || fl.filesystem == nil {
+		return 0, os.ErrClosed
+	}
 	// squashfs files are *mostly* contiguous, we only need the starting location and size for whole blocks
 	// if there are fragments, we need the location of those as well
 
@@ -111,6 +115,9 @@ func (fl *File) Write(p []byte) (int, error) {
 
 // Seek set the offset to a particular point in the file
 func (fl *File) Seek(offset int64, whence int) (int64, error) {
+	if fl == nil || fl.filesystem == nil {
+		return 0, os.ErrClosed
+	}
 	newOffset := int64(0)
 	switch whence {
 	case io.SeekStart:
@@ -125,4 +132,10 @@ func (fl *File) Seek(offset int64, whence int) (int64, error) {
 	}
 	fl.offset = newOffset
 	return fl.offset, nil
+}
+
+// Close close the file
+func (fl *File) Close() error {
+	fl.filesystem = nil
+	return nil
 }

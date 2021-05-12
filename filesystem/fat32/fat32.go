@@ -260,6 +260,7 @@ func Create(f util.File, size int64, start int64, blocksize int64, volumeLabel s
 
 	// write FAT tables
 	eocMarker := uint32(0x0fffffff)
+	unusedMarker := uint32(0x00000000)
 	fatPrimaryStart := reservedSectors * uint16(SectorSize512)
 	fatSize := uint32(sectorsPerFat) * uint32(SectorSize512)
 	fatSecondaryStart := uint64(fatPrimaryStart) + uint64(fatSize)
@@ -268,6 +269,7 @@ func Create(f util.File, size int64, start int64, blocksize int64, volumeLabel s
 	fat := table{
 		fatID:          fatID,
 		eocMarker:      eocMarker,
+		unusedMarker:   unusedMarker,
 		size:           fatSize,
 		rootDirCluster: rootDirCluster,
 		clusters: map[uint32]uint32{
@@ -536,9 +538,21 @@ func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 		if err != nil {
 			return nil, fmt.Errorf("Error writing directory file %s to disk: %v", p, err)
 		}
-
 	}
 	offset := int64(0)
+
+	// what if we were asked to truncate the file?
+	if flag&os.O_TRUNC == os.O_TRUNC && targetEntry.fileSize != 0 {
+		// pretty simple: change the filesize, and then remove all except the first cluster
+		targetEntry.fileSize = 0
+		// we should not need to change the parent, because it is all pointers
+		if err := fs.writeDirectoryEntries(parentDir); err != nil {
+			return nil, fmt.Errorf("Error writing directory file %s to disk: %v", p, err)
+		}
+		if _, err := fs.allocateSpace(1, targetEntry.clusterLocation); err != nil {
+			return nil, fmt.Errorf("Unable to resize cluster list: %v", err)
+		}
+	}
 	if flag&os.O_APPEND == os.O_APPEND {
 		offset = int64(targetEntry.fileSize)
 	}
@@ -777,11 +791,13 @@ func (fs *FileSystem) readDirWithMkdir(p string, doMake bool) (*Directory, []*di
 // allocateSpace ensure that a cluster chain exists to handle a file of a given size.
 // arguments are file size in bytes and starting cluster of the chain
 // if starting is 0, then we are not (re)sizing an existing chain but creating a new one
-// returns the indexes of clusters to be used in order
+// returns the indexes of clusters to be used in order. If the new size is smaller than
+// the original size, will shrink the chain.
 func (fs *FileSystem) allocateSpace(size uint64, previous uint32) ([]uint32, error) {
 	var (
-		clusters []uint32
-		err      error
+		clusters             []uint32
+		err                  error
+		lastAllocatedCluster uint32
 	)
 	// 1- calculate how many clusters needed
 	// 2- see how many clusters already are allocated
@@ -810,8 +826,8 @@ func (fs *FileSystem) allocateSpace(size uint64, previous uint32) ([]uint32, err
 		previous = clusters[len(clusters)-1]
 	}
 
-	// what id we do not need to allocate any?
-	if extraClusterCount < 1 {
+	// what if we do not need to change anything?
+	if extraClusterCount == 0 {
 		return clusters, nil
 	}
 
@@ -822,31 +838,60 @@ func (fs *FileSystem) allocateSpace(size uint64, previous uint32) ([]uint32, err
 		keys = append(keys, k)
 	}
 	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
-	for i := uint32(2); i < maxCluster && len(allocated) < extraClusterCount; i++ {
-		if _, ok := allClusters[i]; !ok {
-			// these become the same at this point
-			allocated = append(allocated, i)
+
+	if extraClusterCount > 0 {
+		for i := uint32(2); i < maxCluster && len(allocated) < extraClusterCount; i++ {
+			if _, ok := allClusters[i]; !ok {
+				// these become the same at this point
+				allocated = append(allocated, i)
+			}
+		}
+
+		// did we allocate them all?
+		if len(allocated) < extraClusterCount {
+			return nil, errors.New("No space left on device")
+		}
+
+		// mark last allocated one as EOC
+		lastAlloc := len(allocated) - 1
+
+		// extend the chain and fill them in
+		if previous > 0 {
+			allClusters[previous] = allocated[0]
+		}
+		for i := 0; i < lastAlloc; i++ {
+			allClusters[allocated[i]] = allocated[i+1]
+		}
+		allClusters[allocated[lastAlloc]] = fs.table.eocMarker
+
+		// update the FSIS
+		lastAllocatedCluster = allocated[len(allocated)-1]
+	} else {
+		var (
+			lastAlloc   int
+			deallocated []uint32
+		)
+		toRemove := abs(extraClusterCount)
+		lastAlloc = len(clusters) - toRemove - 1
+		if lastAlloc < 0 {
+			lastAlloc = 0
+		}
+		deallocated = clusters[lastAlloc+1:]
+
+		// mark last allocated one as EOC
+		allClusters[clusters[lastAlloc]] = fs.table.eocMarker
+
+		// unmark all of the unused ones
+		lastAllocatedCluster = fs.fsis.lastAllocatedCluster
+		for _, cl := range deallocated {
+			allClusters[cl] = fs.table.unusedMarker
+			if cl == lastAllocatedCluster {
+				lastAllocatedCluster--
+			}
 		}
 	}
-
-	// did we allocate them all?
-	if len(allocated) < extraClusterCount {
-		return nil, errors.New("No space left on device")
-	}
-	// mark last allocated one as EOC
-	lastAlloc := len(allocated) - 1
-
-	// extend the chain and fill them in
-	if previous > 0 {
-		allClusters[previous] = allocated[0]
-	}
-	for i := 0; i < lastAlloc; i++ {
-		allClusters[allocated[i]] = allocated[i+1]
-	}
-	allClusters[allocated[lastAlloc]] = fs.table.eocMarker
-
 	// update the FSIS
-	fs.fsis.lastAllocatedCluster = allocated[len(allocated)-1]
+	fs.fsis.lastAllocatedCluster = lastAllocatedCluster
 	// write them all
 	b, err := fs.table.bytes()
 	if err != nil {
@@ -872,4 +917,11 @@ func (fs *FileSystem) allocateSpace(size uint64, previous uint32) ([]uint32, err
 
 	// return all of the clusters
 	return append(clusters, allocated...), nil
+}
+
+func abs(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
 }
