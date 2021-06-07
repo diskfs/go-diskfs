@@ -48,9 +48,16 @@ var (
 
 // GetPartitionTable retrieves a PartitionTable for a Disk
 //
+// If the table is able to be retrieved from the disk, it is saved in the instance.
+//
 // returns an error if the Disk is invalid or does not exist, or the partition table is unknown
 func (d *Disk) GetPartitionTable() (partition.Table, error) {
-	return partition.Read(d.File, int(d.LogicalBlocksize), int(d.PhysicalBlocksize))
+	t, err := partition.Read(d.File, int(d.LogicalBlocksize), int(d.PhysicalBlocksize))
+	if err != nil {
+		return nil, err
+	}
+	d.Table = t
+	return t, nil
 }
 
 // Partition applies a partition.Table implementation to a Disk
