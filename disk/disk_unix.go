@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	BLKRRPART = 0x125f
+	blkrrpart = 0x125f
 )
 
 // ReReadPartitionTable forces the kernel to re-read the partition table
@@ -18,7 +18,7 @@ const (
 // It is done via an ioctl call with request as BLKRRPART.
 func (d *Disk) ReReadPartitionTable() error {
 	fd := d.File.Fd()
-	_, err := unix.IoctlGetInt(int(fd), BLKRRPART)
+	_, err := unix.IoctlGetInt(int(fd), blkrrpart)
 	if err != nil {
 		return fmt.Errorf("Unable to re-read partition table: %v", err)
 	}

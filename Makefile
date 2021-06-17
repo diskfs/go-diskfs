@@ -70,13 +70,8 @@ fmt-check:
 	fi
 
 ## Lint the files
-lint: golint golangci-lint
-	@$(BUILD_CMD) $(LINTER) run --disable-all --enable=golint ./...
-
-golint:
-ifeq (, $(shell which golint))
-	go get -u golang.org/x/lint/golint
-endif
+lint: golangci-lint
+	@$(BUILD_CMD) $(LINTER) run --disable-all --enable=revive ./...
 
 ## Vet the files
 vet:

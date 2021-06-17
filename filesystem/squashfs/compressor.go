@@ -64,6 +64,7 @@ func (c CompressorLzma) flavour() compression {
 
 type GzipStrategy uint16
 
+// gzip strategy options
 const (
 	GzipDefault          GzipStrategy = 0x1
 	GzipFiltered                      = 0x2
@@ -146,6 +147,7 @@ func (c CompressorGzip) flavour() compression {
 // XzFilter filter for xz compression
 type XzFilter uint32
 
+// xz filter options
 const (
 	XzFilterX86      XzFilter = 0x1
 	XzFilterPowerPC           = 0x2
