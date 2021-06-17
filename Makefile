@@ -59,7 +59,7 @@ test: image
 
 golangci-lint: $(LINTER)
 $(LINTER):
-	$(GOENV) go get github.com/golangci/golangci-lint/cmd/golangci-lint@v1.17.1
+	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(GOBIN) v1.41.0
 
 
 ## Check the file format
