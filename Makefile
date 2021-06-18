@@ -56,6 +56,7 @@ unit_test:
 
 test: image
 	TEST_IMAGE=$(IMAGE) $(GOENV) go test $(GO_FILES)
+	GOOS=windows go build
 
 golangci-lint: $(LINTER)
 $(LINTER):
