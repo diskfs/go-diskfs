@@ -1,5 +1,3 @@
-// +build darwin linux solaris aix freebsd illumos netbsd openbsd plan9
-
 package diskfs
 
 import (
@@ -7,6 +5,13 @@ import (
 	"os"
 
 	"golang.org/x/sys/unix"
+)
+
+// this constants should be part of "golang.org/x/sys/unix", but aren't, yet
+const (
+	DKIOCGETBLOCKSIZE         = 0x40046418
+	DKIOCGETPHYSICALBLOCKSIZE = 0x4004644D
+	DKIOCGETBLOCKCOUNT        = 0x40086419
 )
 
 // getSectorSizes get the logical and physical sector sizes for a block device
