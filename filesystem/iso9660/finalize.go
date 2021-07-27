@@ -824,7 +824,10 @@ func walkTree(workspace string) ([]*finalizeFileInfo, map[string]*finalizeFileIn
 	dirList := make(map[string]*finalizeFileInfo)
 	fileList := make([]*finalizeFileInfo, 0)
 	var entry *finalizeFileInfo
-	filepath.Walk(".", func(fp string, fi os.FileInfo, err error) error {
+	err = filepath.Walk(".", func(fp string, fi os.FileInfo, err error) error {
+		if err != nil {
+			return fmt.Errorf("Error walking path %s: %v", fp, err)
+		}
 		isRoot := fp == "."
 		name := fi.Name()
 		shortname, extension := calculateShortnameExtension(name)
@@ -856,6 +859,9 @@ func walkTree(workspace string) ([]*finalizeFileInfo, map[string]*finalizeFileIn
 		}
 		return nil
 	})
+	if err != nil {
+		return nil, nil, err
+	}
 	// reset the workspace
 	os.Chdir(cwd)
 	return fileList, dirList, nil
