@@ -146,7 +146,10 @@ func (fl *File) Write(p []byte) (int, error) {
 			if toWrite > int64(len(p)) {
 				toWrite = int64(len(p))
 			}
-			file.WriteAt(p[0:toWrite], int64(offset)+fs.start)
+			_ , err := file.WriteAt(p[0:toWrite], int64(offset)+fs.start)
+			if err != nil {
+				return totalWritten, fmt.Errorf("Unable to write to file: %v", err)
+			}
 			totalWritten += int(toWrite)
 			clusterIndex++
 		}
@@ -159,7 +162,10 @@ func (fl *File) Write(p []byte) (int, error) {
 			toWrite = left
 		}
 		offset := uint32(start) + (clusters[i]-2)*uint32(bytesPerCluster)
-		file.WriteAt(p[totalWritten:totalWritten+toWrite], int64(offset)+fs.start)
+		_, err := file.WriteAt(p[totalWritten:totalWritten+toWrite], int64(offset)+fs.start)
+		if err != nil {
+			return totalWritten, fmt.Errorf("Unable to write to file: %v", err)
+		}
 		totalWritten += toWrite
 	}
 
