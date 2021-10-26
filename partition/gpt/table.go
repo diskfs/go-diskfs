@@ -475,7 +475,7 @@ func (t *Table) Write(f util.File, size int64) error {
 		return fmt.Errorf("Wrote %d bytes of primary partition array instead of %d", written, len(primaryHeader))
 	}
 
-	written, err = f.WriteAt(partitionArray, int64(t.LogicalSectorSize*int(t.partitionArraySector(false))))
+	written, err = f.WriteAt(partitionArray, int64(t.LogicalSectorSize)*int64(t.partitionArraySector(false)))
 	if err != nil {
 		return fmt.Errorf("Error writing secondary partition array to disk: %v", err)
 	}
