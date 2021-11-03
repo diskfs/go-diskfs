@@ -17,7 +17,7 @@
 //     size := 10*1024*1024 // 10 MB
 //
 //     diskImg := "/tmp/disk.img"
-//     disk := diskfs.Create(diskImg, size, diskfs.Raw)
+//     disk := diskfs.Create(diskImg, size, diskfs.Raw, diskfs.SectorSizeDefault)
 //
 //     fs, err := disk.CreateFilesystem(0, diskfs.TypeFat32)
 //
@@ -29,7 +29,7 @@
 //     diskSize := 10*1024*1024 // 10 MB
 //
 //     diskImg := "/tmp/disk.img"
-//     disk := diskfs.Create(diskImg, size, diskfs.Raw)
+//     disk := diskfs.Create(diskImg, size, diskfs.Raw, diskfs.SectorSizeDefault)
 //
 //     table := &mbr.Table{
 //       LogicalSectorSize:  512,
@@ -54,7 +54,7 @@
 //     diskSize := 10*1024*1024 // 10 MB
 //
 //     diskImg := "/tmp/disk.img"
-//     disk := diskfs.Create(diskImg, size, diskfs.Raw)
+//     disk := diskfs.Create(diskImg, size, diskfs.Raw, diskfs.SectorSizeDefault)
 //
 //     table := &gpt.Table{
 //       LogicalSectorSize:  512,
@@ -79,7 +79,7 @@
 //     diskSize := 10*1024*1024 // 10 MB
 //
 //     diskImg := "/tmp/disk.img"
-//     disk := diskfs.Create(diskImg, size, diskfs.Raw)
+//     disk := diskfs.Create(diskImg, size, diskfs.Raw, diskfs.SectorSizeDefault)
 //
 //     table := &mbr.Table{
 //       LogicalSectorSize:  512,
@@ -157,6 +157,18 @@ var openModeOptions = map[OpenModeOption]int{
 	ReadWriteExclusive: os.O_RDWR | os.O_EXCL,
 }
 
+// SectorSize represents the sector size to use
+type SectorSize int
+
+const (
+	// SectorSizeDefault default behavior, defaulting to defaultBlocksize
+	SectorSizeDefault SectorSize = 0
+	// SectorSize512 override sector size to 512
+	SectorSize512 SectorSize = 512
+	// SectorSize4k override sector size to 4k
+	SectorSize4k SectorSize = 4096
+)
+
 func writableMode(mode OpenModeOption) bool {
 	m, ok := openModeOptions[mode]
 	if ok {
@@ -168,15 +180,23 @@ func writableMode(mode OpenModeOption) bool {
 	return false
 }
 
-func initDisk(f *os.File, openMode OpenModeOption) (*disk.Disk, error) {
+func initDisk(f *os.File, openMode OpenModeOption, sectorSize SectorSize) (*disk.Disk, error) {
 	var (
 		diskType      disk.Type
 		size          int64
-		lblksize      = int64(defaultBlocksize)
-		pblksize      = int64(defaultBlocksize)
+		lblksize      int64
+		pblksize      int64
 		defaultBlocks = true
 	)
 	log.Debug("initDisk(): start")
+
+	if sectorSize != SectorSizeDefault {
+		lblksize = int64(sectorSize)
+		pblksize = int64(sectorSize)
+	} else {
+		lblksize = int64(defaultBlocksize)
+		pblksize = int64(defaultBlocksize)
+	}
 
 	// get device information
 	devInfo, err := f.Stat()
@@ -264,7 +284,7 @@ func Open(device string) (*disk.Disk, error) {
 		return nil, fmt.Errorf("Could not open device %s exclusively for writing", device)
 	}
 	// return our disk
-	return initDisk(f, ReadWriteExclusive)
+	return initDisk(f, ReadWriteExclusive, SectorSizeDefault)
 }
 
 // OpenWithMode open a Disk from a path to a device with a given open mode
@@ -286,13 +306,13 @@ func OpenWithMode(device string, mode OpenModeOption) (*disk.Disk, error) {
 		return nil, fmt.Errorf("Could not open device %s with mode %v: %v", device, mode, err)
 	}
 	// return our disk
-	return initDisk(f, mode)
+	return initDisk(f, mode, SectorSizeDefault)
 }
 
 // Create a Disk from a path to a device
 // Should pass a path to a block device e.g. /dev/sda or a path to a file /tmp/foo.img
 // The provided device must not exist at the time you call Create()
-func Create(device string, size int64, format Format) (*disk.Disk, error) {
+func Create(device string, size int64, format Format, sectorSize SectorSize) (*disk.Disk, error) {
 	if device == "" {
 		return nil, errors.New("must pass device name")
 	}
@@ -308,5 +328,5 @@ func Create(device string, size int64, format Format) (*disk.Disk, error) {
 		return nil, fmt.Errorf("Could not expand device %s to size %d", device, size)
 	}
 	// return our disk
-	return initDisk(f, ReadWriteExclusive)
+	return initDisk(f, ReadWriteExclusive, sectorSize)
 }
