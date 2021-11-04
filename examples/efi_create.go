@@ -26,7 +26,7 @@ func CreateEfi(diskImg string) {
 	)
 
 	// create a disk image
-	disk, err := diskfs.Create(diskImg, diskSize, diskfs.Raw)
+	disk, err := diskfs.Create(diskImg, diskSize, diskfs.Raw, diskfs.SectorSizeDefault)
 	if err != nil {
 		log.Panic(err)
 	}

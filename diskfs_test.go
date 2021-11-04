@@ -98,22 +98,25 @@ func TestOpen(t *testing.T) {
 
 func TestCreate(t *testing.T) {
 	tests := []struct {
-		path   string
-		size   int64
-		format diskfs.Format
-		disk   *disk.Disk
-		err    error
+		path       string
+		size       int64
+		format     diskfs.Format
+		sectorSize diskfs.SectorSize
+		disk       *disk.Disk
+		err        error
 	}{
-		{"", 10 * oneMB, diskfs.Raw, nil, fmt.Errorf("must pass device name")},
-		{"/tmp/disk.img", 0, diskfs.Raw, nil, fmt.Errorf("must pass valid device size to create")},
-		{"/tmp/disk.img", -1, diskfs.Raw, nil, fmt.Errorf("must pass valid device size to create")},
-		{"/tmp/foo/bar/232323/23/2322/disk.img", 10 * oneMB, diskfs.Raw, nil, fmt.Errorf("Could not create device")},
-		{"/tmp/disk.img", 10 * oneMB, diskfs.Raw, &disk.Disk{LogicalBlocksize: 512, PhysicalBlocksize: 512, Size: 10 * oneMB, Type: disk.File}, nil},
+		{"", 10 * oneMB, diskfs.Raw, diskfs.SectorSizeDefault, nil, fmt.Errorf("must pass device name")},
+		{"/tmp/disk.img", 0, diskfs.Raw, diskfs.SectorSizeDefault, nil, fmt.Errorf("must pass valid device size to create")},
+		{"/tmp/disk.img", -1, diskfs.Raw, diskfs.SectorSizeDefault, nil, fmt.Errorf("must pass valid device size to create")},
+		{"/tmp/foo/bar/232323/23/2322/disk.img", 10 * oneMB, diskfs.Raw, diskfs.SectorSizeDefault, nil, fmt.Errorf("Could not create device")},
+		{"/tmp/disk.img", 10 * oneMB, diskfs.Raw, diskfs.SectorSizeDefault, &disk.Disk{LogicalBlocksize: 512, PhysicalBlocksize: 512, Size: 10 * oneMB, Type: disk.File}, nil},
+		{"/tmp/disk.img", 10 * oneMB, diskfs.Raw, diskfs.SectorSize512, &disk.Disk{LogicalBlocksize: 512, PhysicalBlocksize: 512, Size: 10 * oneMB, Type: disk.File}, nil},
+		{"/tmp/disk.img", 10 * oneMB, diskfs.Raw, diskfs.SectorSize4k, &disk.Disk{LogicalBlocksize: 4096, PhysicalBlocksize: 4096, Size: 10 * oneMB, Type: disk.File}, nil},
 	}
 
 	for i, tt := range tests {
-		disk, err := diskfs.Create(tt.path, tt.size, tt.format)
-		msg := fmt.Sprintf("%d: Create(%s, %d, %v)", i, tt.path, tt.size, tt.format)
+		disk, err := diskfs.Create(tt.path, tt.size, tt.format, tt.sectorSize)
+		msg := fmt.Sprintf("%d: Create(%s, %d, %v, %d)", i, tt.path, tt.size, tt.format, tt.sectorSize)
 		switch {
 		case (err == nil && tt.err != nil) || (err != nil && tt.err == nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
 			t.Errorf("%s: mismatched errors, actual %v expected %v", msg, err, tt.err)
