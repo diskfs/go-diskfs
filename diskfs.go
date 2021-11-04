@@ -184,8 +184,8 @@ func initDisk(f *os.File, openMode OpenModeOption, sectorSize SectorSize) (*disk
 	var (
 		diskType      disk.Type
 		size          int64
-		lblksize      int64
-		pblksize      int64
+		lblksize      = int64(defaultBlocksize)
+		pblksize      = int64(defaultBlocksize)
 		defaultBlocks = true
 	)
 	log.Debug("initDisk(): start")
@@ -193,9 +193,6 @@ func initDisk(f *os.File, openMode OpenModeOption, sectorSize SectorSize) (*disk
 	if sectorSize != SectorSizeDefault {
 		lblksize = int64(sectorSize)
 		pblksize = int64(sectorSize)
-	} else {
-		lblksize = int64(defaultBlocksize)
-		pblksize = int64(defaultBlocksize)
 	}
 
 	// get device information
