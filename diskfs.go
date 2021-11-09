@@ -268,42 +268,67 @@ func checkDevice(device string) error {
 	return nil
 }
 
+type openOpts struct {
+	mode       OpenModeOption
+	sectorSize SectorSize
+}
+
+func openOptsDefaults() *openOpts {
+	return &openOpts{
+		mode:       ReadWriteExclusive,
+		sectorSize: SectorSizeDefault,
+	}
+}
+
+// OpenOpt func that process Open options
+type OpenOpt func(o *openOpts) error
+
+// WithOpenMode sets the opening mode to the requested mode of type OpenModeOption.
+// Default is ReadWriteExclusive, i.e. os.O_RDWR | os.O_EXCL
+func WithOpenMode(mode OpenModeOption) OpenOpt {
+	return func(o *openOpts) error {
+		o.mode = mode
+		return nil
+	}
+}
+
+// WithSectorSize opens the disk file or block device with the provided sector size.
+// Defaults to the physical block size.
+func WithSectorSize(sectorSize SectorSize) OpenOpt {
+	return func(o *openOpts) error {
+		o.sectorSize = sectorSize
+		return nil
+	}
+}
+
 // Open a Disk from a path to a device in read-write exclusive mode
 // Should pass a path to a block device e.g. /dev/sda or a path to a file /tmp/foo.img
-// The provided device must exist at the time you call Open()
-func Open(device string) (*disk.Disk, error) {
+// The provided device must exist at the time you call Open().
+// Use OpenOpt to control options, such as sector size or open mode.
+func Open(device string, opts ...OpenOpt) (*disk.Disk, error) {
 	err := checkDevice(device)
 	if err != nil {
 		return nil, err
 	}
-	f, err := os.OpenFile(device, os.O_RDWR|os.O_EXCL, 0600)
+
+	opt := openOptsDefaults()
+	for _, o := range opts {
+		if err := o(opt); err != nil {
+			return nil, err
+		}
+	}
+
+	m, ok := openModeOptions[opt.mode]
+	if !ok {
+		return nil, errors.New("unsupported file open mode")
+	}
+
+	f, err := os.OpenFile(device, m, 0600)
 	if err != nil {
 		return nil, fmt.Errorf("Could not open device %s exclusively for writing", device)
 	}
 	// return our disk
-	return initDisk(f, ReadWriteExclusive, SectorSizeDefault)
-}
-
-// OpenWithMode open a Disk from a path to a device with a given open mode
-// If the device is open in read-only mode, operations to change disk partitioning will
-// return an error
-// Should pass a path to a block device e.g. /dev/sda or a path to a file /tmp/foo.img
-// The provided device must exist at the time you call OpenWithMode()
-func OpenWithMode(device string, mode OpenModeOption) (*disk.Disk, error) {
-	err := checkDevice(device)
-	if err != nil {
-		return nil, err
-	}
-	m, ok := openModeOptions[mode]
-	if !ok {
-		return nil, errors.New("unsupported file open mode")
-	}
-	f, err := os.OpenFile(device, m, 0600)
-	if err != nil {
-		return nil, fmt.Errorf("Could not open device %s with mode %v: %v", device, mode, err)
-	}
-	// return our disk
-	return initDisk(f, mode, SectorSizeDefault)
+	return initDisk(f, ReadWriteExclusive, opt.sectorSize)
 }
 
 // Create a Disk from a path to a device

@@ -81,7 +81,7 @@ func TestOpen(t *testing.T) {
 	}
 
 	for i, tt := range tests {
-		d, err := diskfs.OpenWithMode(tt.path, diskfs.ReadOnly)
+		d, err := diskfs.Open(tt.path, diskfs.WithOpenMode(diskfs.ReadOnly))
 		msg := fmt.Sprintf("%d: Open(%s)", i, tt.path)
 		switch {
 		case (err == nil && tt.err != nil) || (err != nil && tt.err == nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
