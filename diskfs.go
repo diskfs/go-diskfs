@@ -117,9 +117,9 @@ import (
 // when we use a disk image with a GPT, we cannot get the logical sector size from the disk via the kernel
 //    so we use the default sector size of 512, per Rod Smith
 const (
-	defaultBlocksize, firstblock int = 512, 2048
-	blksszGet                        = 0x1268
-	blkpbszGet                       = 0x127b
+	defaultBlocksize = 512
+	blksszGet        = 0x1268
+	blkpbszGet       = 0x127b
 )
 
 // Format represents the format of the disk
@@ -271,7 +271,7 @@ func checkDevice(device string) error {
 // Open a Disk from a path to a device in read-write exclusive mode
 // Should pass a path to a block device e.g. /dev/sda or a path to a file /tmp/foo.img
 // The provided device must exist at the time you call Open()
-func Open(device string) (*disk.Disk, error) {
+func Open(device string, sectorSize SectorSize) (*disk.Disk, error) {
 	err := checkDevice(device)
 	if err != nil {
 		return nil, err
@@ -281,7 +281,7 @@ func Open(device string) (*disk.Disk, error) {
 		return nil, fmt.Errorf("Could not open device %s exclusively for writing", device)
 	}
 	// return our disk
-	return initDisk(f, ReadWriteExclusive, SectorSizeDefault)
+	return initDisk(f, ReadWriteExclusive, sectorSize)
 }
 
 // OpenWithMode open a Disk from a path to a device with a given open mode
@@ -289,7 +289,7 @@ func Open(device string) (*disk.Disk, error) {
 // return an error
 // Should pass a path to a block device e.g. /dev/sda or a path to a file /tmp/foo.img
 // The provided device must exist at the time you call OpenWithMode()
-func OpenWithMode(device string, mode OpenModeOption) (*disk.Disk, error) {
+func OpenWithMode(device string, sectorSize SectorSize, mode OpenModeOption) (*disk.Disk, error) {
 	err := checkDevice(device)
 	if err != nil {
 		return nil, err
@@ -303,7 +303,7 @@ func OpenWithMode(device string, mode OpenModeOption) (*disk.Disk, error) {
 		return nil, fmt.Errorf("Could not open device %s with mode %v: %v", device, mode, err)
 	}
 	// return our disk
-	return initDisk(f, mode, SectorSizeDefault)
+	return initDisk(f, mode, sectorSize)
 }
 
 // Create a Disk from a path to a device

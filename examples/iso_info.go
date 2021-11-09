@@ -12,7 +12,7 @@ import (
 )
 
 func PrintIsoInfo(isoPath string) {
-	disk, err := diskfs.Open(isoPath)
+	disk, err := diskfs.Open(isoPath, diskfs.SectorSizeDefault)
 	if err != nil {
 		log.Fatal(err)
 	}

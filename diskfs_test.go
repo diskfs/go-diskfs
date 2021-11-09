@@ -56,17 +56,19 @@ func TestOpen(t *testing.T) {
 	size := fileInfo.Size()
 
 	tests := []struct {
-		path string
-		disk *disk.Disk
-		err  error
+		path       string
+		disk       *disk.Disk
+		sectorSize diskfs.SectorSize
+		err        error
 	}{
-		{"", nil, fmt.Errorf("must pass device name")},
-		{"/tmp/foo/bar/232323/23/2322/disk.img", nil, fmt.Errorf("")},
-		{path, &disk.Disk{Type: disk.File, LogicalBlocksize: 512, PhysicalBlocksize: 512, Size: size}, nil},
+		{"", nil, diskfs.SectorSizeDefault, fmt.Errorf("must pass device name")},
+		{"/tmp/foo/bar/232323/23/2322/disk.img", nil, diskfs.SectorSizeDefault, fmt.Errorf("")},
+		{path, &disk.Disk{Type: disk.File, LogicalBlocksize: 512, PhysicalBlocksize: 512, Size: size}, diskfs.SectorSizeDefault, nil},
+		{path, &disk.Disk{Type: disk.File, LogicalBlocksize: 4096, PhysicalBlocksize: 4096, Size: size}, diskfs.SectorSize4k, nil},
 	}
 
 	for _, tt := range tests {
-		d, err := diskfs.Open(tt.path)
+		d, err := diskfs.Open(tt.path, tt.sectorSize)
 		msg := fmt.Sprintf("Open(%s)", tt.path)
 		switch {
 		case (err == nil && tt.err != nil) || (err != nil && tt.err == nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
@@ -81,7 +83,7 @@ func TestOpen(t *testing.T) {
 	}
 
 	for i, tt := range tests {
-		d, err := diskfs.OpenWithMode(tt.path, diskfs.ReadOnly)
+		d, err := diskfs.OpenWithMode(tt.path, tt.sectorSize, diskfs.ReadOnly)
 		msg := fmt.Sprintf("%d: Open(%s)", i, tt.path)
 		switch {
 		case (err == nil && tt.err != nil) || (err != nil && tt.err == nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):

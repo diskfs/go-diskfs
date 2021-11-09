@@ -10,7 +10,7 @@ import (
 )
 
 func ReadFilesystem(p string) {
-	disk, err := diskfs.Open(p)
+	disk, err := diskfs.Open(p, diskfs.SectorSizeDefault)
 	if err != nil {
 		log.Panic(err)
 	}
