@@ -200,3 +200,30 @@ func TestCollapseAndSortChildren(t *testing.T) {
 		t.Log(output)
 	}
 }
+
+func TestCalculateShortnameExtension(t *testing.T) {
+	var tests = []struct {
+		name              string
+		filename          string
+		expectedShortName string
+		expectedExtension string
+	}{
+		{"hyphen test, no extension", "meta-data", "META-DATA", ""},
+		{"hyphen test with period", "meta-data.", "META-DATA", ""},
+		{"hyphen test with extension", "meta-data.json", "META-DATA", "JSON"},
+		{"underscore test, no extension", "meta_data", "META_DATA", ""},
+		{"underscore test with extension", "meta_data.json", "META_DATA", "JSON"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			shortName, ext := calculateShortnameExtension(tt.filename)
+			if shortName != tt.expectedShortName {
+				t.Errorf("expected: %s, got: %s", tt.expectedShortName, shortName)
+			}
+			if ext != tt.expectedExtension {
+				t.Errorf("expected: %s, got: %s", tt.expectedExtension, ext)
+			}
+		})
+	}
+}

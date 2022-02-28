@@ -888,7 +888,7 @@ func calculateShortnameExtension(name string) (string, string) {
 	extension = strings.ToUpper(extension)
 
 	// replace illegal characters in shortname and extension with _
-	re := regexp.MustCompile("[^A-Z0-9_]")
+	re := regexp.MustCompile("[^A-Z0-9_-]")
 	shortname = re.ReplaceAllString(shortname, "_")
 	extension = re.ReplaceAllString(extension, "_")
 
