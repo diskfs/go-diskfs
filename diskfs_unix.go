@@ -1,3 +1,4 @@
+//go:build !darwin || linux || solaris || aix || freebsd || illumos || netbsd || openbsd || plan9
 // +build !darwin linux solaris aix freebsd illumos netbsd openbsd plan9
 
 package diskfs
@@ -15,7 +16,7 @@ func getSectorSizes(f *os.File) (int64, int64, error) {
 		ioctl(fd, BLKPBSZGET, &physicalsectsize);
 	*/
 	fd := f.Fd()
-- 
+
 	logicalSectorSize, err := unix.IoctlGetInt(int(fd), unix.BLKSSZGET)
 	if err != nil {
 		return 0, 0, fmt.Errorf("Unable to get device logical sector size: %v", err)
