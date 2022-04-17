@@ -9,6 +9,6 @@ require (
 	github.com/pkg/xattr v0.4.1
 	github.com/sirupsen/logrus v1.7.0
 	github.com/ulikunitz/xz v0.5.10
-	golang.org/x/sys v0.0.0-20200420163511-1957bb5e6d1f
+	golang.org/x/sys v0.0.0-20210616094352-59db8d763f22
 	gopkg.in/djherbis/times.v1 v1.2.0
 )

@@ -118,8 +118,8 @@ import (
 //    so we use the default sector size of 512, per Rod Smith
 const (
 	defaultBlocksize, firstblock int = 512, 2048
-	blksszGet                        = 0x1268
-	blkpbszGet                       = 0x127b
+	// blksszGet                        = 0x1268
+	// blkpbszGet                       = 0x127b
 )
 
 // Format represents the format of the disk
