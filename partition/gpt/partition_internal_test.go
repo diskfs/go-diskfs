@@ -367,7 +367,7 @@ func TestWriteContents(t *testing.T) {
 		partition := Partition{
 			Start:      2048,
 			End:        2048,
-			Size:       uint64(1),
+			Size:       uint64(512),
 			Name:       "EFI System",
 			GUID:       "5CA3360B-5DE6-4FCF-B4CE-419CEE433B51",
 			Attributes: 0,
@@ -384,8 +384,8 @@ func TestWriteContents(t *testing.T) {
 			},
 		}
 		read, err := partition.WriteContents(f, reader)
-		if read != 0 {
-			t.Errorf("Returned %d bytes read instead of 0", read)
+		if read != partition.Size {
+			t.Errorf("Returned %d bytes read instead of %d", read, partition.Size)
 		}
 		if err == nil {
 			t.Errorf("Returned nil error instead of actual errors")
