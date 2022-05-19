@@ -147,12 +147,14 @@ func (p *Partition) WriteContents(f util.File, contents io.Reader) (uint64, erro
 	// validate start/end/size
 	calculatedSize := (p.End - p.Start + 1) * uint64(lss)
 	switch {
-	case p.Size <= 0 && p.End > p.Start:
-		p.Size = calculatedSize
-	case p.Size > 0 && p.End <= p.Start:
-		p.End = p.Start + p.Size/uint64(lss)
 	case p.Size > 0 && p.Size == calculatedSize:
 		// all is good
+	case p.Size == 0 && p.End >= p.Start:
+		// Size was not set
+		p.Size = calculatedSize
+	case p.Size > 0 && p.Size%uint64(lss) == 0 && p.End == 0:
+		// End was not set
+		p.End = p.Start + p.Size/uint64(lss) - 1
 	default:
 		return total, fmt.Errorf("Cannot reconcile partition size %d with start %d / end %d", p.Size, p.Start, p.End)
 	}
@@ -250,13 +252,14 @@ func (p *Partition) initEntry(blocksize uint64, starting uint64) error {
 	size, start, end := part.Size, part.Start, part.End
 	calculatedSize := (end - start + 1) * blocksize
 	switch {
-	case start >= 0 && end > start && size == calculatedSize:
-	case size == 0 && start >= 0 && end > start:
+	case start >= 0 && end >= start && size == calculatedSize:
+	case size == 0 && start >= 0 && end >= start:
 		// provided specific start and end, so calculate size
 		part.Size = uint64(calculatedSize)
-	case size > 0 && start > 0 && end == 0:
+	case size > 0 && size%uint64(blocksize) == 0 && start > 0 && end == 0:
+		// provided specific start and size, so calculate end
 		part.End = start + size/uint64(blocksize) - 1
-	case size > 0 && start == 0 && end == 0:
+	case size > 0 && size%uint64(blocksize) == 0 && start == 0 && end == 0:
 		// we start right after the end of the previous
 		start = uint64(starting)
 		end = start + size/uint64(blocksize) - 1
