@@ -7,7 +7,8 @@ import (
 // Directory represents a single directory in a FAT32 filesystem
 type Directory struct {
 	directoryEntry
-	entries []*directoryEntry
+	sfnCache map[string]bool
+	entries  []*directoryEntry
 }
 
 // dirEntriesFromBytes loads the directory entries from the raw bytes
@@ -41,13 +42,22 @@ func (d *Directory) entriesToBytes(bytesPerCluster int) ([]byte, error) {
 func (d *Directory) createEntry(name string, cluster uint32, dir bool) (*directoryEntry, error) {
 	// is it a long filename or a short filename?
 	var isLFN bool
-	// TODO: convertLfnSfn does not calculate if the short name conflicts and thus shoukld increment the last character
-	//       that should happen here, once we can look in the directory entry
-	shortName, extension, isLFN, _ := convertLfnSfn(name)
+
+	if d.sfnCache == nil {
+		d.sfnCache = make(map[string]bool)
+		// load all short filenames
+		for _, entry := range d.entries {
+			d.sfnCache[entry.filenameShort+"."+entry.fileExtension] = true
+		}
+	}
+
+	shortName, extension, isLFN, _ := convertLfnSfn(name, d.sfnCache)
 	lfn := ""
 	if isLFN {
 		lfn = name
 	}
+
+	d.sfnCache[shortName+"."+extension] = true
 
 	// allocate a slot for the new filename in the existing directory
 	entry := directoryEntry{
