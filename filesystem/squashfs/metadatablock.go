@@ -18,7 +18,7 @@ const (
 
 func getMetadataSize(b []byte) (uint16, bool, error) {
 	if len(b) < 2 {
-		return 0, false, fmt.Errorf("Cannot read size of metadata block with %d bytes, must have minimum %d", len(b), 2)
+		return 0, false, fmt.Errorf("cannot read size of metadata block with %d bytes, must have minimum %d", len(b), 2)
 	}
 	header := binary.LittleEndian.Uint16(b[:2])
 	size := header & 0x7fff
@@ -32,7 +32,7 @@ func parseMetadata(b []byte, c Compressor) (*metadatablock, error) {
 	}
 	size, compressed, err := getMetadataSize(b[:2])
 	if err != nil {
-		return nil, fmt.Errorf("Error reading metadata header: %v", err)
+		return nil, fmt.Errorf("error reading metadata header: %v", err)
 	}
 	if len(b) < int(2+size) {
 		return nil, fmt.Errorf("Metadata header said size should be %d but was only %d", size, len(b)-2)
@@ -77,12 +77,12 @@ func readMetaBlock(r io.ReaderAt, c Compressor, location int64) ([]byte, uint16,
 	r.ReadAt(b, location)
 	size, compressed, err := getMetadataSize(b)
 	if err != nil {
-		return nil, 0, fmt.Errorf("Error getting size and compression for metadata block at %d: %v", location, err)
+		return nil, 0, fmt.Errorf("error getting size and compression for metadata block at %d: %v", location, err)
 	}
 	b = make([]byte, size)
 	read, err := r.ReadAt(b, location+2)
 	if err != nil && err != io.EOF {
-		return nil, 0, fmt.Errorf("Unable to read metadata block of size %d at location %d: %v", size, location, err)
+		return nil, 0, fmt.Errorf("unable to read metadata block of size %d at location %d: %v", size, location, err)
 	}
 	if read != len(b) {
 		return nil, 0, fmt.Errorf("Read %d instead of expected %d bytes for metadata block at location %d", read, size, location)

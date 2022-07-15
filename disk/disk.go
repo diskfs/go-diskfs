@@ -73,7 +73,7 @@ func (d *Disk) Partition(table partition.Table) error {
 	// fill in the uuid
 	err := table.Write(d.File, d.Size)
 	if err != nil {
-		return fmt.Errorf("Failed to write partition table: %v", err)
+		return fmt.Errorf("failed to write partition table: %v", err)
 	}
 	d.Table = table
 	// the partition table needs to be re-read only if
@@ -81,7 +81,7 @@ func (d *Disk) Partition(table partition.Table) error {
 	if d.Type == Device {
 		err = d.ReReadPartitionTable()
 		if err != nil {
-			return fmt.Errorf("Unable to re-read the partition table. Kernel still uses old partition table: %v", err)
+			return fmt.Errorf("unable to re-read the partition table. Kernel still uses old partition table: %v", err)
 		}
 	}
 	return nil
@@ -242,5 +242,5 @@ func (d *Disk) GetFilesystem(partition int) (filesystem.FileSystem, error) {
 	if err == nil {
 		return squashFS, nil
 	}
-	return nil, fmt.Errorf("Unknown filesystem on partition %d", partition)
+	return nil, fmt.Errorf("unknown filesystem on partition %d", partition)
 }

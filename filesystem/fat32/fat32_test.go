@@ -46,51 +46,51 @@ func tmpFat32(fill bool, embedPre, embedPost int64) (*os.File, error) {
 	filename := "fat32_test"
 	f, err := ioutil.TempFile("", filename)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to create tempfile %s :%v", filename, err)
+		return nil, fmt.Errorf("failed to create tempfile %s :%v", filename, err)
 	}
 
 	// either copy the contents of the base file over, or make a file of similar size
 	b, err := ioutil.ReadFile(fat32.Fat32File)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to read contents of %s: %v", fat32.Fat32File, err)
+		return nil, fmt.Errorf("failed to read contents of %s: %v", fat32.Fat32File, err)
 	}
 	if embedPre > 0 {
 		empty := make([]byte, embedPre)
 		written, err := f.Write(empty)
 		if err != nil {
-			return nil, fmt.Errorf("Failed to write %d zeroes at beginning of %s: %v", embedPre, filename, err)
+			return nil, fmt.Errorf("failed to write %d zeroes at beginning of %s: %v", embedPre, filename, err)
 		}
 		if written != len(empty) {
-			return nil, fmt.Errorf("Wrote only %d zeroes at beginning of %s instead of %d", written, filename, len(empty))
+			return nil, fmt.Errorf("wrote only %d zeroes at beginning of %s instead of %d", written, filename, len(empty))
 		}
 	}
 	if fill {
 		written, err := f.Write(b)
 		if err != nil {
-			return nil, fmt.Errorf("Failed to write contents of %s to %s: %v", fat32.Fat32File, filename, err)
+			return nil, fmt.Errorf("failed to write contents of %s to %s: %v", fat32.Fat32File, filename, err)
 		}
 		if written != len(b) {
-			return nil, fmt.Errorf("Wrote only %d bytes of %s to %s instead of %d", written, fat32.Fat32File, filename, len(b))
+			return nil, fmt.Errorf("wrote only %d bytes of %s to %s instead of %d", written, fat32.Fat32File, filename, len(b))
 		}
 	} else {
 		size := int64(len(b))
 		empty := make([]byte, size)
 		written, err := f.Write(empty)
 		if err != nil {
-			return nil, fmt.Errorf("Failed to write %d zeroes as content of %s: %v", size, filename, err)
+			return nil, fmt.Errorf("failed to write %d zeroes as content of %s: %v", size, filename, err)
 		}
 		if written != len(empty) {
-			return nil, fmt.Errorf("Wrote only %d zeroes as content of %s instead of %d", written, filename, len(empty))
+			return nil, fmt.Errorf("wrote only %d zeroes as content of %s instead of %d", written, filename, len(empty))
 		}
 	}
 	if embedPost > 0 {
 		empty := make([]byte, embedPost)
 		written, err := f.Write(empty)
 		if err != nil {
-			return nil, fmt.Errorf("Failed to write %d zeroes at end of %s: %v", embedPost, filename, err)
+			return nil, fmt.Errorf("failed to write %d zeroes at end of %s: %v", embedPost, filename, err)
 		}
 		if written != len(empty) {
-			return nil, fmt.Errorf("Wrote only %d zeroes at end of %s instead of %d", written, filename, len(empty))
+			return nil, fmt.Errorf("wrote only %d zeroes at end of %s instead of %d", written, filename, len(empty))
 		}
 	}
 
@@ -237,7 +237,7 @@ func TestFat32Read(t *testing.T) {
 		{513, 6000, -1, nil, fmt.Errorf("blocksize for FAT32 must be")},
 		{512, fat32.Fat32MaxSize + 10000, -1, nil, fmt.Errorf("requested size is larger than maximum allowed FAT32 size")},
 		{512, 0, -1, nil, fmt.Errorf("requested size is smaller than minimum allowed FAT32 size")},
-		{512, 10000000, 512, nil, fmt.Errorf("Error reading FileSystem Information Sector")},
+		{512, 10000000, 512, nil, fmt.Errorf("error reading FileSystem Information Sector")},
 		{512, 10000000, -1, &fat32.FileSystem{}, nil},
 	}
 	runTest := func(t *testing.T, pre, post int64) {
@@ -311,7 +311,7 @@ func TestFat32ReadDir(t *testing.T) {
 			// total = 80 entries
 			{"/foo", 80, ".", true, nil},
 			// 0 entries because the directory does not exist
-			{"/a/b/c", 0, "", false, fmt.Errorf("Error reading directory /a/b/c")},
+			{"/a/b/c", 0, "", false, fmt.Errorf("error reading directory /a/b/c")},
 		}
 		fileInfo, err := f.Stat()
 		if err != nil {
@@ -366,13 +366,13 @@ func TestFat32OpenFile(t *testing.T) {
 				err      error
 			}{
 				// error opening a directory
-				{"/", os.O_RDONLY, "", fmt.Errorf("Cannot open directory %s as file", "/")},
-				{"/", os.O_RDWR, "", fmt.Errorf("Cannot open directory %s as file", "/")},
-				{"/", os.O_CREATE, "", fmt.Errorf("Cannot open directory %s as file", "/")},
+				{"/", os.O_RDONLY, "", fmt.Errorf("cannot open directory %s as file", "/")},
+				{"/", os.O_RDWR, "", fmt.Errorf("cannot open directory %s as file", "/")},
+				{"/", os.O_CREATE, "", fmt.Errorf("cannot open directory %s as file", "/")},
 				// open non-existent file for read or read write
-				{"/abcdefg", os.O_RDONLY, "", fmt.Errorf("Target file %s does not exist", "/abcdefg")},
-				{"/abcdefg", os.O_RDWR, "", fmt.Errorf("Target file %s does not exist", "/abcdefg")},
-				{"/abcdefg", os.O_APPEND, "", fmt.Errorf("Target file %s does not exist", "/abcdefg")},
+				{"/abcdefg", os.O_RDONLY, "", fmt.Errorf("target file %s does not exist", "/abcdefg")},
+				{"/abcdefg", os.O_RDWR, "", fmt.Errorf("target file %s does not exist", "/abcdefg")},
+				{"/abcdefg", os.O_APPEND, "", fmt.Errorf("target file %s does not exist", "/abcdefg")},
 				// open file for read or read write and check contents
 				{"/CORTO1.TXT", os.O_RDONLY, "Tenemos un archivo corto\n", nil},
 				{"/CORTO1.TXT", os.O_RDWR, "Tenemos un archivo corto\n", nil},
@@ -440,9 +440,9 @@ func TestFat32OpenFile(t *testing.T) {
 				{"/CORTO1.TXT", os.O_RDWR, false, "This is a very long replacement string", "Tenemos un archivo corto\nThis is a very long replacement string", nil},
 				{"/CORTO1.TXT", os.O_RDWR, false, "Two", "Tenemos un archivo corto\nTwo", nil},
 				//  - open for append file that does exist (write contents, check that appended)
-				{"/CORTO1.TXT", os.O_APPEND, false, "More", "", fmt.Errorf("Cannot write to file opened read-only")},
+				{"/CORTO1.TXT", os.O_APPEND, false, "More", "", fmt.Errorf("cannot write to file opened read-only")},
 				{"/CORTO1.TXT", os.O_APPEND | os.O_RDWR, false, "More", "Tenemos un archivo corto\nMore", nil},
-				{"/CORTO1.TXT", os.O_APPEND, true, "More", "", fmt.Errorf("Cannot write to file opened read-only")},
+				{"/CORTO1.TXT", os.O_APPEND, true, "More", "", fmt.Errorf("cannot write to file opened read-only")},
 				{"/CORTO1.TXT", os.O_APPEND | os.O_RDWR, true, "More", "Moremos un archivo corto\n", nil},
 			}
 			for _, tt := range tests {

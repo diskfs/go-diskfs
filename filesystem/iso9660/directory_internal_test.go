@@ -26,7 +26,7 @@ func TestDirectoryEntriesFromBytes(t *testing.T) {
 				}
 				return len(b), nil
 			}
-			return 0, fmt.Errorf("Unknown area to read %d", offset)
+			return 0, fmt.Errorf("unknown area to read %d", offset)
 		},
 	}
 	fs.file = f

@@ -749,7 +749,7 @@ func parseExtendedDevice(b []byte) (*extendedDevice, error) {
 	}
 	basic, err := parseBasicDevice(b[:8])
 	if err != nil {
-		return nil, fmt.Errorf("Error parsing block device: %v", err)
+		return nil, fmt.Errorf("error parsing block device: %v", err)
 	}
 	return &extendedDevice{
 		links:      basic.links,

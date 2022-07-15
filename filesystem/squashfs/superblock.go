@@ -204,7 +204,7 @@ func parseSuperblock(b []byte) (*superblock, error) {
 	}
 	flags, err := parseFlags(b[24:26])
 	if err != nil {
-		return nil, fmt.Errorf("Error parsing flags bytes: %v", err)
+		return nil, fmt.Errorf("error parsing flags bytes: %v", err)
 	}
 	s := &superblock{
 		inodes:              binary.LittleEndian.Uint32(b[4:8]),

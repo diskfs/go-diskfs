@@ -224,7 +224,7 @@ func initDisk(f *os.File, openMode OpenModeOption, sectorSize SectorSize) (*disk
 		log.Debugf("initDisk(): logical block size %d, physical block size %d", lblksize, pblksize)
 		defaultBlocks = false
 		if err != nil {
-			return nil, fmt.Errorf("Unable to get block sizes for device %s: %v", f.Name(), err)
+			return nil, fmt.Errorf("unable to get block sizes for device %s: %v", f.Name(), err)
 		}
 	default:
 		return nil, fmt.Errorf("device %s is neither a block device nor a regular file", f.Name())
@@ -325,7 +325,7 @@ func Open(device string, opts ...OpenOpt) (*disk.Disk, error) {
 
 	f, err := os.OpenFile(device, m, 0600)
 	if err != nil {
-		return nil, fmt.Errorf("Could not open device %s exclusively for writing", device)
+		return nil, fmt.Errorf("could not open device %s exclusively for writing", device)
 	}
 	// return our disk
 	return initDisk(f, ReadWriteExclusive, opt.sectorSize)
@@ -343,11 +343,11 @@ func Create(device string, size int64, format Format, sectorSize SectorSize) (*d
 	}
 	f, err := os.OpenFile(device, os.O_RDWR|os.O_EXCL|os.O_CREATE, 0666)
 	if err != nil {
-		return nil, fmt.Errorf("Could not create device %s", device)
+		return nil, fmt.Errorf("could not create device %s", device)
 	}
 	err = os.Truncate(device, size)
 	if err != nil {
-		return nil, fmt.Errorf("Could not expand device %s to size %d", device, size)
+		return nil, fmt.Errorf("could not expand device %s to size %d", device, size)
 	}
 	// return our disk
 	return initDisk(f, ReadWriteExclusive, sectorSize)

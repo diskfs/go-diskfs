@@ -20,7 +20,7 @@ type xAttrIndex struct {
 
 func parseXAttrIndex(b []byte) (*xAttrIndex, error) {
 	if len(b) < int(xAttrIDEntrySize) {
-		return nil, fmt.Errorf("Cannot parse xAttr Index of size %d less than minimum %d", len(b), xAttrIDEntrySize)
+		return nil, fmt.Errorf("cannot parse xAttr Index of size %d less than minimum %d", len(b), xAttrIDEntrySize)
 	}
 	return &xAttrIndex{
 		pos:   binary.LittleEndian.Uint64(b[0:8]),

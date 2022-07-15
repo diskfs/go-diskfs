@@ -48,14 +48,14 @@ func (p *Partition) toBytes() ([]byte, error) {
 	// partition type GUID is first 16 bytes
 	typeGUID, err := uuid.Parse(string(p.Type))
 	if err != nil {
-		return nil, fmt.Errorf("Unable to parse partition type GUID: %v", err)
+		return nil, fmt.Errorf("unable to parse partition type GUID: %v", err)
 	}
 	copy(b[0:16], bytesToUUIDBytes(typeGUID[0:16]))
 
 	// partition identifier GUID is next 16 bytes
 	idGUID, err := uuid.Parse(p.GUID)
 	if err != nil {
-		return nil, fmt.Errorf("Unable to parse partition identifier GUID: %v", err)
+		return nil, fmt.Errorf("unable to parse partition identifier GUID: %v", err)
 	}
 	copy(b[16:32], bytesToUUIDBytes(idGUID[0:16]))
 
@@ -71,7 +71,7 @@ func (p *Partition) toBytes() ([]byte, error) {
 		r = append(r, rune(s))
 	}
 	if len(r) > 36 {
-		return nil, fmt.Errorf("Cannot use %s as partition name, has %d Unicode code units, maximum size is 36", p.Name, len(r))
+		return nil, fmt.Errorf("cannot use %s as partition name, has %d Unicode code units, maximum size is 36", p.Name, len(r))
 	}
 	// next convert the runes to uint16
 	nameb := utf16.Encode(r)
@@ -156,7 +156,7 @@ func (p *Partition) WriteContents(f util.File, contents io.Reader) (uint64, erro
 		// End was not set
 		p.End = p.Start + p.Size/uint64(lss) - 1
 	default:
-		return total, fmt.Errorf("Cannot reconcile partition size %d with start %d / end %d", p.Size, p.Start, p.End)
+		return total, fmt.Errorf("cannot reconcile partition size %d with start %d / end %d", p.Size, p.Start, p.End)
 	}
 
 	// chunks of physical sector size for efficient writing
@@ -167,7 +167,7 @@ func (p *Partition) WriteContents(f util.File, contents io.Reader) (uint64, erro
 	for {
 		read, err := contents.Read(b)
 		if err != nil && err != io.EOF {
-			return total, fmt.Errorf("Could not read contents to pass to partition: %v", err)
+			return total, fmt.Errorf("could not read contents to pass to partition: %v", err)
 		}
 		tmpTotal := uint64(read) + total
 		if uint64(tmpTotal) > p.Size {
@@ -177,7 +177,7 @@ func (p *Partition) WriteContents(f util.File, contents io.Reader) (uint64, erro
 			var written int
 			written, err = f.WriteAt(b[:read], int64(start+total))
 			if err != nil {
-				return total, fmt.Errorf("Error writing to file: %v", err)
+				return total, fmt.Errorf("error writing to file: %v", err)
 			}
 			total = total + uint64(written)
 		}
@@ -209,7 +209,7 @@ func (p *Partition) ReadContents(f util.File, out io.Writer) (int64, error) {
 	for {
 		read, err := f.ReadAt(b, int64(start)+total)
 		if err != nil && err != io.EOF {
-			return total, fmt.Errorf("Error reading from file: %v", err)
+			return total, fmt.Errorf("error reading from file: %v", err)
 		}
 		if read > 0 {
 			out.Write(b[:read])
@@ -238,7 +238,7 @@ func (p *Partition) initEntry(blocksize uint64, starting uint64) error {
 		var err error
 		guid, err = uuid.Parse(part.GUID)
 		if err != nil {
-			return fmt.Errorf("Invalid UUID: %s", part.GUID)
+			return fmt.Errorf("invalid UUID: %s", part.GUID)
 		}
 	}
 	part.GUID = strings.ToUpper(guid.String())
@@ -266,7 +266,7 @@ func (p *Partition) initEntry(blocksize uint64, starting uint64) error {
 		part.Start = start
 		part.End = end
 	default:
-		return fmt.Errorf("Invalid partition entry, size %d bytes does not match start sector %d and end sector %d", size, start, end)
+		return fmt.Errorf("invalid partition entry, size %d bytes does not match start sector %d and end sector %d", size, start, end)
 	}
 	return nil
 }

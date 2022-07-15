@@ -93,9 +93,9 @@ func TestFat32GetClusterList(t *testing.T) {
 		{8, []uint32{8, 9, 11}, nil},
 		{15, []uint32{15}, nil},
 		// test non-existent ones, just to see that they come back empty
-		{14, nil, fmt.Errorf("Invalid start cluster")},
-		{100, nil, fmt.Errorf("Invalid start cluster")},
-		{16, nil, fmt.Errorf("Invalid cluster chain")},
+		{14, nil, fmt.Errorf("invalid start cluster")},
+		{100, nil, fmt.Errorf("invalid start cluster")},
+		{16, nil, fmt.Errorf("invalid cluster chain")},
 	}
 
 	for i, tt := range tests {
@@ -310,7 +310,7 @@ func TestFat32ReadDirWithMkdir(t *testing.T) {
 				clusterLocation: 3,
 			},
 		}, validDeLong, nil},
-		{"/FOO2", false, nil, nil, fmt.Errorf("Path /FOO2 not found")},
+		{"/FOO2", false, nil, nil, fmt.Errorf("path /FOO2 not found")},
 		{"/FOO2", true, &Directory{
 			directoryEntry: directoryEntry{
 				filenameShort:   "FOO2",

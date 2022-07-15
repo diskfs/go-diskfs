@@ -17,7 +17,7 @@ func tmpDisk(source string) (*os.File, error) {
 	filename := "disk_test"
 	f, err := ioutil.TempFile("", filename)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to create tempfile %s :%v", filename, err)
+		return nil, fmt.Errorf("failed to create tempfile %s :%v", filename, err)
 	}
 
 	// either copy the contents of the source file over, or make a file of appropriate size
@@ -27,14 +27,14 @@ func tmpDisk(source string) (*os.File, error) {
 	} else {
 		b, err := ioutil.ReadFile(source)
 		if err != nil {
-			return nil, fmt.Errorf("Failed to read contents of %s: %v", source, err)
+			return nil, fmt.Errorf("failed to read contents of %s: %v", source, err)
 		}
 		written, err := f.Write(b)
 		if err != nil {
-			return nil, fmt.Errorf("Failed to write contents of %s to %s: %v", source, filename, err)
+			return nil, fmt.Errorf("failed to write contents of %s to %s: %v", source, filename, err)
 		}
 		if written != len(b) {
-			return nil, fmt.Errorf("Wrote only %d bytes of %s to %s instead of %d", written, source, filename, len(b))
+			return nil, fmt.Errorf("wrote only %d bytes of %s to %s instead of %d", written, source, filename, len(b))
 		}
 	}
 
@@ -108,7 +108,7 @@ func TestCreate(t *testing.T) {
 		{"", 10 * oneMB, diskfs.Raw, diskfs.SectorSizeDefault, nil, fmt.Errorf("must pass device name")},
 		{"/tmp/disk.img", 0, diskfs.Raw, diskfs.SectorSizeDefault, nil, fmt.Errorf("must pass valid device size to create")},
 		{"/tmp/disk.img", -1, diskfs.Raw, diskfs.SectorSizeDefault, nil, fmt.Errorf("must pass valid device size to create")},
-		{"/tmp/foo/bar/232323/23/2322/disk.img", 10 * oneMB, diskfs.Raw, diskfs.SectorSizeDefault, nil, fmt.Errorf("Could not create device")},
+		{"/tmp/foo/bar/232323/23/2322/disk.img", 10 * oneMB, diskfs.Raw, diskfs.SectorSizeDefault, nil, fmt.Errorf("could not create device")},
 		{"/tmp/disk.img", 10 * oneMB, diskfs.Raw, diskfs.SectorSizeDefault, &disk.Disk{LogicalBlocksize: 512, PhysicalBlocksize: 512, Size: 10 * oneMB, Type: disk.File}, nil},
 		{"/tmp/disk.img", 10 * oneMB, diskfs.Raw, diskfs.SectorSize512, &disk.Disk{LogicalBlocksize: 512, PhysicalBlocksize: 512, Size: 10 * oneMB, Type: disk.File}, nil},
 		{"/tmp/disk.img", 10 * oneMB, diskfs.Raw, diskfs.SectorSize4k, &disk.Disk{LogicalBlocksize: 4096, PhysicalBlocksize: 4096, Size: 10 * oneMB, Type: disk.File}, nil},

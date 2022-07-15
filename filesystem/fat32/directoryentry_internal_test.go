@@ -54,12 +54,12 @@ var (
 		err       error
 	}{
 		// first several tests use invalid shortname char or too long
-		{"foo", "TXT", "very long filename indeed", nil, fmt.Errorf("Could not calculate checksum for 8.3 filename: Invalid shortname character in filename")},
-		{"א", "TXT", "very long filename indeed", nil, fmt.Errorf("Could not calculate checksum for 8.3 filename: Invalid shortname character in filename")},
-		{"abcdefghuk", "TXT", "very long filename indeed", nil, fmt.Errorf("Could not calculate checksum for 8.3 filename: Invalid shortname character in filename")},
-		{"FOO", "א", "very long filename indeed", nil, fmt.Errorf("Could not calculate checksum for 8.3 filename: Invalid shortname character in extension")},
-		{"FOO", "TXT234", "very long filename indeed", nil, fmt.Errorf("Could not calculate checksum for 8.3 filename: Extension for file is longer")},
-		{"FOO", "txt", "very long filename indeed", nil, fmt.Errorf("Could not calculate checksum for 8.3 filename: Invalid shortname character in extension")},
+		{"foo", "TXT", "very long filename indeed", nil, fmt.Errorf("could not calculate checksum for 8.3 filename: Invalid shortname character in filename")},
+		{"א", "TXT", "very long filename indeed", nil, fmt.Errorf("could not calculate checksum for 8.3 filename: Invalid shortname character in filename")},
+		{"abcdefghuk", "TXT", "very long filename indeed", nil, fmt.Errorf("could not calculate checksum for 8.3 filename: Invalid shortname character in filename")},
+		{"FOO", "א", "very long filename indeed", nil, fmt.Errorf("could not calculate checksum for 8.3 filename: Invalid shortname character in extension")},
+		{"FOO", "TXT234", "very long filename indeed", nil, fmt.Errorf("could not calculate checksum for 8.3 filename: Extension for file is longer")},
+		{"FOO", "txt", "very long filename indeed", nil, fmt.Errorf("could not calculate checksum for 8.3 filename: Invalid shortname character in extension")},
 		// rest are valid
 		{"UNARCH~1", "DAT", "Un archivo con nombre largo.dat", unarcBytes, nil},
 	}
@@ -185,7 +185,7 @@ func getValidDirectoryEntries() ([]*directoryEntry, [][]byte, error) {
 	// read correct bytes off of disk
 	input, err := ioutil.ReadFile(Fat32File)
 	if err != nil {
-		return nil, nil, fmt.Errorf("Error reading data from fat32 test fixture %s: %v", Fat32File, err)
+		return nil, nil, fmt.Errorf("error reading data from fat32 test fixture %s: %v", Fat32File, err)
 	}
 
 	// start of root directory in fat32.img - sector 348
@@ -311,7 +311,7 @@ func getValidDirectoryEntriesExtended() ([]*directoryEntry, [][]byte, error) {
 	// read correct bytes off of disk
 	input, err := ioutil.ReadFile(Fat32File)
 	if err != nil {
-		return nil, nil, fmt.Errorf("Error reading data from fat32 test fixture %s: %v", Fat32File, err)
+		return nil, nil, fmt.Errorf("error reading data from fat32 test fixture %s: %v", Fat32File, err)
 	}
 
 	// start of foo directory in fat32.img - cluster 3 = sector 349 = bytes 349*512 = 178688 = 0x0002ba00
@@ -396,12 +396,12 @@ func TestDirectoryEntryLfnChecksum(t *testing.T) {
 		err       error
 	}{
 		// first all of the error cases
-		{"abc\u2378", "F", 0x00, fmt.Errorf("Invalid shortname character in filename")},
-		{"abc", "F", 0x00, fmt.Errorf("Invalid shortname character in filename")},
-		{"ABC", "F\u2378", 0x00, fmt.Errorf("Invalid shortname character in extension")},
-		{"ABC", "f", 0x00, fmt.Errorf("Invalid shortname character in extension")},
-		{"ABCDEFGHIJ", "F", 0x00, fmt.Errorf("Short name for file is longer than")},
-		{"ABCD", "FUUYY", 0x00, fmt.Errorf("Extension for file is longer than")},
+		{"abc\u2378", "F", 0x00, fmt.Errorf("invalid shortname character in filename")},
+		{"abc", "F", 0x00, fmt.Errorf("invalid shortname character in filename")},
+		{"ABC", "F\u2378", 0x00, fmt.Errorf("invalid shortname character in extension")},
+		{"ABC", "f", 0x00, fmt.Errorf("invalid shortname character in extension")},
+		{"ABCDEFGHIJ", "F", 0x00, fmt.Errorf("short name for file is longer than")},
+		{"ABCD", "FUUYY", 0x00, fmt.Errorf("extension for file is longer than")},
 		// valid exact length of each
 		{"ABCDEFGH", "TXT", 0xf6, nil},
 		// shortened each

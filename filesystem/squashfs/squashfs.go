@@ -80,7 +80,7 @@ func Create(f util.File, size int64, start int64, blocksize int64) (*FileSystem,
 	//  It is only on `Finalize()` that we write it out to the actual disk file
 	tmpdir, err := ioutil.TempDir("", "diskfs_squashfs")
 	if err != nil {
-		return nil, fmt.Errorf("Could not create working directory: %v", err)
+		return nil, fmt.Errorf("could not create working directory: %v", err)
 	}
 
 	// create root directory
@@ -129,7 +129,7 @@ func Read(file util.File, size int64, start int64, blocksize int64) (*FileSystem
 	b := make([]byte, superblockSize)
 	read, err = file.ReadAt(b, start)
 	if err != nil {
-		return nil, fmt.Errorf("Unable to read bytes for superblock: %v", err)
+		return nil, fmt.Errorf("unable to read bytes for superblock: %v", err)
 	}
 	if int64(read) != superblockSize {
 		return nil, fmt.Errorf("Read %d bytes instead of expected %d for superblock", read, superblockSize)
@@ -138,13 +138,13 @@ func Read(file util.File, size int64, start int64, blocksize int64) (*FileSystem
 	// parse superblock
 	s, err := parseSuperblock(b)
 	if err != nil {
-		return nil, fmt.Errorf("Error parsing superblock: %v", err)
+		return nil, fmt.Errorf("error parsing superblock: %v", err)
 	}
 
 	// create the compressor function we will use
 	compress, err := newCompressor(s.compression)
 	if err != nil {
-		return nil, fmt.Errorf("Unable to create compressor")
+		return nil, fmt.Errorf("unable to create compressor")
 	}
 
 	// load fragments
@@ -186,7 +186,7 @@ func Read(file util.File, size int64, start int64, blocksize int64) (*FileSystem
 	// for efficiency, read in the root inode right now
 	rootInode, err := fs.getInode(s.rootInode.block, s.rootInode.offset, inodeBasicDirectory)
 	if err != nil {
-		return nil, fmt.Errorf("Unable to read root inode")
+		return nil, fmt.Errorf("unable to read root inode")
 	}
 	fs.rootDir = rootInode
 	return fs, nil
@@ -205,11 +205,11 @@ func (fs *FileSystem) Type() filesystem.Type {
 // if readonly and not in workspace, will return an error
 func (fs *FileSystem) Mkdir(p string) error {
 	if fs.workspace == "" {
-		return fmt.Errorf("Cannot write to read-only filesystem")
+		return fmt.Errorf("cannot write to read-only filesystem")
 	}
 	err := os.MkdirAll(path.Join(fs.workspace, p), 0755)
 	if err != nil {
-		return fmt.Errorf("Could not create directory %s: %v", p, err)
+		return fmt.Errorf("could not create directory %s: %v", p, err)
 	}
 	// we are not interesting in returning the entries
 	return err
@@ -230,12 +230,12 @@ func (fs *FileSystem) ReadDir(p string) ([]os.FileInfo, error) {
 		// read the entries
 		fi, err = ioutil.ReadDir(fullPath)
 		if err != nil {
-			return nil, fmt.Errorf("Could not read directory %s: %v", p, err)
+			return nil, fmt.Errorf("could not read directory %s: %v", p, err)
 		}
 	} else {
 		dirEntries, err := fs.readDirectory(p)
 		if err != nil {
-			return nil, fmt.Errorf("Error reading directory %s: %v", p, err)
+			return nil, fmt.Errorf("error reading directory %s: %v", p, err)
 		}
 		fi = make([]os.FileInfo, 0, len(dirEntries))
 		for _, entry := range dirEntries {
@@ -261,21 +261,21 @@ func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 
 	// if the dir == filename, then it is just /
 	if dir == filename {
-		return nil, fmt.Errorf("Cannot open directory %s as file", p)
+		return nil, fmt.Errorf("cannot open directory %s as file", p)
 	}
 
 	// cannot open to write or append or create if we do not have a workspace
 	writeMode := flag&os.O_WRONLY != 0 || flag&os.O_RDWR != 0 || flag&os.O_APPEND != 0 || flag&os.O_CREATE != 0 || flag&os.O_TRUNC != 0 || flag&os.O_EXCL != 0
 	if fs.workspace == "" {
 		if writeMode {
-			return nil, fmt.Errorf("Cannot write to read-only filesystem")
+			return nil, fmt.Errorf("cannot write to read-only filesystem")
 		}
 
 		// get the directory entries
 		var entries []*directoryEntry
 		entries, err = fs.readDirectory(dir)
 		if err != nil {
-			return nil, fmt.Errorf("Could not read directory entries for %s", dir)
+			return nil, fmt.Errorf("could not read directory entries for %s", dir)
 		}
 		// we now know that the directory exists, see if the file exists
 		var targetEntry *directoryEntry
@@ -283,7 +283,7 @@ func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 			eName := e.Name()
 			// cannot do anything with directories
 			if eName == filename && e.IsDir() {
-				return nil, fmt.Errorf("Cannot open directory %s as file", p)
+				return nil, fmt.Errorf("cannot open directory %s as file", p)
 			}
 			if eName == filename {
 				// if we got this far, we have found the file
@@ -295,7 +295,7 @@ func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 		// see if the file exists
 		// if the file does not exist, and is not opened for os.O_CREATE, return an error
 		if targetEntry == nil {
-			return nil, fmt.Errorf("Target file %s does not exist", p)
+			return nil, fmt.Errorf("target file %s does not exist", p)
 		}
 		// get the inode data for this file
 		// now open the file
@@ -324,7 +324,7 @@ func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 	} else {
 		f, err = os.OpenFile(path.Join(fs.workspace, p), flag, 0644)
 		if err != nil {
-			return nil, fmt.Errorf("Target file %s does not exist: %v", p, err)
+			return nil, fmt.Errorf("target file %s does not exist: %v", p, err)
 		}
 	}
 
@@ -336,7 +336,7 @@ func (fs *FileSystem) readDirectory(p string) ([]*directoryEntry, error) {
 	// use the root inode to find the location of the root direectory in the table
 	entries, err := fs.getDirectoryEntries(p, fs.rootDir)
 	if err != nil {
-		return nil, fmt.Errorf("Could not read directory at path %s: %v", p, err)
+		return nil, fmt.Errorf("could not read directory at path %s: %v", p, err)
 	}
 	return entries, nil
 }
@@ -351,7 +351,7 @@ func (fs *FileSystem) getDirectoryEntries(p string, in inode) ([]*directoryEntry
 	// break path down into parts and levels
 	parts, err := splitPath(p)
 	if err != nil {
-		return nil, fmt.Errorf("Could not parse path: %v", err)
+		return nil, fmt.Errorf("could not parse path: %v", err)
 	}
 
 	iType := in.inodeType()
@@ -373,7 +373,7 @@ func (fs *FileSystem) getDirectoryEntries(p string, in inode) ([]*directoryEntry
 	// read the directory data from the directory table
 	dir, err := fs.getDirectory(block, offset, size)
 	if err != nil {
-		return nil, fmt.Errorf("Unable to read directory from table: %v", err)
+		return nil, fmt.Errorf("unable to read directory from table: %v", err)
 	}
 	entriesRaw := dir.entries
 	var entries []*directoryEntry
@@ -381,7 +381,7 @@ func (fs *FileSystem) getDirectoryEntries(p string, in inode) ([]*directoryEntry
 	if len(parts) == 0 {
 		entries, err = fs.hydrateDirectoryEntries(entriesRaw)
 		if err != nil {
-			return nil, fmt.Errorf("Could not populate directory entries for %s with properties: %v", p, err)
+			return nil, fmt.Errorf("could not populate directory entries for %s with properties: %v", p, err)
 		}
 		return entries, nil
 	}
@@ -395,7 +395,7 @@ func (fs *FileSystem) getDirectoryEntries(p string, in inode) ([]*directoryEntry
 			// read the inode for this entry
 			inode, err := fs.getInode(uint32(entry.startBlock), entry.offset, entry.inodeType)
 			if err != nil {
-				return nil, fmt.Errorf("Error finding inode for %s: %v", p, err)
+				return nil, fmt.Errorf("error finding inode for %s: %v", p, err)
 			}
 
 			childPath := ""
@@ -404,13 +404,13 @@ func (fs *FileSystem) getDirectoryEntries(p string, in inode) ([]*directoryEntry
 			}
 			entries, err = fs.getDirectoryEntries(childPath, inode)
 			if err != nil {
-				return nil, fmt.Errorf("Could not get entries: %v", err)
+				return nil, fmt.Errorf("could not get entries: %v", err)
 			}
 			return entries, nil
 		}
 	}
 	// if we made it here, we were not looking for this directory, but did not find it among our children
-	return nil, fmt.Errorf("Could not find path %s", p)
+	return nil, fmt.Errorf("could not find path %s", p)
 }
 
 func (fs *FileSystem) hydrateDirectoryEntries(entries []*directoryEntryRaw) ([]*directoryEntry, error) {
@@ -419,7 +419,7 @@ func (fs *FileSystem) hydrateDirectoryEntries(entries []*directoryEntryRaw) ([]*
 		// read the inode for this entry
 		in, err := fs.getInode(e.startBlock, e.offset, e.inodeType)
 		if err != nil {
-			return nil, fmt.Errorf("Error finding inode for %s: %v", e.name, err)
+			return nil, fmt.Errorf("error finding inode for %s: %v", e.name, err)
 		}
 		body, header := in.getBody(), in.getHeader()
 		xattrIndex, has := body.xattrIndex()
@@ -427,7 +427,7 @@ func (fs *FileSystem) hydrateDirectoryEntries(entries []*directoryEntryRaw) ([]*
 		if has && xattrIndex != noXattrInodeFlag {
 			xattrs, err = fs.xattrs.find(int(xattrIndex))
 			if err != nil {
-				return nil, fmt.Errorf("Error reading xattrs for %s: %v", e.name, err)
+				return nil, fmt.Errorf("error reading xattrs for %s: %v", e.name, err)
 			}
 		}
 		fullEntries = append(fullEntries, &directoryEntry{
@@ -457,7 +457,7 @@ func (fs *FileSystem) getInode(blockOffset uint32, byteOffset uint16, iType inod
 	size := inodeTypeToSize(iType)
 	uncompressed, err := readMetadata(fs.file, fs.compressor, int64(fs.superblock.inodeTableStart), blockOffset, byteOffset, size)
 	if err != nil {
-		return nil, fmt.Errorf("Error reading block at position %d: %v", blockOffset, err)
+		return nil, fmt.Errorf("error reading block at position %d: %v", blockOffset, err)
 	}
 	// parse the header to see the type matches
 	header, err := parseInodeHeader(uncompressed)
@@ -474,7 +474,7 @@ func (fs *FileSystem) getInode(blockOffset uint32, byteOffset uint16, iType inod
 		size += extra
 		uncompressed, err = readMetadata(fs.file, fs.compressor, int64(fs.superblock.inodeTableStart), blockOffset, byteOffset, size)
 		if err != nil {
-			return nil, fmt.Errorf("Error reading block at position %d: %v", blockOffset, err)
+			return nil, fmt.Errorf("error reading block at position %d: %v", blockOffset, err)
 		}
 		// no need to revalidate the body type, or check for extra
 		body, _, err = parseInodeBody(uncompressed[inodeHeaderSize:], int(fs.blocksize), iType)
@@ -494,7 +494,7 @@ func (fs *FileSystem) getDirectory(blockOffset uint32, byteOffset uint16, size i
 	// get the block
 	uncompressed, err := readMetadata(fs.file, fs.compressor, int64(fs.superblock.directoryTableStart), blockOffset, byteOffset, size)
 	if err != nil {
-		return nil, fmt.Errorf("Error reading block at position %d: %v", blockOffset, err)
+		return nil, fmt.Errorf("error reading block at position %d: %v", blockOffset, err)
 	}
 	// for parseDirectory, we only want to use precisely the right number of bytes
 	if len(uncompressed) > size {
@@ -508,7 +508,7 @@ func (fs *FileSystem) readBlock(location int64, compressed bool, size uint32) ([
 	b := make([]byte, size)
 	read, err := fs.file.ReadAt(b, int64(location))
 	if err != nil && err != io.EOF {
-		return nil, fmt.Errorf("Error reading block %d: %v", location, err)
+		return nil, fmt.Errorf("error reading block %d: %v", location, err)
 	}
 	if read != int(size) {
 		return nil, fmt.Errorf("read %d bytes instead of expected %d", read, size)
@@ -535,7 +535,7 @@ func (fs *FileSystem) readFragment(index, offset uint32, fragmentSize int64) ([]
 	b := make([]byte, fragmentInfo.size)
 	read, err := fs.file.ReadAt(b, int64(fragmentInfo.start))
 	if err != nil && err != io.EOF {
-		return nil, fmt.Errorf("Unable to read fragment block %d: %v", index, err)
+		return nil, fmt.Errorf("unable to read fragment block %d: %v", index, err)
 	}
 	if read != len(b) {
 		return nil, fmt.Errorf("Read %d instead of expected %d bytes for fragment block %d", read, len(b), index)
@@ -595,13 +595,13 @@ func readFragmentTable(s *superblock, file util.File, c Compressor) ([]*fragment
 	for i, offset := range offsets {
 		uncompressed, _, err := readMetaBlock(file, c, offset)
 		if err != nil {
-			return nil, fmt.Errorf("Error reading meta block %d at position %d: %v", i, offset, err)
+			return nil, fmt.Errorf("error reading meta block %d at position %d: %v", i, offset, err)
 		}
 		// uncompressed should be a multiple of 16 bytes
 		for j := 0; j < len(uncompressed); j += 16 {
 			entry, err := parseFragmentEntry(uncompressed[j:])
 			if err != nil {
-				return nil, fmt.Errorf("Error parsing fragment table entry in block %d position %d: %v", i, j, err)
+				return nil, fmt.Errorf("error parsing fragment table entry in block %d position %d: %v", i, j, err)
 			}
 			fragmentTable = append(fragmentTable, entry)
 		}
@@ -630,7 +630,7 @@ func readXattrsTable(s *superblock, file util.File, c Compressor) (*xAttrTable, 
 	b := make([]byte, xAttrHeaderSize)
 	read, err := file.ReadAt(b, int64(s.xattrTableStart))
 	if err != nil && err != io.EOF {
-		return nil, fmt.Errorf("Unable to read bytes for xattrs metadata ID header: %v", err)
+		return nil, fmt.Errorf("unable to read bytes for xattrs metadata ID header: %v", err)
 	}
 	if read != len(b) {
 		return nil, fmt.Errorf("Read %d bytes instead of expected %d for xattrs metadata ID header", read, len(b))
@@ -653,7 +653,7 @@ func readXattrsTable(s *superblock, file util.File, c Compressor) (*xAttrTable, 
 	b = make([]byte, idBlocks*8)
 	read, err = file.ReadAt(b, int64(s.xattrTableStart)+xAttrHeaderSize)
 	if err != nil && err != io.EOF {
-		return nil, fmt.Errorf("Unable to read bytes for xattrs metadata ID table: %v", err)
+		return nil, fmt.Errorf("unable to read bytes for xattrs metadata ID table: %v", err)
 	}
 	if read != len(b) {
 		return nil, fmt.Errorf("Read %d bytes instead of expected %d for xattrs metadata ID table", read, len(b))
@@ -670,7 +670,7 @@ func readXattrsTable(s *superblock, file util.File, c Compressor) (*xAttrTable, 
 		locn := binary.LittleEndian.Uint64(b[i : i+8])
 		uncompressed, _, err = readMetaBlock(file, c, int64(locn))
 		if err != nil {
-			return nil, fmt.Errorf("Error reading xattr index meta block %d at position %d: %v", i, locn, err)
+			return nil, fmt.Errorf("error reading xattr index meta block %d at position %d: %v", i, locn, err)
 		}
 		bIndex = append(bIndex, uncompressed...)
 	}
@@ -681,7 +681,7 @@ func readXattrsTable(s *superblock, file util.File, c Compressor) (*xAttrTable, 
 	for i := xAttrStart; i < xAttrEnd; {
 		uncompressed, size, err = readMetaBlock(file, c, int64(i))
 		if err != nil {
-			return nil, fmt.Errorf("Error reading xattr data meta block at position %d: %v", i, err)
+			return nil, fmt.Errorf("error reading xattr data meta block at position %d: %v", i, err)
 		}
 		xAttrData = append(xAttrData, uncompressed...)
 		i += uint64(size)
@@ -702,7 +702,7 @@ func parseXattrsTable(bUIDXattr, bIndex []byte, offset uint64, c Compressor) (*x
 	for i := 0; i+entrySize <= len(bIndex); i += entrySize {
 		entry, err := parseXAttrIndex(bIndex[i:])
 		if err != nil {
-			return nil, fmt.Errorf("Error parsing xAttr ID table entry in position %d: %v", i, err)
+			return nil, fmt.Errorf("error parsing xAttr ID table entry in position %d: %v", i, err)
 		}
 		xAttrIDList = append(xAttrIDList, entry)
 	}
@@ -744,7 +744,7 @@ func readUidsGids(s *superblock, file util.File, c Compressor) ([]uint32, error)
 	b := make([]byte, idBlocks*8)
 	read, err := file.ReadAt(b, int64(idStart))
 	if err != nil && err != io.EOF {
-		return nil, fmt.Errorf("Unable to read index bytes for uidgid ID table: %v", err)
+		return nil, fmt.Errorf("unable to read index bytes for uidgid ID table: %v", err)
 	}
 	if read != len(b) {
 		return nil, fmt.Errorf("Read %d bytes instead of expected %d for uidgid ID table", read, len(b))
@@ -760,7 +760,7 @@ func readUidsGids(s *superblock, file util.File, c Compressor) ([]uint32, error)
 		locn := binary.LittleEndian.Uint64(b[i : i+8])
 		uncompressed, _, err = readMetaBlock(file, c, int64(locn))
 		if err != nil {
-			return nil, fmt.Errorf("Error reading uidgid index meta block %d at position %d: %v", i, locn, err)
+			return nil, fmt.Errorf("error reading uidgid index meta block %d at position %d: %v", i, locn, err)
 		}
 		data = append(data, uncompressed...)
 	}

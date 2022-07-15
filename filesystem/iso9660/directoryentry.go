@@ -124,11 +124,11 @@ func (de *directoryEntry) toBytes(skipExt bool, ceBlocks []uint32) ([][]byte, er
 			if de.isSubdirectory {
 				nametype = "directory"
 			}
-			return nil, fmt.Errorf("Invalid %s %s: %v", nametype, de.filename, err)
+			return nil, fmt.Errorf("invalid %s %s: %v", nametype, de.filename, err)
 		}
 		filenameBytes, err = stringToASCIIBytes(de.filename)
 		if err != nil {
-			return nil, fmt.Errorf("Error converting filename to bytes: %v", err)
+			return nil, fmt.Errorf("error converting filename to bytes: %v", err)
 		}
 	}
 
@@ -140,7 +140,7 @@ func (de *directoryEntry) toBytes(skipExt bool, ceBlocks []uint32) ([][]byte, er
 	if !skipExt {
 		extBytes, err = dirEntryExtensionsToBytes(de.extensions, directoryEntryMaxSize-len(b), de.filesystem.blocksize, ceBlocks)
 		if err != nil {
-			return nil, fmt.Errorf("Unable to convert directory entry SUSP extensions to bytes: %v", err)
+			return nil, fmt.Errorf("unable to convert directory entry SUSP extensions to bytes: %v", err)
 		}
 		b = append(b, extBytes[0]...)
 	}
@@ -201,7 +201,7 @@ func dirEntryExtensionsToBytes(extensions []directoryEntrySystemUseExtension, ma
 func dirEntryFromBytes(b []byte, ext []suspExtension) (*directoryEntry, error) {
 	// has to be at least 34 bytes
 	if len(b) < int(directoryEntryMinSize) {
-		return nil, fmt.Errorf("Cannot read directoryEntry from %d bytes, fewer than minimum of %d bytes", len(b), directoryEntryMinSize)
+		return nil, fmt.Errorf("cannot read directoryEntry from %d bytes, fewer than minimum of %d bytes", len(b), directoryEntryMinSize)
 	}
 	recordSize := b[0]
 	// what if it is not the right size?
@@ -252,7 +252,7 @@ func dirEntryFromBytes(b []byte, ext []suspExtension) (*directoryEntry, error) {
 		var err error
 		suspFields, err = parseDirectoryEntryExtensions(b[33+nameLenWithPadding:], ext)
 		if err != nil {
-			return nil, fmt.Errorf("Unable to parse directory entry extensions: %v", err)
+			return nil, fmt.Errorf("unable to parse directory entry extensions: %v", err)
 		}
 	}
 
@@ -289,7 +289,7 @@ func parseDirEntry(b []byte, f *FileSystem) (*directoryEntry, error) {
 	// get the bytes
 	de, err := dirEntryFromBytes(b[:entryLen], f.suspExtensions)
 	if err != nil {
-		return nil, fmt.Errorf("Invalid directory entry : %v", err)
+		return nil, fmt.Errorf("invalid directory entry : %v", err)
 	}
 	de.filesystem = f
 
@@ -306,7 +306,7 @@ func parseDirEntry(b []byte, f *FileSystem) (*directoryEntry, error) {
 				continuationBytes := make([]byte, size)
 				read, err := f.file.ReadAt(continuationBytes, location*f.blocksize+offset)
 				if err != nil {
-					return nil, fmt.Errorf("Error reading continuation entry data at %d: %v", location, err)
+					return nil, fmt.Errorf("error reading continuation entry data at %d: %v", location, err)
 				}
 				if read != size {
 					return nil, fmt.Errorf("Read continuation entry data %d bytes instead of expected %d", read, size)
@@ -314,7 +314,7 @@ func parseDirEntry(b []byte, f *FileSystem) (*directoryEntry, error) {
 				// parse and append
 				entries, err := parseDirectoryEntryExtensions(continuationBytes, f.suspExtensions)
 				if err != nil {
-					return nil, fmt.Errorf("Error parsing continuation entry data at %d: %v", location, err)
+					return nil, fmt.Errorf("error parsing continuation entry data at %d: %v", location, err)
 				}
 				// remove the CE one from the extensions array and append our new ones
 				de.extensions = append(de.extensions[:len(de.extensions)-1], entries...)
@@ -342,7 +342,7 @@ func parseDirEntries(b []byte, f *FileSystem) ([]*directoryEntry, error) {
 		}
 		de, err := parseDirEntry(b[i+0:i+entryLen], f)
 		if err != nil {
-			return nil, fmt.Errorf("Invalid directory entry %d at byte %d: %v", count, i, err)
+			return nil, fmt.Errorf("invalid directory entry %d at byte %d: %v", count, i, err)
 		}
 		// some extensions to directory relocation, so check if we should ignore it
 		if f.suspEnabled {
@@ -367,7 +367,7 @@ func (de *directoryEntry) getLocation(p string) (uint32, uint32, error) {
 	// break path down into parts and levels
 	parts, err := splitPath(p)
 	if err != nil {
-		return 0, 0, fmt.Errorf("Could not parse path: %v", err)
+		return 0, 0, fmt.Errorf("could not parse path: %v", err)
 	}
 	var location, size uint32
 	if len(parts) == 0 {
@@ -379,7 +379,7 @@ func (de *directoryEntry) getLocation(p string) (uint32, uint32, error) {
 		dirb := make([]byte, de.size, de.size)
 		n, err := de.filesystem.file.ReadAt(dirb, int64(de.location)*de.filesystem.blocksize)
 		if err != nil {
-			return 0, 0, fmt.Errorf("Could not read directory: %v", err)
+			return 0, 0, fmt.Errorf("could not read directory: %v", err)
 		}
 		if n != len(dirb) {
 			return 0, 0, fmt.Errorf("Read %d bytes instead of expected %d", n, len(dirb))
@@ -387,7 +387,7 @@ func (de *directoryEntry) getLocation(p string) (uint32, uint32, error) {
 		// parse those entries
 		dirEntries, err := parseDirEntries(dirb, de.filesystem)
 		if err != nil {
-			return 0, 0, fmt.Errorf("Could not parse directory: %v", err)
+			return 0, 0, fmt.Errorf("could not parse directory: %v", err)
 		}
 		// find the entry among the children that has the desired name
 		for _, entry := range dirEntries {
@@ -401,7 +401,7 @@ func (de *directoryEntry) getLocation(p string) (uint32, uint32, error) {
 					case err2 != nil && err2 == ErrSuspFilenameUnsupported:
 						continue
 					case err2 != nil:
-						return 0, 0, fmt.Errorf("Extension %s count not find a filename property: %v", e.ID(), err2)
+						return 0, 0, fmt.Errorf("extension %s count not find a filename property: %v", e.ID(), err2)
 					default:
 						checkFilename = filename
 						break
@@ -419,7 +419,7 @@ func (de *directoryEntry) getLocation(p string) (uint32, uint32, error) {
 								dirb := make([]byte, de.filesystem.blocksize)
 								n, err2 := de.filesystem.file.ReadAt(dirb, int64(location2)*de.filesystem.blocksize)
 								if err2 != nil {
-									return 0, 0, fmt.Errorf("Could not read bytes of relocated directory %s from block %d: %v", checkFilename, location2, err2)
+									return 0, 0, fmt.Errorf("could not read bytes of relocated directory %s from block %d: %v", checkFilename, location2, err2)
 								}
 								if n != len(dirb) {
 									return 0, 0, fmt.Errorf("Read %d bytes instead of expected %d for relocated directory %s from block %d: %v", n, len(dirb), checkFilename, location2, err)
@@ -428,7 +428,7 @@ func (de *directoryEntry) getLocation(p string) (uint32, uint32, error) {
 								size2 := dirb[0]
 								entry, err2 = parseDirEntry(dirb[:size2], de.filesystem)
 								if err2 != nil {
-									return 0, 0, fmt.Errorf("Error converting bytes to a directory entry for relocated directory %s from block %d: %v", checkFilename, location2, err2)
+									return 0, 0, fmt.Errorf("error converting bytes to a directory entry for relocated directory %s from block %d: %v", checkFilename, location2, err2)
 								}
 								break
 							}
@@ -436,7 +436,7 @@ func (de *directoryEntry) getLocation(p string) (uint32, uint32, error) {
 					}
 					location, size, err = entry.getLocation(path.Join(parts[1:]...))
 					if err != nil {
-						return 0, 0, fmt.Errorf("Could not get location: %v", err)
+						return 0, 0, fmt.Errorf("could not get location: %v", err)
 					}
 				} else {
 					// this is the final one, we found it, keep it
@@ -537,7 +537,7 @@ func timeToBytes(t time.Time) []byte {
 // convert a string to ascii bytes, but only accept valid d-characters
 func validateFilename(s string, isDir bool) error {
 	var err error
-	// 		return nil, fmt.Errorf("Invalid d-character")
+	// 		return nil, fmt.Errorf("invalid d-character")
 	if isDir {
 		// directory only allowed up to 8 characters of A-Z,0-9,_
 		re := regexp.MustCompile("^[A-Z0-9_]{1,30}$")

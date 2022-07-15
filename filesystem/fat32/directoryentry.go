@@ -105,7 +105,7 @@ func (de *directoryEntry) toBytes() ([]byte, error) {
 	if de.filenameLong != "" {
 		lfnBytes, err := longFilenameBytes(de.filenameLong, de.filenameShort, de.fileExtension)
 		if err != nil {
-			return nil, fmt.Errorf("Could not convert long filename to directory entries: %v", err)
+			return nil, fmt.Errorf("could not convert long filename to directory entries: %v", err)
 		}
 		b = append(b, lfnBytes...)
 	}
@@ -123,12 +123,12 @@ func (de *directoryEntry) toBytes() ([]byte, error) {
 	// convert the short filename and extension to ascii bytes
 	shortName, err := stringToASCIIBytes(fmt.Sprintf("% -8s", de.filenameShort))
 	if err != nil {
-		return nil, fmt.Errorf("Error converting short filename to bytes: %v", err)
+		return nil, fmt.Errorf("error converting short filename to bytes: %v", err)
 	}
 	// convert the short filename and extension to ascii bytes
 	extension, err := stringToASCIIBytes(fmt.Sprintf("% -3s", de.fileExtension))
 	if err != nil {
-		return nil, fmt.Errorf("Error converting file extension to bytes: %v", err)
+		return nil, fmt.Errorf("error converting file extension to bytes: %v", err)
 	}
 	copy(dosBytes[0:8], shortName)
 	copy(dosBytes[8:11], extension)
@@ -193,7 +193,7 @@ byteLoop:
 			tmpLfn, err := longFilenameEntryFromBytes(b[i : i+32])
 			// an error is impossible since we pass exactly 32, but we leave the handler here anyways
 			if err != nil {
-				return nil, fmt.Errorf("Error parsing long filename at position %d: %v", i, err)
+				return nil, fmt.Errorf("error parsing long filename at position %d: %v", i, err)
 			}
 			lfn = tmpLfn + lfn
 			continue
@@ -260,7 +260,7 @@ func longFilenameBytes(s, shortName, extension string) ([]byte, error) {
 	// we need the checksum of the short name
 	checksum, err := lfnChecksum(shortName, extension)
 	if err != nil {
-		return nil, fmt.Errorf("Could not calculate checksum for 8.3 filename: %v", err)
+		return nil, fmt.Errorf("could not calculate checksum for 8.3 filename: %v", err)
 	}
 	// should be multiple of exactly 32 bytes
 	slots := calculateSlots(s)
@@ -355,17 +355,17 @@ func longFilenameEntryFromBytes(b []byte) (string, error) {
 func lfnChecksum(name, extension string) (byte, error) {
 	nameBytes, err := stringToValidASCIIBytes(name)
 	if err != nil {
-		return 0x00, fmt.Errorf("Invalid shortname character in filename: %s", name)
+		return 0x00, fmt.Errorf("invalid shortname character in filename: %s", name)
 	}
 	extensionBytes, err := stringToValidASCIIBytes(extension)
 	if err != nil {
-		return 0x00, fmt.Errorf("Invalid shortname character in extension: %s", extension)
+		return 0x00, fmt.Errorf("invalid shortname character in extension: %s", extension)
 	}
 
 	// now make sure we don't have too many - and fill in blanks
 	length := len(nameBytes)
 	if length > 8 {
-		return 0x00, fmt.Errorf("Short name for file is longer than allowed 8 bytes: %s", name)
+		return 0x00, fmt.Errorf("short name for file is longer than allowed 8 bytes: %s", name)
 	}
 	for i := 8; i > length; i-- {
 		nameBytes = append(nameBytes, 0x20)
@@ -373,7 +373,7 @@ func lfnChecksum(name, extension string) (byte, error) {
 
 	length = len(extensionBytes)
 	if length > 3 {
-		return 0x00, fmt.Errorf("Extension for file is longer than allowed 3 bytes: %s", extension)
+		return 0x00, fmt.Errorf("extension for file is longer than allowed 3 bytes: %s", extension)
 	}
 	for i := 3; i > length; i-- {
 		extensionBytes = append(extensionBytes, 0x20)
@@ -400,7 +400,7 @@ func stringToValidASCIIBytes(s string) ([]byte, error) {
 		if validShortNameCharacters[b2] {
 			continue
 		}
-		return nil, fmt.Errorf("Invalid 8.3 character")
+		return nil, fmt.Errorf("invalid 8.3 character")
 	}
 	return b, nil
 }

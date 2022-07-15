@@ -56,13 +56,13 @@ type directoryEntryGroup struct {
 func parseDirectory(b []byte) (*directory, error) {
 	// must have at least one header
 	if _, err := parseDirectoryHeader(b); err != nil {
-		return nil, fmt.Errorf("Could not parse directory header: %v", err)
+		return nil, fmt.Errorf("could not parse directory header: %v", err)
 	}
 	entries := make([]*directoryEntryRaw, 0)
 	for pos := 0; pos+dirHeaderSize < len(b); {
 		directoryHeader, err := parseDirectoryHeader(b[pos:])
 		if err != nil {
-			return nil, fmt.Errorf("Could not parse directory header: %v", err)
+			return nil, fmt.Errorf("could not parse directory header: %v", err)
 		}
 		if directoryHeader.count+1 > maxDirEntries {
 			return nil, fmt.Errorf("Corrupted directory, had %d entries instead of max %d", directoryHeader.count+1, maxDirEntries)
@@ -71,7 +71,7 @@ func parseDirectory(b []byte) (*directory, error) {
 		for count := uint32(0); count < directoryHeader.count; count++ {
 			entry, size, err := parseDirectoryEntry(b[pos:], directoryHeader.inode)
 			if err != nil {
-				return nil, fmt.Errorf("Unable to parse entry at position %d: %v", pos, err)
+				return nil, fmt.Errorf("unable to parse entry at position %d: %v", pos, err)
 			}
 			entry.startBlock = directoryHeader.startBlock
 			entries = append(entries, entry)

@@ -37,32 +37,32 @@ func getValidIso9660FSWorkspace() (*iso9660.FileSystem, error) {
 	// create the filesystem
 	f, err := tmpIso9660File()
 	if err != nil {
-		return nil, fmt.Errorf("Failed to create iso9660 tmpfile: %v", err)
+		return nil, fmt.Errorf("failed to create iso9660 tmpfile: %v", err)
 	}
 	return iso9660.Create(f, 0, 0, 2048, "")
 }
 func getValidIso9660FSUserWorkspace() (*iso9660.FileSystem, error) {
 	f, err := tmpIso9660File()
 	if err != nil {
-		return nil, fmt.Errorf("Failed to create iso9660 tmpfile: %v", err)
+		return nil, fmt.Errorf("failed to create iso9660 tmpfile: %v", err)
 	}
 	dir, err := ioutil.TempDir("", "myIso9660")
 	if err != nil {
-		return nil, fmt.Errorf("Failed to create iso9660 tmpfile: %v", err)
+		return nil, fmt.Errorf("failed to create iso9660 tmpfile: %v", err)
 	}
 	return iso9660.Create(f, 0, 0, 2048, dir)
 }
 func getValidIso9660FSReadOnly() (*iso9660.FileSystem, error) {
 	f, err := os.Open(iso9660.ISO9660File)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to read iso9660 testfile %s: %v", iso9660.ISO9660File, err)
+		return nil, fmt.Errorf("failed to read iso9660 testfile %s: %v", iso9660.ISO9660File, err)
 	}
 	return iso9660.Read(f, 0, 0, 2048)
 }
 func getValidRockRidgeFSReadOnly() (*iso9660.FileSystem, error) {
 	f, err := os.Open(iso9660.RockRidgeFile)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to read iso9660 testfile %s: %v", iso9660.RockRidgeFile, err)
+		return nil, fmt.Errorf("failed to read iso9660 testfile %s: %v", iso9660.RockRidgeFile, err)
 	}
 	return iso9660.Read(f, 0, 0, 2048)
 }
@@ -71,7 +71,7 @@ func tmpIso9660File() (*os.File, error) {
 	filename := "iso9660_test.iso"
 	f, err := ioutil.TempFile("", filename)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to create tempfile %s :%v", filename, err)
+		return nil, fmt.Errorf("failed to create tempfile %s :%v", filename, err)
 	}
 	return f, nil
 }
@@ -167,7 +167,7 @@ func TestIso9660Create(t *testing.T) {
 		{2048, 2048*iso9660.MaxBlocks + 1, nil, fmt.Errorf("requested size is larger than maximum allowed ISO9660 size"), ""},
 		{2048, 32*iso9660.KB + 3*2048 - 1, nil, fmt.Errorf("requested size is smaller than minimum allowed ISO9660 size"), ""},
 		{2048, 10000000, nil, fmt.Errorf("Provided workspace is not a directory"), testFile.Name()},
-		{2048, 10000000, nil, fmt.Errorf("Could not stat working directory"), missingDir},
+		{2048, 10000000, nil, fmt.Errorf("could not stat working directory"), missingDir},
 		{2048, 10000000, &iso9660.FileSystem{}, nil, testDir},
 		{2048, 10000000, &iso9660.FileSystem{}, nil, ""},
 	}
@@ -368,14 +368,14 @@ func TestIso9660OpenFile(t *testing.T) {
 			}
 			tests := []testStruct{
 				// error opening a directory
-				{"/", os.O_RDONLY, "", fmt.Errorf("Cannot open directory %s as file", "/")},
+				{"/", os.O_RDONLY, "", fmt.Errorf("cannot open directory %s as file", "/")},
 				// open non-existent file for read or read write
-				{"/abcdefg", os.O_RDONLY, "", fmt.Errorf("Target file %s does not exist", "/abcdefg")},
+				{"/abcdefg", os.O_RDONLY, "", fmt.Errorf("target file %s does not exist", "/abcdefg")},
 				// open file for read or read write and check contents
 				{"/FOO/FILENA01", os.O_RDONLY, "filename_1\n", nil},
 				{"/FOO/FILENA75", os.O_RDONLY, "filename_9\n", nil},
 				// rock ridge versions should not exist
-				{"/README.md", os.O_RDONLY, "", fmt.Errorf("Target file %s does not exist", "/README.md")},
+				{"/README.md", os.O_RDONLY, "", fmt.Errorf("target file %s does not exist", "/README.md")},
 			}
 			runTests(t, fs, tests)
 		})
@@ -386,14 +386,14 @@ func TestIso9660OpenFile(t *testing.T) {
 			}
 			tests := []testStruct{
 				// error opening a directory
-				{"/", os.O_RDONLY, "", fmt.Errorf("Cannot open directory %s as file", "/")},
+				{"/", os.O_RDONLY, "", fmt.Errorf("cannot open directory %s as file", "/")},
 				// open non-existent file for read or read write
-				{"/abcdefg", os.O_RDONLY, "", fmt.Errorf("Target file %s does not exist", "/abcdefg")},
+				{"/abcdefg", os.O_RDONLY, "", fmt.Errorf("target file %s does not exist", "/abcdefg")},
 				// open file for read or read write and check contents
 				{"/foo/filename_1", os.O_RDONLY, "filename_1\n", nil},
 				{"/foo/filename_75", os.O_RDONLY, "filename_75\n", nil},
 				// only rock ridge versions should exist
-				{"/README.MD", os.O_RDONLY, "", fmt.Errorf("Target file %s does not exist", "/README.MD")},
+				{"/README.MD", os.O_RDONLY, "", fmt.Errorf("target file %s does not exist", "/README.MD")},
 				{"/README.md", os.O_RDONLY, "README\n", nil},
 			}
 			runTests(t, fs, tests)
@@ -414,9 +414,9 @@ func TestIso9660OpenFile(t *testing.T) {
 			}
 			tests := []testStruct{
 				// error opening a directory
-				{"/", os.O_RDONLY, "", fmt.Errorf("Cannot open directory %s as file", "/")},
+				{"/", os.O_RDONLY, "", fmt.Errorf("cannot open directory %s as file", "/")},
 				// open non-existent file for read or read write
-				{"/abcdefg", os.O_RDONLY, "", fmt.Errorf("Target file %s does not exist", "/abcdefg")},
+				{"/abcdefg", os.O_RDONLY, "", fmt.Errorf("target file %s does not exist", "/abcdefg")},
 				// open file for read or read write and check contents
 				{"/FOO/FILENA01", os.O_RDONLY, "filename_1\n", nil},
 				{"/FOO/FILENA75", os.O_RDONLY, "filename_75\n", nil},

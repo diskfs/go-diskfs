@@ -19,7 +19,7 @@ const (
 
 var (
 	// ErrSuspNoHandler error to show gracefully that we do not have a handler for this signature. Opposed to processing error
-	ErrSuspNoHandler = errors.New("NoHandler")
+	ErrSuspNoHandler = errors.New("noHandler")
 	// ErrSuspFilenameUnsupported error to show that this extension does not support searching by path
 	ErrSuspFilenameUnsupported = errors.New("FilenameUnsupported")
 	// ErrSuspRelocatedDirectoryUnsupported error to indicate that this extension does not support relocated directories
@@ -524,7 +524,7 @@ func parseDirectoryEntryExtensions(b []byte, handlers []suspExtension) ([]direct
 		if parser, ok := suspExtensionParser[signature]; ok {
 			entry, err = parser(suspBytes)
 			if err != nil {
-				return nil, fmt.Errorf("Error parsing %s extension at byte position %d: %v", signature, i, err)
+				return nil, fmt.Errorf("error parsing %s extension at byte position %d: %v", signature, i, err)
 			}
 		} else {
 			// go through each extension we have and see if it can process

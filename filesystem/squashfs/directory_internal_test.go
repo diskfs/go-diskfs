@@ -114,7 +114,7 @@ func TestParseDirectory(t *testing.T) {
 		err error
 	}{
 		{testDirectoryTable, testDirectory, nil},
-		{testDirectoryTable[:10], nil, fmt.Errorf("Could not parse directory header: Header was 10 bytes, less than minimum 12")},
+		{testDirectoryTable[:10], nil, fmt.Errorf("could not parse directory header: Header was 10 bytes, less than minimum 12")},
 	}
 	for i, tt := range tests {
 		dir, err := parseDirectory(tt.b)

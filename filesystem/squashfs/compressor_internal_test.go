@@ -20,7 +20,7 @@ func TestNewCompressor(t *testing.T) {
 		{compressionXz, &CompressorXz{}, nil},
 		{compressionLz4, &CompressorLz4{}, nil},
 		{compressionZstd, nil, fmt.Errorf("zstd compression not yet supported")},
-		{100, nil, fmt.Errorf("Unknown compression type")},
+		{100, nil, fmt.Errorf("unknown compression type")},
 	}
 
 	for i, tt := range tests {

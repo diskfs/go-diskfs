@@ -16,7 +16,7 @@ func TestGetMetadataSize(t *testing.T) {
 	}{
 		{[]byte{0x25, 0xff}, 0x7f25, false, nil},
 		{[]byte{0x25, 0x7f}, 0x7f25, true, nil},
-		{[]byte{0x25}, 0, false, fmt.Errorf("Cannot read size of metadata block with 1 bytes, must have minimum 2")},
+		{[]byte{0x25}, 0, false, fmt.Errorf("cannot read size of metadata block with 1 bytes, must have minimum 2")},
 	}
 
 	for i, tt := range tests {

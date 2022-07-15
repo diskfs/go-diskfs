@@ -88,7 +88,7 @@ func dos71EBPBFromBytes(b []byte) (*dos71EBPB, int, error) {
 	// extract the embedded DOS 3.31 BPB
 	dos331bpb, err := dos331BPBFromBytes(b[0:25])
 	if err != nil {
-		return nil, 0, fmt.Errorf("Could not read embedded DOS 3.31 BPB: %v", err)
+		return nil, 0, fmt.Errorf("could not read embedded DOS 3.31 BPB: %v", err)
 	}
 	bpb.dos331BPB = dos331bpb
 
@@ -96,7 +96,7 @@ func dos71EBPBFromBytes(b []byte) (*dos71EBPB, int, error) {
 	bpb.mirrorFlags = binary.LittleEndian.Uint16(b[29:31])
 	version := binary.LittleEndian.Uint16(b[31:33])
 	if version != uint16(fatVersion0) {
-		return nil, size, fmt.Errorf("Invalid FAT32 version found: %v", version)
+		return nil, size, fmt.Errorf("invalid FAT32 version found: %v", version)
 	}
 	bpb.version = fatVersion0
 	bpb.rootDirectoryCluster = binary.LittleEndian.Uint32(b[33:37])
@@ -121,7 +121,7 @@ func dos71EBPBFromBytes(b []byte) (*dos71EBPB, int, error) {
 		bpb.volumeLabel = re.ReplaceAllString(string(b[60:71]), "")
 		bpb.fileSystemType = re.ReplaceAllString(string(b[71:79]), "")
 	default:
-		return nil, size, fmt.Errorf("Unknown DOS 7.1 EBPB Signature: %v", extendedSignature)
+		return nil, size, fmt.Errorf("unknown DOS 7.1 EBPB Signature: %v", extendedSignature)
 	}
 
 	return &bpb, size, nil
@@ -140,32 +140,32 @@ func (bpb *dos71EBPB) toBytes() ([]byte, error) {
 		// do we have a valid volume label?
 		label := bpb.volumeLabel
 		if len(label) > 11 {
-			return nil, fmt.Errorf("Invalid volume label: too long at %d characters, maximum is %d", len(label), 11)
+			return nil, fmt.Errorf("invalid volume label: too long at %d characters, maximum is %d", len(label), 11)
 		}
 		labelR := []rune(label)
 		if len(label) != len(labelR) {
-			return nil, fmt.Errorf("Invalid volume label: non-ascii characters")
+			return nil, fmt.Errorf("invalid volume label: non-ascii characters")
 		}
 		// pad with 0x20 = " "
 		copy(b[60:71], []byte(fmt.Sprintf("%-11s", label)))
 		// do we have a valid filesystem type?
 		fstype := bpb.fileSystemType
 		if len(fstype) > 8 {
-			return nil, fmt.Errorf("Invalid filesystem type: too long at %d characters, maximum is %d", len(fstype), 8)
+			return nil, fmt.Errorf("invalid filesystem type: too long at %d characters, maximum is %d", len(fstype), 8)
 		}
 		fstypeR := []rune(fstype)
 		if len(fstype) != len(fstypeR) {
-			return nil, fmt.Errorf("Invalid filesystem type: non-ascii characters")
+			return nil, fmt.Errorf("invalid filesystem type: non-ascii characters")
 		}
 		// pad with 0x20 = " "
 		copy(b[71:79], []byte(fmt.Sprintf("%-11s", fstype)))
 	default:
-		return nil, fmt.Errorf("Unknown DOS 7.1 EBPB Signature: %v", bpb.extendedBootSignature)
+		return nil, fmt.Errorf("unknown DOS 7.1 EBPB Signature: %v", bpb.extendedBootSignature)
 	}
 	// fill in the common parts
 	dos331Bytes, err := bpb.dos331BPB.toBytes()
 	if err != nil {
-		return nil, fmt.Errorf("Error converting embedded DOS 3.31 BPB to bytes: %v", err)
+		return nil, fmt.Errorf("error converting embedded DOS 3.31 BPB to bytes: %v", err)
 	}
 	copy(b[0:25], dos331Bytes)
 	binary.LittleEndian.PutUint32(b[25:29], bpb.sectorsPerFat)

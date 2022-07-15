@@ -79,7 +79,7 @@ func get9660DirectoryEntries(f *FileSystem) ([]*directoryEntry, [][][]byte, []by
 	// read correct bytes off of disk
 	input, err := ioutil.ReadFile(ISO9660File)
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("Error reading data from iso9660 test fixture %s: %v", ISO9660File, err)
+		return nil, nil, nil, nil, fmt.Errorf("error reading data from iso9660 test fixture %s: %v", ISO9660File, err)
 	}
 
 	// start of root directory in file.iso - sector 18
@@ -260,7 +260,7 @@ func getRockRidgeDirectoryEntries(f *FileSystem, includeRelocated bool) ([]*dire
 	// read correct bytes off of disk
 	input, err := ioutil.ReadFile(RockRidgeFile)
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("Error reading data from iso9660 test fixture %s: %v", ISO9660File, err)
+		return nil, nil, nil, nil, fmt.Errorf("error reading data from iso9660 test fixture %s: %v", ISO9660File, err)
 	}
 
 	// start of root directory in file.iso - sector 18
@@ -648,7 +648,7 @@ func getValidDirectoryEntriesExtended(fs *FileSystem) ([]*directoryEntry, [][]by
 	// read correct bytes off of disk
 	input, err := ioutil.ReadFile(ISO9660File)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("Error reading data from iso9660 test fixture %s: %v", ISO9660File, err)
+		return nil, nil, nil, fmt.Errorf("error reading data from iso9660 test fixture %s: %v", ISO9660File, err)
 	}
 
 	start := fooSector * blocksize // start of /foo directory in file.iso
@@ -760,7 +760,7 @@ func TestDirectoryEntryParseDirEntries(t *testing.T) {
 				}
 				return len(b), nil
 			}
-			return 0, fmt.Errorf("Unknown area to read %d", offset)
+			return 0, fmt.Errorf("unknown area to read %d", offset)
 		},
 	}
 	fs.file = f
