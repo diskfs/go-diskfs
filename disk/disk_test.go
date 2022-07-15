@@ -35,7 +35,10 @@ func tmpDisk(source string) (*os.File, error) {
 	// either copy the contents of the source file over, or make a file of appropriate size
 	if source == "" {
 		// make it a 10MB file
-		f.Truncate(10 * 1024 * 1024)
+		err = f.Truncate(10 * 1024 * 1024)
+		if err != nil {
+			fmt.Printf("failed to truncate:%v", err)
+		}
 	} else {
 		b, err := os.ReadFile(source)
 		if err != nil {
@@ -233,7 +236,10 @@ func TestWritePartitionContents(t *testing.T) {
 				Writable:          true,
 			}
 			b := make([]byte, partitionSize)
-			rand.Read(b)
+			_, err = rand.Read(b)
+			if err != nil {
+				t.Log(err)
+			}
 			reader := bytes.NewReader(b)
 			written, err := d.WritePartitionContents(tt.partition, reader)
 			switch {
@@ -302,7 +308,10 @@ func TestReadPartitionContents(t *testing.T) {
 
 			// get the actual content
 			b2 := make([]byte, partitionSize*512)
-			f.ReadAt(b2, int64(partitionStart*512))
+			_, err = f.ReadAt(b2, int64(partitionStart*512))
+			if err != nil {
+				t.Log(err)
+			}
 
 			d := &disk.Disk{
 				File:              f,
@@ -373,7 +382,10 @@ func TestReadPartitionContents(t *testing.T) {
 
 			// get the actual content
 			b2 := make([]byte, partitionSize*512)
-			f.ReadAt(b2, int64(partitionStart*512))
+			_, err = f.ReadAt(b2, int64(partitionStart*512))
+			if err != nil {
+				t.Log(err)
+			}
 
 			d := &disk.Disk{
 				File:              f,
