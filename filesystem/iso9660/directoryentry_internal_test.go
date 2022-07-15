@@ -114,7 +114,7 @@ func get9660DirectoryEntries(f *FileSystem) ([]*directoryEntry, [][][]byte, []by
 
 	t1 := time.Now()
 	entries := []*directoryEntry{
-		&directoryEntry{
+		{
 			extAttrSize:              0,
 			location:                 0x12,
 			size:                     0x800,
@@ -130,7 +130,7 @@ func get9660DirectoryEntries(f *FileSystem) ([]*directoryEntry, [][][]byte, []by
 			isSelf:                   true,
 			filesystem:               f,
 		},
-		&directoryEntry{
+		{
 			extAttrSize:              0,
 			location:                 0x12,
 			size:                     0x800,
@@ -146,7 +146,7 @@ func get9660DirectoryEntries(f *FileSystem) ([]*directoryEntry, [][][]byte, []by
 			isParent:                 true,
 			filesystem:               f,
 		},
-		&directoryEntry{
+		{
 			extAttrSize:              0,
 			location:                 0x13,
 			size:                     0x800,
@@ -161,7 +161,7 @@ func get9660DirectoryEntries(f *FileSystem) ([]*directoryEntry, [][][]byte, []by
 			filename:                 "ABC",
 			filesystem:               f,
 		},
-		&directoryEntry{
+		{
 			extAttrSize:              0,
 			location:                 0x14,
 			size:                     0x800,
@@ -176,7 +176,7 @@ func get9660DirectoryEntries(f *FileSystem) ([]*directoryEntry, [][][]byte, []by
 			filename:                 "BAR",
 			filesystem:               f,
 		},
-		&directoryEntry{
+		{
 			extAttrSize:              0,
 			location:                 0x15,
 			size:                     0x800,
@@ -191,7 +191,7 @@ func get9660DirectoryEntries(f *FileSystem) ([]*directoryEntry, [][][]byte, []by
 			filename:                 "DEEP",
 			filesystem:               f,
 		},
-		&directoryEntry{
+		{
 			extAttrSize:              0,
 			location:                 0x21,
 			size:                     0x1000,
@@ -206,7 +206,7 @@ func get9660DirectoryEntries(f *FileSystem) ([]*directoryEntry, [][][]byte, []by
 			filename:                 "FOO",
 			filesystem:               f,
 		},
-		&directoryEntry{
+		{
 			extAttrSize:              0,
 			location:                 0x1473,
 			size:                     0x7,
@@ -295,7 +295,7 @@ func getRockRidgeDirectoryEntries(f *FileSystem, includeRelocated bool) ([]*dire
 
 	t1 := time.Now()
 	entries := []*directoryEntry{
-		&directoryEntry{
+		{
 			extAttrSize:              0,
 			location:                 0x12,
 			size:                     0x800,
@@ -322,7 +322,7 @@ func getRockRidgeDirectoryEntries(f *FileSystem, includeRelocated bool) ([]*dire
 				directoryEntrySystemUseExtensionReference{extensionVersion: 1, id: "RRIP_1991A", descriptor: "THE ROCK RIDGE INTERCHANGE PROTOCOL PROVIDES SUPPORT FOR POSIX FILE SYSTEM SEMANTICS", source: "PLEASE CONTACT DISC PUBLISHER FOR SPECIFICATION SOURCE.  SEE PUBLISHER IDENTIFIER IN PRIMARY VOLUME DESCRIPTOR FOR CONTACT INFORMATION."},
 			},
 		},
-		&directoryEntry{
+		{
 			extAttrSize:              0,
 			location:                 0x12,
 			size:                     0x800,
@@ -347,7 +347,7 @@ func getRockRidgeDirectoryEntries(f *FileSystem, includeRelocated bool) ([]*dire
 				},
 			},
 		},
-		&directoryEntry{
+		{
 			extAttrSize:              0,
 			location:                 0x14,
 			size:                     0x800,
@@ -372,7 +372,7 @@ func getRockRidgeDirectoryEntries(f *FileSystem, includeRelocated bool) ([]*dire
 				rockRidgeName{name: "abc"},
 			},
 		},
-		&directoryEntry{
+		{
 			extAttrSize:              0,
 			location:                 0x15,
 			size:                     0x800,
@@ -397,7 +397,7 @@ func getRockRidgeDirectoryEntries(f *FileSystem, includeRelocated bool) ([]*dire
 				rockRidgeName{name: "bar"},
 			},
 		},
-		&directoryEntry{
+		{
 			extAttrSize:              0x0,
 			location:                 0x16,
 			size:                     0x800,
@@ -421,7 +421,7 @@ func getRockRidgeDirectoryEntries(f *FileSystem, includeRelocated bool) ([]*dire
 				rockRidgeName{name: "deep"},
 			},
 		},
-		&directoryEntry{
+		{
 			extAttrSize:              0,
 			location:                 0x1d,
 			size:                     0x2800,
@@ -446,7 +446,7 @@ func getRockRidgeDirectoryEntries(f *FileSystem, includeRelocated bool) ([]*dire
 				rockRidgeName{name: "foo"},
 			},
 		},
-		&directoryEntry{
+		{
 			extAttrSize:              0,
 			location:                 0x29,
 			size:                     0x0,
@@ -472,7 +472,7 @@ func getRockRidgeDirectoryEntries(f *FileSystem, includeRelocated bool) ([]*dire
 				rockRidgeSymlink{name: "/a/b/c/d/ef/g/h"},
 			},
 		},
-		&directoryEntry{
+		{
 			extAttrSize:              0,
 			location:                 0x1476,
 			size:                     0x7,
@@ -697,7 +697,6 @@ func TestTimeToBytes(t *testing.T) {
 			t.Errorf("timeToBytes(%v) expected output %x, actual %x", tt.rfc, tt.b, b)
 		}
 	}
-
 }
 
 func TestDirectoryEntryStringToASCIIBytes(t *testing.T) {
@@ -719,7 +718,6 @@ func TestDirectoryEntryStringToASCIIBytes(t *testing.T) {
 			t.Errorf("mismatched err expected, actual: %v, %v", tt.err, err)
 		}
 	}
-
 }
 
 func TestDirectoryEntryUCaseValid(t *testing.T) {
@@ -790,7 +788,6 @@ func TestDirectoryEntryParseDirEntries(t *testing.T) {
 			}
 		}
 	}
-
 }
 
 func TestDirectoryEntryToBytes(t *testing.T) {

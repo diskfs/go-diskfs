@@ -171,9 +171,9 @@ func TestGetExtensions(t *testing.T) {
 		{"regular01", false, false, []directoryEntrySystemUseExtension{
 			rockRidgePosixAttributes{mode: 0764, linkCount: 1, uid: uid, gid: gid, length: pxLength},
 			rockRidgeTimestamps{stamps: []rockRidgeTimestamp{
-				rockRidgeTimestamp{timestampType: rockRidgeTimestampModify, time: now},
-				rockRidgeTimestamp{timestampType: rockRidgeTimestampAccess, time: now},
-				rockRidgeTimestamp{timestampType: rockRidgeTimestampAttribute, time: now},
+				{timestampType: rockRidgeTimestampModify, time: now},
+				{timestampType: rockRidgeTimestampAccess, time: now},
+				{timestampType: rockRidgeTimestampAttribute, time: now},
 			},
 			},
 			rockRidgeName{name: "regular01"},
@@ -191,9 +191,9 @@ func TestGetExtensions(t *testing.T) {
 		{"directory02", false, false, []directoryEntrySystemUseExtension{
 			rockRidgePosixAttributes{mode: 0754 | os.ModeDir, linkCount: 2, uid: uid, gid: gid, length: pxLength},
 			rockRidgeTimestamps{stamps: []rockRidgeTimestamp{
-				rockRidgeTimestamp{timestampType: rockRidgeTimestampModify, time: now},
-				rockRidgeTimestamp{timestampType: rockRidgeTimestampAccess, time: now},
-				rockRidgeTimestamp{timestampType: rockRidgeTimestampAttribute, time: now},
+				{timestampType: rockRidgeTimestampModify, time: now},
+				{timestampType: rockRidgeTimestampAccess, time: now},
+				{timestampType: rockRidgeTimestampAttribute, time: now},
 			},
 			},
 			rockRidgeName{name: "directory02"},
@@ -211,9 +211,9 @@ func TestGetExtensions(t *testing.T) {
 		{"symlink03", false, false, []directoryEntrySystemUseExtension{
 			rockRidgePosixAttributes{mode: symMode | os.ModeSymlink, linkCount: 1, uid: uid, gid: gid, length: pxLength},
 			rockRidgeTimestamps{stamps: []rockRidgeTimestamp{
-				rockRidgeTimestamp{timestampType: rockRidgeTimestampModify, time: now},
-				rockRidgeTimestamp{timestampType: rockRidgeTimestampAccess, time: now},
-				rockRidgeTimestamp{timestampType: rockRidgeTimestampAttribute, time: now},
+				{timestampType: rockRidgeTimestampModify, time: now},
+				{timestampType: rockRidgeTimestampAccess, time: now},
+				{timestampType: rockRidgeTimestampAttribute, time: now},
 			},
 			},
 			rockRidgeName{name: "symlink03"},
@@ -228,9 +228,9 @@ func TestGetExtensions(t *testing.T) {
 		{"directoryparent", false, true, []directoryEntrySystemUseExtension{
 			rockRidgePosixAttributes{mode: 0754 | os.ModeDir, linkCount: 2, uid: uid, gid: gid, length: pxLength},
 			rockRidgeTimestamps{stamps: []rockRidgeTimestamp{
-				rockRidgeTimestamp{timestampType: rockRidgeTimestampModify, time: now},
-				rockRidgeTimestamp{timestampType: rockRidgeTimestampAccess, time: now},
-				rockRidgeTimestamp{timestampType: rockRidgeTimestampAttribute, time: now},
+				{timestampType: rockRidgeTimestampModify, time: now},
+				{timestampType: rockRidgeTimestampAccess, time: now},
+				{timestampType: rockRidgeTimestampAttribute, time: now},
 			},
 			},
 		}, func(path string) {
@@ -243,9 +243,9 @@ func TestGetExtensions(t *testing.T) {
 		{"directoryself", true, false, []directoryEntrySystemUseExtension{
 			rockRidgePosixAttributes{mode: 0754 | os.ModeDir, linkCount: 2, uid: uid, gid: gid, length: pxLength},
 			rockRidgeTimestamps{stamps: []rockRidgeTimestamp{
-				rockRidgeTimestamp{timestampType: rockRidgeTimestampModify, time: now},
-				rockRidgeTimestamp{timestampType: rockRidgeTimestampAccess, time: now},
-				rockRidgeTimestamp{timestampType: rockRidgeTimestampAttribute, time: now},
+				{timestampType: rockRidgeTimestampModify, time: now},
+				{timestampType: rockRidgeTimestampAccess, time: now},
+				{timestampType: rockRidgeTimestampAttribute, time: now},
 			},
 			},
 		}, func(path string) {
