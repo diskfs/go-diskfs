@@ -56,7 +56,7 @@ func TestCopyFileData(t *testing.T) {
 		t.Fatal("Error reading 'to' tmpfile", err)
 	}
 
-	if bytes.Compare(b, c) != 0 {
+	if !bytes.Equal(b, c) {
 		t.Fatalf("Mismatched content between 'from' and 'to' files, 'from' then 'to'\n%#x\n%#x", b, c)
 	}
 

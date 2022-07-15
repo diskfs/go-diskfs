@@ -53,7 +53,7 @@ func compareDirectoryEntries(a, b *directoryEntry, compareDates, compareExtensio
 	default:
 		// compare them
 		for i, e := range cExt {
-			if e.Signature() != dExt[i].Signature() || e.Length() != dExt[i].Length() || e.Version() != dExt[i].Version() || bytes.Compare(e.Data(), dExt[i].Data()) != 0 {
+			if e.Signature() != dExt[i].Signature() || e.Length() != dExt[i].Length() || e.Version() != dExt[i].Version() || !bytes.Equal(e.Data(), dExt[i].Data()) {
 				extMatch = false
 				break
 			}
@@ -693,7 +693,7 @@ func TestTimeToBytes(t *testing.T) {
 			t.Fatalf("Error parsing input date: %v", err)
 		}
 		b := timeToBytes(input)
-		if bytes.Compare(b, tt.b) != 0 {
+		if !bytes.Equal(b, tt.b) {
 			t.Errorf("timeToBytes(%v) expected output %x, actual %x", tt.rfc, tt.b, b)
 		}
 	}
@@ -712,7 +712,7 @@ func TestDirectoryEntryStringToASCIIBytes(t *testing.T) {
 	}
 	for _, tt := range tests {
 		output, err := stringToASCIIBytes(tt.input)
-		if bytes.Compare(output, tt.output) != 0 {
+		if !bytes.Equal(output, tt.output) {
 			t.Errorf("stringToASCIIBytes(%s) expected output %v, actual %v", tt.input, tt.output, output)
 		}
 		if (err != nil && tt.err == nil) || (err == nil && tt.err != nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())) {
@@ -811,7 +811,7 @@ func TestDirectoryEntryToBytes(t *testing.T) {
 			t.Errorf("Reported size as %d but had %d bytes", b[0], len(b))
 		default:
 			// compare the actual dir entry
-			if bytes.Compare(directoryEntryBytesNullDate(b[0]), directoryEntryBytesNullDate(validBytes[i][0])) != 0 {
+			if !bytes.Equal(directoryEntryBytesNullDate(b[0]), directoryEntryBytesNullDate(validBytes[i][0])) {
 				t.Errorf("%d: Mismatched entry bytes %s, actual vs expected", i, de.filename)
 				t.Log(b[0])
 				t.Log(validBytes[i])
@@ -821,7 +821,7 @@ func TestDirectoryEntryToBytes(t *testing.T) {
 				t.Errorf("%d: Mismatched number of continuation entries actual %d expected %d", i, len(b)-1, len(validBytes[i])-1)
 			}
 			for j, e := range validBytes[i][1:] {
-				if bytes.Compare(e, b[j+1]) != 0 {
+				if !bytes.Equal(e, b[j+1]) {
 					t.Errorf("%d: mismatched continuation entry bytes, actual then expected", i)
 					t.Log(b[j+1])
 					t.Log(e)

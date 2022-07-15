@@ -103,7 +103,7 @@ func (v *volumeDescriptors) equal(a *volumeDescriptors) bool {
 		return false
 	}
 	// just convert everything to bytes and compare
-	return bytes.Compare(v.toBytes(), a.toBytes()) == 0
+	return bytes.Equal(v.toBytes(), a.toBytes())
 }
 
 func (v *volumeDescriptors) toBytes() []byte {
@@ -119,7 +119,7 @@ func (v *primaryVolumeDescriptor) Type() volumeDescriptorType {
 	return volumeDescriptorPrimary
 }
 func (v *primaryVolumeDescriptor) equal(a volumeDescriptor) bool {
-	return bytes.Compare(v.toBytes(), a.toBytes()) == 0
+	return bytes.Equal(v.toBytes(), a.toBytes())
 }
 func (v *primaryVolumeDescriptor) toBytes() []byte {
 	b := volumeDescriptorFirstBytes(volumeDescriptorPrimary)
@@ -234,13 +234,13 @@ func parsePrimaryVolumeDescriptor(b []byte) (*primaryVolumeDescriptor, error) {
 	var expiration, effective time.Time
 	expirationBytes := b[847 : 847+17]
 	effectiveBytes := b[864 : 864+17]
-	if bytes.Compare(expirationBytes, nullBytes) != 0 {
+	if !bytes.Equal(expirationBytes, nullBytes) {
 		expiration, err = decBytesToTime(expirationBytes)
 		if err != nil {
 			return nil, fmt.Errorf("unable to convert expiration date/time from bytes: %v", err)
 		}
 	}
-	if bytes.Compare(effectiveBytes, nullBytes) != 0 {
+	if !bytes.Equal(effectiveBytes, nullBytes) {
 		effective, err = decBytesToTime(effectiveBytes)
 		if err != nil {
 			return nil, fmt.Errorf("unable to convert effective date/time from bytes: %v", err)
@@ -284,7 +284,7 @@ func (v *terminatorVolumeDescriptor) Type() volumeDescriptorType {
 	return volumeDescriptorTerminator
 }
 func (v *terminatorVolumeDescriptor) equal(a volumeDescriptor) bool {
-	return bytes.Compare(v.toBytes(), a.toBytes()) == 0
+	return bytes.Equal(v.toBytes(), a.toBytes())
 }
 func (v *terminatorVolumeDescriptor) toBytes() []byte {
 	b := volumeDescriptorFirstBytes(volumeDescriptorTerminator)
@@ -296,7 +296,7 @@ func (v *bootVolumeDescriptor) Type() volumeDescriptorType {
 	return volumeDescriptorBoot
 }
 func (v *bootVolumeDescriptor) equal(a volumeDescriptor) bool {
-	return bytes.Compare(v.toBytes(), a.toBytes()) == 0
+	return bytes.Equal(v.toBytes(), a.toBytes())
 }
 func (v *bootVolumeDescriptor) toBytes() []byte {
 	b := volumeDescriptorFirstBytes(volumeDescriptorBoot)
@@ -335,13 +335,13 @@ func parseSupplementaryVolumeDescriptor(b []byte) (*supplementaryVolumeDescripto
 	var expiration, effective time.Time
 	expirationBytes := b[847 : 847+17]
 	effectiveBytes := b[864 : 864+17]
-	if bytes.Compare(expirationBytes, nullBytes) != 0 {
+	if !bytes.Equal(expirationBytes, nullBytes) {
 		expiration, err = decBytesToTime(expirationBytes)
 		if err != nil {
 			return nil, fmt.Errorf("unable to convert expiration date/time from bytes: %v", err)
 		}
 	}
-	if bytes.Compare(effectiveBytes, nullBytes) != 0 {
+	if !bytes.Equal(effectiveBytes, nullBytes) {
 		effective, err = decBytesToTime(effectiveBytes)
 		if err != nil {
 			return nil, fmt.Errorf("unable to convert effective date/time from bytes: %v", err)
@@ -384,7 +384,7 @@ func (v *supplementaryVolumeDescriptor) Type() volumeDescriptorType {
 	return volumeDescriptorSupplementary
 }
 func (v *supplementaryVolumeDescriptor) equal(a volumeDescriptor) bool {
-	return bytes.Compare(v.toBytes(), a.toBytes()) == 0
+	return bytes.Equal(v.toBytes(), a.toBytes())
 }
 func (v *supplementaryVolumeDescriptor) toBytes() []byte {
 	b := volumeDescriptorFirstBytes(volumeDescriptorSupplementary)
@@ -435,7 +435,7 @@ func (v *partitionVolumeDescriptor) Type() volumeDescriptorType {
 	return volumeDescriptorPartition
 }
 func (v *partitionVolumeDescriptor) equal(a volumeDescriptor) bool {
-	return bytes.Compare(v.toBytes(), a.toBytes()) == 0
+	return bytes.Equal(v.toBytes(), a.toBytes())
 }
 func (v *partitionVolumeDescriptor) toBytes() []byte {
 	b := volumeDescriptorFirstBytes(volumeDescriptorPartition)

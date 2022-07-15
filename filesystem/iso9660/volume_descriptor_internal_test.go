@@ -57,7 +57,7 @@ func comparePrimaryVolumeDescriptorsBytesIgnoreDates(a []byte, b []byte) bool {
 	bNull := primaryVolumeDescriptorsBytesNullDate(b)
 
 	// we ignore the reserved areas that are unused
-	return bytes.Compare(aNull[:883], bNull[:883]) == 0
+	return bytes.Equal(aNull[:883], bNull[:883])
 }
 func primaryVolumeDescriptorsBytesNullDate(a []byte) []byte {
 	// null the volume dates
@@ -238,7 +238,7 @@ func TestTimeToDecBytes(t *testing.T) {
 			t.Fatalf("Error parsing input date: %v", err)
 		}
 		b := timeToDecBytes(input)
-		if bytes.Compare(b, tt.b) != 0 {
+		if !bytes.Equal(b, tt.b) {
 			t.Errorf("timeToBytes(%v) expected then actual \n% x\n% x", tt.rfc, tt.b, b)
 		}
 	}

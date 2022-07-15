@@ -322,11 +322,11 @@ func TestReadPartitionContents(t *testing.T) {
 				t.Logf("%v", tt.err)
 			case tt.err != nil && read > 0:
 				t.Errorf("Unexpectedly read %d bytes, expected 0", read)
-			case tt.err == nil && bytes.Compare(b, b2) != 0:
+			case tt.err == nil && !bytes.Equal(b, b2):
 				t.Errorf("mismatched bytes, actual then expected")
 				t.Logf("len(actual) %d len(expected) %d\n", len(b), len(b2))
-				//t.Log(b)
-				//t.Log(b2)
+				// t.Log(b)
+				// t.Log(b2)
 			}
 		}
 	})

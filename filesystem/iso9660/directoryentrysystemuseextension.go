@@ -64,7 +64,7 @@ type directoryEntrySystemUseExtensionRaw struct {
 
 func (d directoryEntrySystemUseExtensionRaw) Equal(o directoryEntrySystemUseExtension) bool {
 	t, ok := o.(directoryEntrySystemUseExtensionRaw)
-	return ok && t.signature == d.signature && t.length == d.length && t.version == d.version && bytes.Compare(d.data, t.data) == 0
+	return ok && t.signature == d.signature && t.length == d.length && t.version == d.version && !bytes.Equal(d.data, t.data)
 }
 func (d directoryEntrySystemUseExtensionRaw) Signature() string {
 	return d.signature

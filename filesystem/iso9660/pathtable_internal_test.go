@@ -106,7 +106,7 @@ func TestPathTableToLBytes(t *testing.T) {
 	b2 := validTable.toLBytes()
 	copy(b, b2)
 
-	if bytes.Compare(b, validBytes) != 0 {
+	if !bytes.Equal(b, validBytes) {
 		t.Errorf("Mismatched path table bytes. Actual then expected")
 		t.Logf("%#v", b)
 		t.Logf("%#v", validBytes)
@@ -119,7 +119,7 @@ func TestPathTableToMBytes(t *testing.T) {
 	b2 := validTable.toMBytes()
 	copy(b, b2)
 
-	if bytes.Compare(b, validBytes) != 0 {
+	if !bytes.Equal(b, validBytes) {
 		t.Errorf("Mismatched path table bytes. Actual then expected")
 		t.Logf("%#v", b)
 		t.Logf("%#v", validBytes)

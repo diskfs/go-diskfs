@@ -38,7 +38,7 @@ func TestElToritoGenerateCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
-	if bytes.Compare(b, e) != 0 {
+	if !bytes.Equal(b, e) {
 		t.Errorf("Mismatched bytes, actual then expected\n% x\n% x\n", b, e)
 	}
 }
@@ -60,7 +60,7 @@ func TestElToritoValidationEntry(t *testing.T) {
 	// add the checksum - we calculated this manually
 	e[0x1c] = 0x3c
 	e[0x1d] = 0xd5
-	if bytes.Compare(b, e) != 0 {
+	if !bytes.Equal(b, e) {
 		t.Errorf("Mismatched bytes, actual then expected\n% x\n% x\n", b, e)
 	}
 }
@@ -89,7 +89,7 @@ func TestElToritoHeaderBytes(t *testing.T) {
 	}
 	for _, tt := range tests {
 		b := e.headerBytes(tt.last, tt.entries)
-		if bytes.Compare(b, tt.expected) != 0 {
+		if !bytes.Equal(b, tt.expected) {
 			t.Errorf("last (%v), entries (%d): mismatched result, actual then expected\n% x\n% x\n", tt.last, tt.entries, b, tt.expected)
 		}
 	}
@@ -112,7 +112,7 @@ func TestElToritoEntryBytes(t *testing.T) {
 	b := e.entryBytes()
 	expected := make([]byte, 0x20)
 	copy(expected, []byte{0x88, byte(HardDiskEmulation), 0x17, 0x0, byte(mbr.Linux), 0x0, 0x5, 0x0, 0xc1, 0x00})
-	if bytes.Compare(b, expected) != 0 {
+	if !bytes.Equal(b, expected) {
 		t.Errorf("Mismatched bytes, actual then expected\n% x\n% x\n", b, expected)
 	}
 }
