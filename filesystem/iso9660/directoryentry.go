@@ -309,7 +309,7 @@ func parseDirEntry(b []byte, f *FileSystem) (*directoryEntry, error) {
 					return nil, fmt.Errorf("error reading continuation entry data at %d: %v", location, err)
 				}
 				if read != size {
-					return nil, fmt.Errorf("Read continuation entry data %d bytes instead of expected %d", read, size)
+					return nil, fmt.Errorf("read continuation entry data %d bytes instead of expected %d", read, size)
 				}
 				// parse and append
 				entries, err := parseDirectoryEntryExtensions(continuationBytes, f.suspExtensions)
@@ -382,7 +382,7 @@ func (de *directoryEntry) getLocation(p string) (uint32, uint32, error) {
 			return 0, 0, fmt.Errorf("could not read directory: %v", err)
 		}
 		if n != len(dirb) {
-			return 0, 0, fmt.Errorf("Read %d bytes instead of expected %d", n, len(dirb))
+			return 0, 0, fmt.Errorf("read %d bytes instead of expected %d", n, len(dirb))
 		}
 		// parse those entries
 		dirEntries, err := parseDirEntries(dirb, de.filesystem)
@@ -422,7 +422,7 @@ func (de *directoryEntry) getLocation(p string) (uint32, uint32, error) {
 									return 0, 0, fmt.Errorf("could not read bytes of relocated directory %s from block %d: %v", checkFilename, location2, err2)
 								}
 								if n != len(dirb) {
-									return 0, 0, fmt.Errorf("Read %d bytes instead of expected %d for relocated directory %s from block %d: %v", n, len(dirb), checkFilename, location2, err)
+									return 0, 0, fmt.Errorf("read %d bytes instead of expected %d for relocated directory %s from block %d: %v", n, len(dirb), checkFilename, location2, err)
 								}
 								// get the size of the actual directory entry
 								size2 := dirb[0]

@@ -128,7 +128,7 @@ func Read(f util.File, logicalBlockSize, physicalBlockSize int) (*Table, error) 
 		return nil, fmt.Errorf("error reading MBR from file: %v", err)
 	}
 	if read != len(b) {
-		return nil, fmt.Errorf("Read only %d bytes of MBR from file instead of expected %d", read, len(b))
+		return nil, fmt.Errorf("read only %d bytes of MBR from file instead of expected %d", read, len(b))
 	}
 	return tableFromBytes(b, logicalBlockSize, physicalBlockSize)
 }

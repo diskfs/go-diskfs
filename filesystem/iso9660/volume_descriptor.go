@@ -178,12 +178,12 @@ func volumeDescriptorFromBytes(b []byte) (volumeDescriptor, error) {
 	copy(tmpb[3:8], b[1:6])
 	signature := binary.BigEndian.Uint64(tmpb)
 	if signature != isoIdentifier {
-		return nil, fmt.Errorf("Mismatched ISO identifier in Volume Descriptor. Found %x expected %x", signature, isoIdentifier)
+		return nil, fmt.Errorf("mismatched ISO identifier in Volume Descriptor. Found %x expected %x", signature, isoIdentifier)
 	}
 	// validate the version
 	version := b[6]
 	if version != isoVersion {
-		return nil, fmt.Errorf("Mismatched ISO version in Volume Descriptor. Found %x expected %x", version, isoVersion)
+		return nil, fmt.Errorf("mismatched ISO version in Volume Descriptor. Found %x expected %x", version, isoVersion)
 	}
 	// get the type and data - later we will be more intelligent about this and read actual primary volume info
 	vdType := volumeDescriptorType(b[0])
@@ -310,7 +310,7 @@ func (v *bootVolumeDescriptor) toBytes() []byte {
 func parseBootVolumeDescriptor(b []byte) (*bootVolumeDescriptor, error) {
 	systemIdentifier := string(b[0x7 : 0x7+len(bootSystemIdentifier)])
 	if systemIdentifier != bootSystemIdentifier {
-		return nil, fmt.Errorf("Incorrect specification, actual '%s' expected '%s'", systemIdentifier, bootSystemIdentifier)
+		return nil, fmt.Errorf("incorrect specification, actual '%s' expected '%s'", systemIdentifier, bootSystemIdentifier)
 	}
 	location := binary.LittleEndian.Uint32(b[0x47:0x4b])
 	return &bootVolumeDescriptor{location: location}, nil

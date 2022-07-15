@@ -33,7 +33,7 @@ func (f *fragmentEntry) toBytes() []byte {
 func parseFragmentEntry(b []byte) (*fragmentEntry, error) {
 	target := 16
 	if len(b) < target {
-		return nil, fmt.Errorf("Mismatched fragment entry size, received %d bytes, less than minimum %d", len(b), target)
+		return nil, fmt.Errorf("mismatched fragment entry size, received %d bytes, less than minimum %d", len(b), target)
 	}
 	start := binary.LittleEndian.Uint64(b[0:8])
 	size := binary.LittleEndian.Uint32(b[8:12])

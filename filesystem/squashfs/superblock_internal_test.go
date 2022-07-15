@@ -23,8 +23,8 @@ var superblockFlagsTests = []struct {
 	err   error
 }{
 	// we built these test numbers manually...
-	{[]byte{1}, nil, fmt.Errorf("Received 1")},
-	{[]byte{1, 2, 3}, nil, fmt.Errorf("Received 3")},
+	{[]byte{1}, nil, fmt.Errorf("received 1")},
+	{[]byte{1, 2, 3}, nil, fmt.Errorf("received 3")},
 	// all of them flagged
 	{[]byte{0xfb, 0xf}, &superblockFlags{true, true, true, true, true, true, true, true, true, true, true}, nil},
 	// none of them flagged

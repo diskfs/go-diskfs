@@ -132,7 +132,7 @@ func Read(file util.File, size int64, start int64, blocksize int64) (*FileSystem
 		return nil, fmt.Errorf("unable to read bytes for superblock: %v", err)
 	}
 	if int64(read) != superblockSize {
-		return nil, fmt.Errorf("Read %d bytes instead of expected %d for superblock", read, superblockSize)
+		return nil, fmt.Errorf("read %d bytes instead of expected %d for superblock", read, superblockSize)
 	}
 
 	// parse superblock
@@ -538,7 +538,7 @@ func (fs *FileSystem) readFragment(index, offset uint32, fragmentSize int64) ([]
 		return nil, fmt.Errorf("unable to read fragment block %d: %v", index, err)
 	}
 	if read != len(b) {
-		return nil, fmt.Errorf("Read %d instead of expected %d bytes for fragment block %d", read, len(b), index)
+		return nil, fmt.Errorf("read %d instead of expected %d bytes for fragment block %d", read, len(b), index)
 	}
 
 	data := b
@@ -633,7 +633,7 @@ func readXattrsTable(s *superblock, file util.File, c Compressor) (*xAttrTable, 
 		return nil, fmt.Errorf("unable to read bytes for xattrs metadata ID header: %v", err)
 	}
 	if read != len(b) {
-		return nil, fmt.Errorf("Read %d bytes instead of expected %d for xattrs metadata ID header", read, len(b))
+		return nil, fmt.Errorf("read %d bytes instead of expected %d for xattrs metadata ID header", read, len(b))
 	}
 	// find out how many xattr IDs we have and where the metadata starts. The table always starts
 	//   with this information
@@ -656,7 +656,7 @@ func readXattrsTable(s *superblock, file util.File, c Compressor) (*xAttrTable, 
 		return nil, fmt.Errorf("unable to read bytes for xattrs metadata ID table: %v", err)
 	}
 	if read != len(b) {
-		return nil, fmt.Errorf("Read %d bytes instead of expected %d for xattrs metadata ID table", read, len(b))
+		return nil, fmt.Errorf("read %d bytes instead of expected %d for xattrs metadata ID table", read, len(b))
 	}
 
 	var (
@@ -747,7 +747,7 @@ func readUidsGids(s *superblock, file util.File, c Compressor) ([]uint32, error)
 		return nil, fmt.Errorf("unable to read index bytes for uidgid ID table: %v", err)
 	}
 	if read != len(b) {
-		return nil, fmt.Errorf("Read %d bytes instead of expected %d for uidgid ID table", read, len(b))
+		return nil, fmt.Errorf("read %d bytes instead of expected %d for uidgid ID table", read, len(b))
 	}
 
 	var (

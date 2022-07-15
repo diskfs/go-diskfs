@@ -167,7 +167,7 @@ func TestIso9660Create(t *testing.T) {
 		{513, 6000, nil, fmt.Errorf("blocksize for ISO9660 must be"), ""},
 		{2048, 2048*iso9660.MaxBlocks + 1, nil, fmt.Errorf("requested size is larger than maximum allowed ISO9660 size"), ""},
 		{2048, 32*iso9660.KB + 3*2048 - 1, nil, fmt.Errorf("requested size is smaller than minimum allowed ISO9660 size"), ""},
-		{2048, 10000000, nil, fmt.Errorf("Provided workspace is not a directory"), testFile.Name()},
+		{2048, 10000000, nil, fmt.Errorf("provided workspace is not a directory"), testFile.Name()},
 		{2048, 10000000, nil, fmt.Errorf("could not stat working directory"), missingDir},
 		{2048, 10000000, &iso9660.FileSystem{}, nil, testDir},
 		{2048, 10000000, &iso9660.FileSystem{}, nil, ""},

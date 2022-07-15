@@ -110,7 +110,7 @@ func (i *inodeHeader) toBytes() []byte {
 func parseInodeHeader(b []byte) (*inodeHeader, error) {
 	target := inodeHeaderSize
 	if len(b) < target {
-		return nil, fmt.Errorf("Received only %d bytes instead of minimum %d", len(b), target)
+		return nil, fmt.Errorf("received only %d bytes instead of minimum %d", len(b), target)
 	}
 	i := &inodeHeader{
 		inodeType: inodeType(binary.LittleEndian.Uint16(b[0:2])),
@@ -239,7 +239,7 @@ func (i basicDirectory) equal(o inodeBody) bool {
 func parseBasicDirectory(b []byte) (*basicDirectory, error) {
 	target := 16
 	if len(b) < target {
-		return nil, fmt.Errorf("Received %d bytes, fewer than minimum %d", len(b), target)
+		return nil, fmt.Errorf("received %d bytes, fewer than minimum %d", len(b), target)
 	}
 	d := &basicDirectory{
 		startBlock:       binary.LittleEndian.Uint32(b[0:4]),
@@ -312,7 +312,7 @@ func parseExtendedDirectory(b []byte) (*extendedDirectory, int, error) {
 		extra  int
 	)
 	if len(b) < target {
-		return nil, 0, fmt.Errorf("Received %d bytes, fewer than minimum %d", len(b), target)
+		return nil, 0, fmt.Errorf("received %d bytes, fewer than minimum %d", len(b), target)
 	}
 	d := &extendedDirectory{
 		links:            binary.LittleEndian.Uint32(b[0:4]),
@@ -430,7 +430,7 @@ func parseBasicFile(b []byte, blocksize int) (*basicFile, int, error) {
 		extra  int
 	)
 	if len(b) < target {
-		return nil, 0, fmt.Errorf("Received %d bytes, fewer than minimum %d", len(b), target)
+		return nil, 0, fmt.Errorf("received %d bytes, fewer than minimum %d", len(b), target)
 	}
 	fileSize := binary.LittleEndian.Uint32(b[12:16])
 	d := &basicFile{
@@ -518,7 +518,7 @@ func parseExtendedFile(b []byte, blocksize int) (*extendedFile, int, error) {
 		extra  int
 	)
 	if len(b) < target {
-		return nil, 0, fmt.Errorf("Received %d bytes instead of expected minimal %d", len(b), target)
+		return nil, 0, fmt.Errorf("received %d bytes instead of expected minimal %d", len(b), target)
 	}
 	fileSize := binary.LittleEndian.Uint64(b[8:16])
 	d := &extendedFile{
@@ -581,7 +581,7 @@ func parseBasicSymlink(b []byte) (*basicSymlink, int, error) {
 		extra  int
 	)
 	if len(b) < target {
-		return nil, 0, fmt.Errorf("Received %d bytes instead of expected minimal %d", len(b), target)
+		return nil, 0, fmt.Errorf("received %d bytes instead of expected minimal %d", len(b), target)
 	}
 	s := &basicSymlink{
 		links: binary.LittleEndian.Uint32(b[0:4]),
@@ -635,7 +635,7 @@ func parseExtendedSymlink(b []byte) (*extendedSymlink, int, error) {
 		extra  int
 	)
 	if len(b) < target {
-		return nil, 0, fmt.Errorf("Received %d bytes instead of expected minimal %d", len(b), target)
+		return nil, 0, fmt.Errorf("received %d bytes instead of expected minimal %d", len(b), target)
 	}
 	s := &extendedSymlink{
 		links: binary.LittleEndian.Uint32(b[0:4]),
@@ -685,7 +685,7 @@ func (i basicDevice) equal(o inodeBody) bool {
 func parseBasicDevice(b []byte) (*basicDevice, error) {
 	target := 8
 	if len(b) < target {
-		return nil, fmt.Errorf("Received %d bytes instead of expected %d", len(b), target)
+		return nil, fmt.Errorf("received %d bytes instead of expected %d", len(b), target)
 	}
 	devNum := binary.LittleEndian.Uint32(b[4:8])
 	s := &basicDevice{
@@ -745,7 +745,7 @@ func (i extendedDevice) equal(o inodeBody) bool {
 func parseExtendedDevice(b []byte) (*extendedDevice, error) {
 	target := 12
 	if len(b) < target {
-		return nil, fmt.Errorf("Received %d bytes instead of expected minimal %d", len(b), target)
+		return nil, fmt.Errorf("received %d bytes instead of expected minimal %d", len(b), target)
 	}
 	basic, err := parseBasicDevice(b[:8])
 	if err != nil {
@@ -798,7 +798,7 @@ func (i basicIPC) equal(o inodeBody) bool {
 func parseBasicIPC(b []byte) (*basicIPC, error) {
 	target := 4
 	if len(b) < target {
-		return nil, fmt.Errorf("Received %d bytes instead of expected %d", len(b), target)
+		return nil, fmt.Errorf("received %d bytes instead of expected %d", len(b), target)
 	}
 	s := &basicIPC{
 		links: binary.LittleEndian.Uint32(b[0:4]),
@@ -846,7 +846,7 @@ func (i extendedIPC) equal(o inodeBody) bool {
 func parseExtendedIPC(b []byte) (*extendedIPC, error) {
 	target := 8
 	if len(b) < target {
-		return nil, fmt.Errorf("Received %d bytes instead of expected %d", len(b), target)
+		return nil, fmt.Errorf("received %d bytes instead of expected %d", len(b), target)
 	}
 	s := &extendedIPC{
 		links:      binary.LittleEndian.Uint32(b[0:4]),

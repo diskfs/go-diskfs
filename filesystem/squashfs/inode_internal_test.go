@@ -77,7 +77,7 @@ func TestInodeHeader(t *testing.T) {
 		err    error
 	}{
 		{goodHeader, testGetFirstInodeHeader(), nil},
-		{goodHeader[:10], nil, fmt.Errorf("Received only %d bytes instead of minimum %d", 10, inodeHeaderSize)},
+		{goodHeader[:10], nil, fmt.Errorf("received only %d bytes instead of minimum %d", 10, inodeHeaderSize)},
 	}
 	t.Run("parse", func(t *testing.T) {
 		for i, tt := range tests {
@@ -151,7 +151,7 @@ func TestBasicDirectory(t *testing.T) {
 		err error
 	}{
 		{inodeB[:], dir, nil},
-		{inodeB[:10], nil, fmt.Errorf("Received %d bytes, fewer than minimum %d", 10, 16)},
+		{inodeB[:10], nil, fmt.Errorf("received %d bytes, fewer than minimum %d", 10, 16)},
 	}
 
 	t.Run("toBytes", func(t *testing.T) {
@@ -212,7 +212,7 @@ func TestBasicFile(t *testing.T) {
 		err  error
 	}{
 		{inodeB[:], f, nil},
-		{inodeB[:10], nil, fmt.Errorf("Received %d bytes, fewer than minimum %d", 10, 16)},
+		{inodeB[:10], nil, fmt.Errorf("received %d bytes, fewer than minimum %d", 10, 16)},
 	}
 
 	t.Run("toBytes", func(t *testing.T) {
@@ -286,7 +286,7 @@ func TestExtendedFile(t *testing.T) {
 		err  error
 	}{
 		{inodeB[:], f, nil},
-		{inodeB[:10], nil, fmt.Errorf("Received %d bytes instead of expected minimal %d", 10, 40)},
+		{inodeB[:10], nil, fmt.Errorf("received %d bytes instead of expected minimal %d", 10, 40)},
 	}
 
 	t.Run("toBytes", func(t *testing.T) {
@@ -340,7 +340,7 @@ func TestBasicSymlink(t *testing.T) {
 		err error
 	}{
 		{inodeB[:], s, nil},
-		{inodeB[:7], nil, fmt.Errorf("Received %d bytes instead of expected minimal %d", 7, 8)},
+		{inodeB[:7], nil, fmt.Errorf("received %d bytes instead of expected minimal %d", 7, 8)},
 	}
 
 	t.Run("toBytes", func(t *testing.T) {
@@ -437,7 +437,7 @@ func TestInode(t *testing.T) {
 		err error
 	}{
 		{inodeB[:], in, nil},
-		{inodeB[:10], nil, fmt.Errorf("Received %d bytes, insufficient for minimum %d for header and inode", 10, 17)},
+		{inodeB[:10], nil, fmt.Errorf("received %d bytes, insufficient for minimum %d for header and inode", 10, 17)},
 	}
 
 	t.Run("toBytes", func(t *testing.T) {

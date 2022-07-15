@@ -511,7 +511,7 @@ func Read(f util.File, logicalBlockSize, physicalBlockSize int) (*Table, error) 
 		return nil, fmt.Errorf("error reading GPT from file: %w", err)
 	}
 	if read != len(b) {
-		return nil, fmt.Errorf("Read only %d bytes of GPT from file instead of expected %d", read, len(b))
+		return nil, fmt.Errorf("read only %d bytes of GPT from file instead of expected %d", read, len(b))
 	}
 	return tableFromBytes(b, logicalBlockSize, physicalBlockSize)
 }

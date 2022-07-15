@@ -400,7 +400,7 @@ func Read(file util.File, size int64, start int64, blocksize int64) (*FileSystem
 		return nil, fmt.Errorf("unable to read bytes for FSInformationSector: %v", err)
 	}
 	if read != 512 {
-		return nil, fmt.Errorf("Read %d bytes instead of expected %d for FS Information Sector", read, 512)
+		return nil, fmt.Errorf("read %d bytes instead of expected %d for FS Information Sector", read, 512)
 	}
 	fsis, err := fsInformationSectorFromBytes(fsisBytes)
 	if err != nil {

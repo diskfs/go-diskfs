@@ -140,7 +140,7 @@ func (s *superblockFlags) bytes() []byte {
 func parseFlags(b []byte) (*superblockFlags, error) {
 	targetLength := 2
 	if len(b) != targetLength {
-		return nil, fmt.Errorf("Received %d bytes instead of expected %d", len(b), targetLength)
+		return nil, fmt.Errorf("received %d bytes instead of expected %d", len(b), targetLength)
 	}
 	flags := binary.LittleEndian.Uint16(b)
 	s := &superblockFlags{

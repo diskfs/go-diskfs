@@ -811,7 +811,6 @@ func createPathTable(fi []*finalizeFileInfo) *pathTable {
 	return &pathTable{
 		records: entries,
 	}
-
 }
 
 func walkTree(workspace string) ([]*finalizeFileInfo, map[string]*finalizeFileInfo, error) {

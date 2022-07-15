@@ -388,15 +388,15 @@ func (d rockRidgePosixAttributes) Merge([]directoryEntrySystemUseExtension) dire
 func (r rockRidgeExtension) parsePosixAttributes(b []byte) (directoryEntrySystemUseExtension, error) {
 	targetSize := r.pxLength
 	if len(b) != targetSize {
-		return nil, fmt.Errorf("Rock Ridge PX extension must be %d bytes, but received %d", targetSize, len(b))
+		return nil, fmt.Errorf("rock Ridge PX extension must be %d bytes, but received %d", targetSize, len(b))
 	}
 	size := b[2]
 	if size != uint8(targetSize) {
-		return nil, fmt.Errorf("Rock Ridge PX extension must be %d bytes, but byte 2 indicated %d", targetSize, size)
+		return nil, fmt.Errorf("rock Ridge PX extension must be %d bytes, but byte 2 indicated %d", targetSize, size)
 	}
 	version := b[3]
 	if version != 1 {
-		return nil, fmt.Errorf("Rock Ridge PX extension must be version 1, was %d", version)
+		return nil, fmt.Errorf("rock Ridge PX extension must be version 1, was %d", version)
 	}
 	// file mode
 	modes := binary.LittleEndian.Uint32(b[4:8])
@@ -488,15 +488,15 @@ func (d rockRidgePosixDeviceNumber) Merge([]directoryEntrySystemUseExtension) di
 func (r rockRidgeExtension) parsePosixDeviceNumber(b []byte) (directoryEntrySystemUseExtension, error) {
 	targetSize := 20
 	if len(b) != targetSize {
-		return nil, fmt.Errorf("Rock Ridge PN extension must be %d bytes, but received %d", targetSize, len(b))
+		return nil, fmt.Errorf("rock Ridge PN extension must be %d bytes, but received %d", targetSize, len(b))
 	}
 	size := b[2]
 	if size != uint8(targetSize) {
-		return nil, fmt.Errorf("Rock Ridge PN extension must be %d bytes, but byte 2 indicated %d", targetSize, size)
+		return nil, fmt.Errorf("rock Ridge PN extension must be %d bytes, but byte 2 indicated %d", targetSize, size)
 	}
 	version := b[3]
 	if version != 1 {
-		return nil, fmt.Errorf("Rock Ridge PN extension must be version 1, was %d", version)
+		return nil, fmt.Errorf("rock Ridge PN extension must be version 1, was %d", version)
 	}
 	return rockRidgePosixDeviceNumber{
 		high: binary.LittleEndian.Uint32(b[4:8]),
@@ -612,11 +612,11 @@ func (d rockRidgeSymlink) Merge(links []directoryEntrySystemUseExtension) direct
 func (r rockRidgeExtension) parseSymlink(b []byte) (directoryEntrySystemUseExtension, error) {
 	size := int(b[2])
 	if size != len(b) {
-		return nil, fmt.Errorf("Rock Ridge SL extension received %d bytes, but byte 2 indicated %d", len(b), size)
+		return nil, fmt.Errorf("rock Ridge SL extension received %d bytes, but byte 2 indicated %d", len(b), size)
 	}
 	version := b[3]
 	if version != 1 {
-		return nil, fmt.Errorf("Rock Ridge SL extension must be version 1, was %d", version)
+		return nil, fmt.Errorf("rock Ridge SL extension must be version 1, was %d", version)
 	}
 	continued := b[4] == 1
 	name := ""
@@ -729,11 +729,11 @@ func (d rockRidgeName) Merge(names []directoryEntrySystemUseExtension) directory
 func (r rockRidgeExtension) parseName(b []byte) (directoryEntrySystemUseExtension, error) {
 	size := int(b[2])
 	if size != len(b) {
-		return nil, fmt.Errorf("Rock Ridge NM extension received %d bytes, but byte 2 indicated %d", len(b), size)
+		return nil, fmt.Errorf("rock Ridge NM extension received %d bytes, but byte 2 indicated %d", len(b), size)
 	}
 	version := b[3]
 	if version != 1 {
-		return nil, fmt.Errorf("Rock Ridge NM extension must be version 1, was %d", version)
+		return nil, fmt.Errorf("rock Ridge NM extension must be version 1, was %d", version)
 	}
 	continued := b[4]&1 != 0
 	current := b[4]&2 != 0
@@ -878,11 +878,11 @@ func (d rockRidgeTimestamps) Merge([]directoryEntrySystemUseExtension) directory
 func (r rockRidgeExtension) parseTimestamps(b []byte) (directoryEntrySystemUseExtension, error) {
 	size := b[2]
 	if int(size) != len(b) {
-		return nil, fmt.Errorf("Rock Ridge TF extension has %d bytes, but byte 2 indicated %d", len(b), size)
+		return nil, fmt.Errorf("rock Ridge TF extension has %d bytes, but byte 2 indicated %d", len(b), size)
 	}
 	version := b[3]
 	if version != 1 {
-		return nil, fmt.Errorf("Rock Ridge TF extension must be version 1, was %d", version)
+		return nil, fmt.Errorf("rock Ridge TF extension must be version 1, was %d", version)
 	}
 	// what timestamps are recorded?
 	flags := b[4]
@@ -978,15 +978,15 @@ func (d rockRidgeSparseFile) Merge([]directoryEntrySystemUseExtension) directory
 func (r rockRidgeExtension) parseSparseFile(b []byte) (directoryEntrySystemUseExtension, error) {
 	targetSize := r.sfLength
 	if len(b) != targetSize {
-		return nil, fmt.Errorf("Rock Ridge SF extension must be %d bytes, but received %d", targetSize, len(b))
+		return nil, fmt.Errorf("rock Ridge SF extension must be %d bytes, but received %d", targetSize, len(b))
 	}
 	size := b[2]
 	if size != uint8(targetSize) {
-		return nil, fmt.Errorf("Rock Ridge SF extension must be %d bytes, but byte 2 indicated %d", targetSize, size)
+		return nil, fmt.Errorf("rock Ridge SF extension must be %d bytes, but byte 2 indicated %d", targetSize, size)
 	}
 	version := b[3]
 	if version != 1 {
-		return nil, fmt.Errorf("Rock Ridge SF extension must be version 1, was %d", version)
+		return nil, fmt.Errorf("rock Ridge SF extension must be version 1, was %d", version)
 	}
 	sf := &rockRidgeSparseFile{
 		high:   binary.LittleEndian.Uint32(b[4:8]),
@@ -1039,15 +1039,15 @@ func (d rockRidgeChildDirectory) Merge([]directoryEntrySystemUseExtension) direc
 func (r rockRidgeExtension) parseChildDirectory(b []byte) (directoryEntrySystemUseExtension, error) {
 	targetSize := 12
 	if len(b) != targetSize {
-		return nil, fmt.Errorf("Rock Ridge CL extension must be %d bytes, but received %d", targetSize, len(b))
+		return nil, fmt.Errorf("rock Ridge CL extension must be %d bytes, but received %d", targetSize, len(b))
 	}
 	size := b[2]
 	if size != uint8(targetSize) {
-		return nil, fmt.Errorf("Rock Ridge CL extension must be %d bytes, but byte 2 indicated %d", targetSize, size)
+		return nil, fmt.Errorf("rock Ridge CL extension must be %d bytes, but byte 2 indicated %d", targetSize, size)
 	}
 	version := b[3]
 	if version != 1 {
-		return nil, fmt.Errorf("Rock Ridge CL extension must be version 1, was %d", version)
+		return nil, fmt.Errorf("rock Ridge CL extension must be version 1, was %d", version)
 	}
 	return rockRidgeChildDirectory{
 		location: binary.LittleEndian.Uint32(b[4:8]),
@@ -1094,15 +1094,15 @@ func (d rockRidgeParentDirectory) Merge([]directoryEntrySystemUseExtension) dire
 func (r rockRidgeExtension) parseParentDirectory(b []byte) (directoryEntrySystemUseExtension, error) {
 	targetSize := 12
 	if len(b) != targetSize {
-		return nil, fmt.Errorf("Rock Ridge PL extension must be %d bytes, but received %d", targetSize, len(b))
+		return nil, fmt.Errorf("rock Ridge PL extension must be %d bytes, but received %d", targetSize, len(b))
 	}
 	size := b[2]
 	if size != uint8(targetSize) {
-		return nil, fmt.Errorf("Rock Ridge PL extension must be %d bytes, but byte 2 indicated %d", targetSize, size)
+		return nil, fmt.Errorf("rock Ridge PL extension must be %d bytes, but byte 2 indicated %d", targetSize, size)
 	}
 	version := b[3]
 	if version != 1 {
-		return nil, fmt.Errorf("Rock Ridge PL extension must be version 1, was %d", version)
+		return nil, fmt.Errorf("rock Ridge PL extension must be version 1, was %d", version)
 	}
 	return rockRidgeParentDirectory{
 		location: binary.LittleEndian.Uint32(b[4:8]),
@@ -1146,15 +1146,15 @@ func (d rockRidgeRelocatedDirectory) Merge([]directoryEntrySystemUseExtension) d
 func (r rockRidgeExtension) parseRelocatedDirectory(b []byte) (directoryEntrySystemUseExtension, error) {
 	targetSize := 4
 	if len(b) != targetSize {
-		return nil, fmt.Errorf("Rock Ridge RE extension must be %d bytes, but received %d", targetSize, len(b))
+		return nil, fmt.Errorf("rock Ridge RE extension must be %d bytes, but received %d", targetSize, len(b))
 	}
 	size := b[2]
 	if size != uint8(targetSize) {
-		return nil, fmt.Errorf("Rock Ridge RE extension must be %d bytes, but byte 2 indicated %d", targetSize, size)
+		return nil, fmt.Errorf("rock Ridge RE extension must be %d bytes, but byte 2 indicated %d", targetSize, size)
 	}
 	version := b[3]
 	if version != 1 {
-		return nil, fmt.Errorf("Rock Ridge RE extension must be version 1, was %d", version)
+		return nil, fmt.Errorf("rock Ridge RE extension must be version 1, was %d", version)
 	}
 	return rockRidgeRelocatedDirectory{}, nil
 }

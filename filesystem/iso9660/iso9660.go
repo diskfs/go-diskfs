@@ -85,7 +85,7 @@ func Create(f util.File, size int64, start int64, blocksize int64, workspace str
 			return nil, fmt.Errorf("could not stat working directory: %v", err)
 		}
 		if !info.IsDir() {
-			return nil, fmt.Errorf("Provided workspace is not a directory: %s", workspace)
+			return nil, fmt.Errorf("provided workspace is not a directory: %s", workspace)
 		}
 		workdir = workspace
 	} else {
@@ -171,7 +171,7 @@ func Read(file util.File, size int64, start int64, blocksize int64) (*FileSystem
 			return nil, fmt.Errorf("unable to read bytes for volume descriptor %d: %v", i, err)
 		}
 		if int64(read) != volumeDescriptorSize {
-			return nil, fmt.Errorf("Read %d bytes instead of expected %d for volume descriptor %d", read, volumeDescriptorSize, i)
+			return nil, fmt.Errorf("read %d bytes instead of expected %d for volume descriptor %d", read, volumeDescriptorSize, i)
 		}
 		// convert to a vd structure
 		vd, err = volumeDescriptorFromBytes(vdBytes)
@@ -204,7 +204,7 @@ func Read(file util.File, size int64, start int64, blocksize int64) (*FileSystem
 			return nil, fmt.Errorf("unable to read path table of size %d at location %d: %v", pvd.pathTableSize, pathTableLocation, err)
 		}
 		if read != len(pathTableBytes) {
-			return nil, fmt.Errorf("Read %d bytes of path table instead of expected %d at location %d", read, pvd.pathTableSize, pathTableLocation)
+			return nil, fmt.Errorf("read %d bytes of path table instead of expected %d at location %d", read, pvd.pathTableSize, pathTableLocation)
 		}
 		pt, err = parsePathTable(pathTableBytes)
 		if err != nil {
@@ -221,10 +221,10 @@ func Read(file util.File, size int64, start int64, blocksize int64) (*FileSystem
 		return nil, fmt.Errorf("unable to read root directory size at location %d: %v", location, err)
 	}
 	if read != len(b) {
-		return nil, fmt.Errorf("Root directory entry size, read %d bytes instead of expected %d", read, len(b))
+		return nil, fmt.Errorf("root directory entry size, read %d bytes instead of expected %d", read, len(b))
 	}
 	if b[0] == 0 {
-		return nil, fmt.Errorf("Root directory entry size at location %d was zero, check header and blocksize, given as %d", location, blocksize)
+		return nil, fmt.Errorf("root directory entry size at location %d was zero, check header and blocksize, given as %d", location, blocksize)
 	}
 	// now read the whole entry
 	b = make([]byte, b[0])
@@ -233,7 +233,7 @@ func Read(file util.File, size int64, start int64, blocksize int64) (*FileSystem
 		return nil, fmt.Errorf("unable to read root directory entry at location %d: %v", location, err)
 	}
 	if read != len(b) {
-		return nil, fmt.Errorf("Root directory entry, read %d bytes instead of expected %d", read, len(b))
+		return nil, fmt.Errorf("root directory entry, read %d bytes instead of expected %d", read, len(b))
 	}
 	// parse it - we do not have any handlers yet
 	de, err := parseDirEntry(b, &FileSystem{
@@ -444,7 +444,7 @@ func (fs *FileSystem) readDirectory(p string) ([]*directoryEntry, error) {
 			return nil, fmt.Errorf("could not read directory %s: %v", p, err)
 		}
 		if n != len(dirb) {
-			return nil, fmt.Errorf("Read %d bytes instead of expected %d", n, len(dirb))
+			return nil, fmt.Errorf("read %d bytes instead of expected %d", n, len(dirb))
 		}
 		// convert to uint32
 		size = binary.LittleEndian.Uint32(dirb)
@@ -469,7 +469,7 @@ func (fs *FileSystem) readDirectory(p string) ([]*directoryEntry, error) {
 		return nil, fmt.Errorf("could not read directory entries for %s: %v", p, err)
 	}
 	if n != int(size) {
-		return nil, fmt.Errorf("Reading directory %s returned %d bytes read instead of expected %d", p, n, size)
+		return nil, fmt.Errorf("reading directory %s returned %d bytes read instead of expected %d", p, n, size)
 	}
 	// parse the entries
 	entries, err := parseDirEntries(b, fs)
