@@ -50,7 +50,7 @@ func tmpFat32(fill bool, embedPre, embedPost int64) (*os.File, error) {
 	}
 
 	// either copy the contents of the base file over, or make a file of similar size
-	b, err := ioutil.ReadFile(fat32.Fat32File)
+	b, err := os.ReadFile(fat32.Fat32File)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read contents of %s: %v", fat32.Fat32File, err)
 	}

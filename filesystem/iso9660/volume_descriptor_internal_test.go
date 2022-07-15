@@ -3,7 +3,7 @@ package iso9660
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"reflect"
 	"testing"
 	"time"
@@ -80,7 +80,7 @@ func primaryVolumeDescriptorsBytesNullDate(a []byte) []byte {
 func getValidVolumeDescriptors() ([]volumeDescriptor, []byte, error) {
 	blocksize := uint16(2048)
 	// read correct bytes off of disk
-	b, err := ioutil.ReadFile(volRecordsFile)
+	b, err := os.ReadFile(volRecordsFile)
 	if err != nil {
 		return nil, nil, fmt.Errorf("error reading data from volrecords test fixture %s: %v", volRecordsFile, err)
 	}
@@ -159,7 +159,7 @@ func get9660PrimaryVolumeDescriptor() (*primaryVolumeDescriptor, []byte, error) 
 	t1, _ := time.Parse(time.RFC3339, "2017-11-26T07:53:16Z")
 
 	// read correct bytes off of disk
-	input, err := ioutil.ReadFile(ISO9660File)
+	input, err := os.ReadFile(ISO9660File)
 	if err != nil {
 		return nil, nil, fmt.Errorf("error reading data from iso9660 test fixture %s: %v", ISO9660File, err)
 	}

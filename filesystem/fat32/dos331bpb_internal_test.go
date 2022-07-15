@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"strings"
 	"testing"
 )
@@ -51,7 +51,7 @@ func TestDos331BPBFromBytes(t *testing.T) {
 		}
 	})
 	t.Run("valid data", func(t *testing.T) {
-		input, err := ioutil.ReadFile(Fat32File)
+		input, err := os.ReadFile(Fat32File)
 		if err != nil {
 			t.Fatalf("Error reading test fixture data from %s: %v", Fat32File, err)
 		}
@@ -81,7 +81,7 @@ func TestDos331BPBToBytes(t *testing.T) {
 	if b == nil {
 		t.Fatal("b was nil unexpectedly")
 	}
-	valid, err := ioutil.ReadFile(Fat32File)
+	valid, err := os.ReadFile(Fat32File)
 	if err != nil {
 		t.Fatalf("Error reading test fixture data from %s: %v", Fat32File, err)
 	}

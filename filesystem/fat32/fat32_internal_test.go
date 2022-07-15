@@ -2,7 +2,6 @@ package fat32
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"reflect"
 	"strings"
@@ -271,7 +270,7 @@ func TestFat32MkFile(t *testing.T) {
 
 func TestFat32ReadDirWithMkdir(t *testing.T) {
 	fs := getValidFat32FSFull()
-	datab, err := ioutil.ReadFile(Fat32File)
+	datab, err := os.ReadFile(Fat32File)
 	if err != nil {
 		t.Fatalf("Unable to read data from file %s: %v", Fat32File, err)
 	}

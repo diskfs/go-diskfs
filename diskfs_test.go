@@ -25,7 +25,7 @@ func tmpDisk(source string) (*os.File, error) {
 		// make it a 10MB file
 		f.Truncate(10 * 1024 * 1024)
 	} else {
-		b, err := ioutil.ReadFile(source)
+		b, err := os.ReadFile(source)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read contents of %s: %v", source, err)
 		}

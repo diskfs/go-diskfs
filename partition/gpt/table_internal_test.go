@@ -3,7 +3,7 @@ package gpt
 import (
 	"crypto/rand"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"strings"
 	"testing"
 )
@@ -64,7 +64,7 @@ func TestTableFromBytes(t *testing.T) {
 		}
 	})
 	t.Run("Invalid EFI Signature", func(t *testing.T) {
-		b, err := ioutil.ReadFile(gptFile)
+		b, err := os.ReadFile(gptFile)
 		if err != nil {
 			t.Fatalf("Unable to read test fixture file %s: %v", gptFile, err)
 		}
@@ -82,7 +82,7 @@ func TestTableFromBytes(t *testing.T) {
 		}
 	})
 	t.Run("Invalid EFI Revision", func(t *testing.T) {
-		b, err := ioutil.ReadFile(gptFile)
+		b, err := os.ReadFile(gptFile)
 		if err != nil {
 			t.Fatalf("Unable to read test fixture file %s: %v", gptFile, err)
 		}
@@ -100,7 +100,7 @@ func TestTableFromBytes(t *testing.T) {
 		}
 	})
 	t.Run("Invalid EFI Header Size", func(t *testing.T) {
-		b, err := ioutil.ReadFile(gptFile)
+		b, err := os.ReadFile(gptFile)
 		if err != nil {
 			t.Fatalf("Unable to read test fixture file %s: %v", gptFile, err)
 		}
@@ -118,7 +118,7 @@ func TestTableFromBytes(t *testing.T) {
 		}
 	})
 	t.Run("Invalid EFI Zeroes", func(t *testing.T) {
-		b, err := ioutil.ReadFile(gptFile)
+		b, err := os.ReadFile(gptFile)
 		if err != nil {
 			t.Fatalf("Unable to read test fixture file %s: %v", gptFile, err)
 		}
@@ -136,7 +136,7 @@ func TestTableFromBytes(t *testing.T) {
 		}
 	})
 	t.Run("Invalid EFI Header Checksum", func(t *testing.T) {
-		b, err := ioutil.ReadFile(gptFile)
+		b, err := os.ReadFile(gptFile)
 		if err != nil {
 			t.Fatalf("Unable to read test fixture file %s: %v", gptFile, err)
 		}
@@ -154,7 +154,7 @@ func TestTableFromBytes(t *testing.T) {
 		}
 	})
 	t.Run("Invalid EFI Partition Checksum", func(t *testing.T) {
-		b, err := ioutil.ReadFile(gptFile)
+		b, err := os.ReadFile(gptFile)
 		if err != nil {
 			t.Fatalf("Unable to read test fixture file %s: %v", gptFile, err)
 		}
@@ -173,7 +173,7 @@ func TestTableFromBytes(t *testing.T) {
 		}
 	})
 	t.Run("Valid table", func(t *testing.T) {
-		b, err := ioutil.ReadFile(gptFile)
+		b, err := os.ReadFile(gptFile)
 		if err != nil {
 			t.Fatalf("Unable to read test fixture file %s: %v", gptFile, err)
 		}

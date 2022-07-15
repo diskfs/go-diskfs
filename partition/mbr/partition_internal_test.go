@@ -6,7 +6,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
-	"io/ioutil"
+	"os"
 	"strings"
 	"testing"
 
@@ -67,7 +67,7 @@ func TestFromBytes(t *testing.T) {
 		}
 	})
 	t.Run("Valid partition", func(t *testing.T) {
-		b, err := ioutil.ReadFile(mbrPartitionFile)
+		b, err := os.ReadFile(mbrPartitionFile)
 		if err != nil {
 			t.Fatalf("Unable to read test fixture file %s: %v", mbrPartitionFile, err)
 		}
@@ -120,7 +120,7 @@ func TestToBytes(t *testing.T) {
 		if err != nil {
 			t.Error("should return nil error")
 		}
-		expected, err := ioutil.ReadFile(mbrPartitionFile)
+		expected, err := os.ReadFile(mbrPartitionFile)
 		if err != nil {
 			t.Fatalf("Unable to read test fixture file %s: %v", mbrPartitionFile, err)
 		}

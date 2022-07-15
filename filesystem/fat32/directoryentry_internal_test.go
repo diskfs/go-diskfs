@@ -3,7 +3,7 @@ package fat32
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -183,7 +183,7 @@ func getValidDirectoryEntries() ([]*directoryEntry, [][]byte, error) {
 	}
 
 	// read correct bytes off of disk
-	input, err := ioutil.ReadFile(Fat32File)
+	input, err := os.ReadFile(Fat32File)
 	if err != nil {
 		return nil, nil, fmt.Errorf("error reading data from fat32 test fixture %s: %v", Fat32File, err)
 	}
@@ -309,7 +309,7 @@ func getValidDirectoryEntriesExtended() ([]*directoryEntry, [][]byte, error) {
 	}
 
 	// read correct bytes off of disk
-	input, err := ioutil.ReadFile(Fat32File)
+	input, err := os.ReadFile(Fat32File)
 	if err != nil {
 		return nil, nil, fmt.Errorf("error reading data from fat32 test fixture %s: %v", Fat32File, err)
 	}

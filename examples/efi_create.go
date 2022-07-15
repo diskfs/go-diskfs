@@ -4,7 +4,6 @@ package examples
 
 import (
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 
@@ -42,7 +41,7 @@ func CreateEfi(diskImg string) {
 	/*
 	 * create an ESP partition with some contents
 	 */
-	kernel, err := ioutil.ReadFile("/some/kernel/file")
+	kernel, err := os.ReadFile("/some/kernel/file")
 
 	spec := diskpkg.FilesystemSpec{Partition: 0, FSType: filesystem.TypeFat32}
 	fs, err := disk.CreateFilesystem(spec)

@@ -3,7 +3,7 @@ package mbr
 import (
 	"crypto/rand"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"strings"
 	"testing"
 )
@@ -56,7 +56,7 @@ func TestTableFromBytes(t *testing.T) {
 		}
 	})
 	t.Run("Invalid MBR Signature", func(t *testing.T) {
-		b, err := ioutil.ReadFile(mbrFile)
+		b, err := os.ReadFile(mbrFile)
 		if err != nil {
 			t.Fatalf("Unable to read test fixture file %s: %v", mbrFile, err)
 		}
@@ -74,7 +74,7 @@ func TestTableFromBytes(t *testing.T) {
 		}
 	})
 	t.Run("Valid table", func(t *testing.T) {
-		b, err := ioutil.ReadFile(mbrFile)
+		b, err := os.ReadFile(mbrFile)
 		if err != nil {
 			t.Fatalf("Unable to read test fixture file %s: %v", mbrFile, err)
 		}

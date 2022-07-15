@@ -7,7 +7,6 @@ package squashfs
 // 3. Take the relevant sizes, locations and inodes and use them here.
 
 import (
-	"io/ioutil"
 	"os"
 	"time"
 
@@ -147,7 +146,7 @@ func testGetFilesystem(f util.File) (*FileSystem, []byte, error) {
 		if err != nil {
 			return nil, nil, err
 		}
-		b, err = ioutil.ReadFile(SquashfsUncompressedfile)
+		b, err = os.ReadFile(SquashfsUncompressedfile)
 		if err != nil {
 			return nil, nil, err
 		}

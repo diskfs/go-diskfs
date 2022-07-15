@@ -3,7 +3,6 @@ package iso9660
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"reflect"
 	"strings"
@@ -77,7 +76,7 @@ func get9660DirectoryEntries(f *FileSystem) ([]*directoryEntry, [][][]byte, []by
 	rootSector := 18
 	ceSector := 19
 	// read correct bytes off of disk
-	input, err := ioutil.ReadFile(ISO9660File)
+	input, err := os.ReadFile(ISO9660File)
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("error reading data from iso9660 test fixture %s: %v", ISO9660File, err)
 	}
@@ -258,7 +257,7 @@ func getRockRidgeDirectoryEntries(f *FileSystem, includeRelocated bool) ([]*dire
 	rootSector := 18
 	ceSector := 19
 	// read correct bytes off of disk
-	input, err := ioutil.ReadFile(RockRidgeFile)
+	input, err := os.ReadFile(RockRidgeFile)
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("error reading data from iso9660 test fixture %s: %v", ISO9660File, err)
 	}
@@ -646,7 +645,7 @@ func getValidDirectoryEntriesExtended(fs *FileSystem) ([]*directoryEntry, [][]by
 		e.filesystem = fs
 	}
 	// read correct bytes off of disk
-	input, err := ioutil.ReadFile(ISO9660File)
+	input, err := os.ReadFile(ISO9660File)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("error reading data from iso9660 test fixture %s: %v", ISO9660File, err)
 	}
