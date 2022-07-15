@@ -7,6 +7,7 @@ package iso9660_test
 
 import (
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path"
@@ -349,9 +350,9 @@ func TestIso9660OpenFile(t *testing.T) {
 				case reader == nil && (tt.err == nil || tt.expected != ""):
 					t.Errorf("%s: Unexpected nil output", header)
 				case reader != nil:
-					b, err := ioutil.ReadAll(reader)
+					b, err := io.ReadAll(reader)
 					if err != nil {
-						t.Errorf("%s: ioutil.ReadAll(reader) unexpected error: %v", header, err)
+						t.Errorf("%s: io.ReadAll(reader) unexpected error: %v", header, err)
 					}
 					if string(b) != tt.expected {
 						t.Errorf("%s: mismatched contents, actual then expected", header)
@@ -517,11 +518,11 @@ func TestIso9660OpenFile(t *testing.T) {
 						bWrite := []byte(tt.contents)
 						written, writeErr := readWriter.Write(bWrite)
 						readWriter.Seek(0, os.SEEK_SET)
-						bRead, readErr := ioutil.ReadAll(readWriter)
+						bRead, readErr := io.ReadAll(readWriter)
 
 						switch {
 						case readErr != nil:
-							t.Errorf("%s: ioutil.ReadAll() unexpected error: %v", header, readErr)
+							t.Errorf("%s: io.ReadAll() unexpected error: %v", header, readErr)
 						case (writeErr == nil && tt.err != nil) || (writeErr != nil && tt.err == nil) || (writeErr != nil && tt.err != nil && !strings.HasPrefix(writeErr.Error(), tt.err.Error())):
 							t.Errorf("%s: readWriter.Write(b) mismatched errors, actual: %v , expected: %v", header, writeErr, tt.err)
 						case written != len(bWrite) && tt.err == nil:

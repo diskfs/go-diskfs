@@ -305,7 +305,7 @@ func TestFinalize9660(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to open top-level file from iso: %v", err)
 		}
-		content, err := ioutil.ReadAll(isoFile)
+		content, err := io.ReadAll(isoFile)
 		if err != nil {
 			t.Fatalf("Failed to read top-level file from iso: %v", err)
 		}
@@ -318,7 +318,7 @@ func TestFinalize9660(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to open file from iso: %v", err)
 		}
-		content, err = ioutil.ReadAll(isoFile)
+		content, err = io.ReadAll(isoFile)
 		if err != nil {
 			t.Fatalf("Failed to read file from iso: %v", err)
 		}

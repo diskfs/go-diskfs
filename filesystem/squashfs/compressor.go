@@ -5,7 +5,7 @@ import (
 	"compress/zlib"
 	"encoding/binary"
 	"fmt"
-	"io/ioutil"
+	"io"
 
 	"github.com/pierrec/lz4"
 	"github.com/ulikunitz/xz"
@@ -45,7 +45,7 @@ func (c CompressorLzma) decompress(in []byte) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error creating lzma decompressor: %v", err)
 	}
-	p, err := ioutil.ReadAll(lz)
+	p, err := io.ReadAll(lz)
 	if err != nil {
 		return nil, fmt.Errorf("error decompressing: %v", err)
 	}
@@ -103,7 +103,7 @@ func (c CompressorGzip) decompress(in []byte) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error creating gzip decompressor: %v", err)
 	}
-	p, err := ioutil.ReadAll(gz)
+	p, err := io.ReadAll(gz)
 	if err != nil {
 		return nil, fmt.Errorf("error decompressing: %v", err)
 	}
@@ -186,7 +186,7 @@ func (c CompressorXz) decompress(in []byte) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error creating xz decompressor: %v", err)
 	}
-	p, err := ioutil.ReadAll(xz)
+	p, err := io.ReadAll(xz)
 	if err != nil {
 		return nil, fmt.Errorf("error decompressing: %v", err)
 	}
@@ -254,7 +254,7 @@ func (c CompressorLz4) compress(in []byte) ([]byte, error) {
 func (c CompressorLz4) decompress(in []byte) ([]byte, error) {
 	b := bytes.NewReader(in)
 	lz := lz4.NewReader(b)
-	p, err := ioutil.ReadAll(lz)
+	p, err := io.ReadAll(lz)
 	if err != nil {
 		return nil, fmt.Errorf("error decompressing: %v", err)
 	}

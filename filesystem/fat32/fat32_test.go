@@ -396,9 +396,9 @@ func TestFat32OpenFile(t *testing.T) {
 				case reader == nil && (tt.err == nil || tt.expected != ""):
 					t.Errorf("%s: Unexpected nil output", header)
 				case reader != nil:
-					b, err := ioutil.ReadAll(reader)
+					b, err := io.ReadAll(reader)
 					if err != nil {
-						t.Errorf("%s: ioutil.ReadAll(reader) unexpected error: %v", header, err)
+						t.Errorf("%s: io.ReadAll(reader) unexpected error: %v", header, err)
 					}
 					if string(b) != tt.expected {
 						t.Errorf("%s: mismatched contents, actual then expected", header)
@@ -487,17 +487,17 @@ func TestFat32OpenFile(t *testing.T) {
 						b := make([]byte, 512)
 						_, err := readWriter.Read(b)
 						if err != nil && err != io.EOF {
-							t.Errorf("%s: ioutil.ReadAll(readWriter) unexpected error: %v", header, err)
+							t.Errorf("%s: io.ReadAll(readWriter) unexpected error: %v", header, err)
 							continue
 						}
 					}
 					written, writeErr := readWriter.Write(bWrite)
 					readWriter.Seek(0, 0)
-					bRead, readErr := ioutil.ReadAll(readWriter)
+					bRead, readErr := io.ReadAll(readWriter)
 
 					switch {
 					case readErr != nil:
-						t.Errorf("%s: ioutil.ReadAll() unexpected error: %v", header, readErr)
+						t.Errorf("%s: io.ReadAll() unexpected error: %v", header, readErr)
 					case (writeErr == nil && tt.err != nil) || (writeErr != nil && tt.err == nil) || (writeErr != nil && tt.err != nil && !strings.HasPrefix(writeErr.Error(), tt.err.Error())):
 						t.Errorf("%s: readWriter.Write(b) mismatched errors, actual: %v , expected: %v", header, writeErr, tt.err)
 					case written != len(bWrite) && tt.err == nil:
@@ -554,10 +554,10 @@ func TestFat32OpenFile(t *testing.T) {
 					readWriter.Seek(0, 0)
 					written, writeErr := readWriter.Write(fileContent)
 					readWriter.Seek(0, 0)
-					readFileContent, readErr := ioutil.ReadAll(readWriter)
+					readFileContent, readErr := io.ReadAll(readWriter)
 					switch {
 					case readErr != nil:
-						t.Errorf("write many: ioutil.ReadAll() unexpected error on %s: %v", fileName, readErr)
+						t.Errorf("write many: io.ReadAll() unexpected error on %s: %v", fileName, readErr)
 					case writeErr != nil:
 						t.Errorf("write many: readWriter.Write(b) error on %s: %v", fileName, writeErr)
 					case written != len(fileContent):
@@ -623,11 +623,11 @@ func TestFat32OpenFile(t *testing.T) {
 				rand.Read(bWrite)
 				written, writeErr := readWriter.Write(bWrite)
 				readWriter.Seek(0, 0)
-				bRead, readErr := ioutil.ReadAll(readWriter)
+				bRead, readErr := io.ReadAll(readWriter)
 
 				switch {
 				case readErr != nil:
-					t.Errorf("%s: ioutil.ReadAll() unexpected error: %v", header, readErr)
+					t.Errorf("%s: io.ReadAll() unexpected error: %v", header, readErr)
 				case writeErr != nil:
 					t.Errorf("%s: readWriter.Write(b) unexpected error: %v", header, writeErr)
 				case written != len(bWrite):
@@ -704,10 +704,10 @@ func TestFat32OpenFile(t *testing.T) {
 			t.Fatalf("could not reopen file: %v", err)
 		}
 		// read the data
-		bRead, readErr := ioutil.ReadAll(readWriter)
+		bRead, readErr := io.ReadAll(readWriter)
 		switch {
 		case readErr != nil:
-			t.Fatalf("%s: ioutil.ReadAll() unexpected error: %v", header, readErr)
+			t.Fatalf("%s: io.ReadAll() unexpected error: %v", header, readErr)
 		case len(bRead) != 0:
 			t.Fatalf("%s: readWriter.ReadAll(b) read %d bytes after truncate instead of expected %d", header, len(bRead), 0)
 		}
@@ -769,11 +769,11 @@ func TestFat32OpenFile(t *testing.T) {
 			}
 
 			readWriter.Seek(0, 0)
-			bRead, readErr := ioutil.ReadAll(readWriter)
+			bRead, readErr := io.ReadAll(readWriter)
 
 			switch {
 			case readErr != nil:
-				t.Errorf("%s: ioutil.ReadAll() unexpected error: %v", header, readErr)
+				t.Errorf("%s: io.ReadAll() unexpected error: %v", header, readErr)
 			case !bytes.Equal(bWrite, bRead):
 				t.Errorf("%s: mismatched contents, read %d expected %d, actual data then expected:", header, len(bRead), len(bWrite))
 				// t.Log(bRead)

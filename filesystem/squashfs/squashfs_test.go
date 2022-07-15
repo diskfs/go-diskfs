@@ -2,6 +2,7 @@ package squashfs_test
 
 import (
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path"
@@ -210,9 +211,9 @@ func TestSquashfsOpenFile(t *testing.T) {
 				case reader == nil && (tt.err == nil || tt.expected != ""):
 					t.Errorf("%s: Unexpected nil output", header)
 				case reader != nil:
-					b, err := ioutil.ReadAll(reader)
+					b, err := io.ReadAll(reader)
 					if err != nil {
-						t.Errorf("%s: ioutil.ReadAll(reader) unexpected error: %v", header, err)
+						t.Errorf("%s: io.ReadAll(reader) unexpected error: %v", header, err)
 					}
 					if string(b) != tt.expected {
 						t.Errorf("%s: mismatched contents, actual then expected", header)
