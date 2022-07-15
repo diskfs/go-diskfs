@@ -633,7 +633,7 @@ func TestFat32OpenFile(t *testing.T) {
 					t.Errorf("%s: readWriter.Write(b) unexpected error: %v", header, writeErr)
 				case written != len(bWrite):
 					t.Errorf("%s: readWriter.Write(b) wrote %d bytes instead of expected %d", header, written, len(bWrite))
-				case bytes.Compare(bWrite, bRead) != 0:
+				case !bytes.Equal(bWrite, bRead):
 					t.Errorf("%s: mismatched contents, read %d expected %d, actual data then expected:", header, len(bRead), len(bWrite))
 					//t.Log(bRead)
 					//t.Log(bWrite)
@@ -775,7 +775,7 @@ func TestFat32OpenFile(t *testing.T) {
 			switch {
 			case readErr != nil:
 				t.Errorf("%s: ioutil.ReadAll() unexpected error: %v", header, readErr)
-			case bytes.Compare(bWrite, bRead) != 0:
+			case !bytes.Equal(bWrite, bRead):
 				t.Errorf("%s: mismatched contents, read %d expected %d, actual data then expected:", header, len(bRead), len(bWrite))
 				//t.Log(bRead)
 				//t.Log(bWrite)

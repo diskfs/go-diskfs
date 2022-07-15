@@ -27,7 +27,7 @@ func (m *msDosBootSector) equal(a *msDosBootSector) bool {
 	return m.biosParameterBlock.equal(a.biosParameterBlock) &&
 		m.oemName == a.oemName &&
 		m.jumpInstruction == a.jumpInstruction &&
-		bytes.Compare(m.bootCode, a.bootCode) == 0
+		bytes.Equal(m.bootCode, a.bootCode)
 }
 
 // MsDosBootSectorFromBytes create an MsDosBootSector from a byte slice

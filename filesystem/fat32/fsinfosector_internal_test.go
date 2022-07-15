@@ -142,7 +142,7 @@ func TestInformationSectorToBytes(t *testing.T) {
 			t.Fatalf("Error reading test fixture data from %s: %v", Fat32File, err)
 		}
 		validBytes := valid[512:1024]
-		if bytes.Compare(validBytes, b) != 0 {
+		if !bytes.Equal(validBytes, b) {
 			t.Error("Mismatched bytes")
 		}
 	})

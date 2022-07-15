@@ -204,7 +204,7 @@ func TestFat32TableToBytes(t *testing.T) {
 			t.Fatalf("Error reading test fixture data from %s: %v", Fat32File, err)
 		}
 		validBytes := valid[16384 : 158*512+16384]
-		if bytes.Compare(validBytes, b) != 0 {
+		if !bytes.Equal(validBytes, b) {
 			t.Error("Mismatched bytes")
 		}
 	})

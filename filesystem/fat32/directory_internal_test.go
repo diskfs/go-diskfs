@@ -39,7 +39,6 @@ func TestDirectoryEntriesFromBytes(t *testing.T) {
 			}
 		}
 	}
-
 }
 
 func TestDirectoryEntriesToBytes(t *testing.T) {
@@ -71,7 +70,7 @@ func TestDirectoryEntriesToBytes(t *testing.T) {
 		t.Errorf("unexpected 0 length byte slice")
 	case len(output) != len(b):
 		t.Errorf("mismatched byte slice length actual %d, expected %d", len(output), len(b))
-	case bytes.Compare(output, b) != 0:
+	case !bytes.Equal(output, b):
 		t.Errorf("Mismatched output of bytes. Actual then expected:")
 		t.Logf("%v", output)
 		t.Logf("%v", b)

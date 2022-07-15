@@ -86,7 +86,7 @@ func TestDos331BPBToBytes(t *testing.T) {
 		t.Fatalf("Error reading test fixture data from %s: %v", Fat32File, err)
 	}
 	validBytes := valid[11:36]
-	if bytes.Compare(validBytes, b) != 0 {
+	if !bytes.Equal(validBytes, b) {
 		t.Log(validBytes)
 		t.Log(b)
 		t.Error("Mismatched bytes")

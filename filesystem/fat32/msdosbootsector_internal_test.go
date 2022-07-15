@@ -152,7 +152,7 @@ func TestMsDosBootSectorToBytes(t *testing.T) {
 		// it should have passed it
 		calculatedName := b[3:11]
 		expectedName := []byte{97, 98, 99, 0x20, 0x20, 0x20, 0x20, 0x20}
-		if bytes.Compare(calculatedName, expectedName) != 0 {
+		if !bytes.Equal(calculatedName, expectedName) {
 			t.Log(calculatedName)
 			t.Log(expectedName)
 			t.Fatal("did not fill short OEM name properly")
@@ -202,7 +202,7 @@ func TestMsDosBootSectorToBytes(t *testing.T) {
 		calculatedBootCode := b[90:510]
 		expectedBootCode := make([]byte, 420)
 		copy(expectedBootCode, bs.bootCode)
-		if bytes.Compare(calculatedBootCode, expectedBootCode) != 0 {
+		if !bytes.Equal(calculatedBootCode, expectedBootCode) {
 			t.Log(calculatedBootCode)
 			t.Log(expectedBootCode)
 			t.Fatal("did not fill boot code properly")
@@ -239,7 +239,7 @@ func TestMsDosBootSectorToBytes(t *testing.T) {
 			t.Fatalf("Error reading test fixture data from %s: %v", Fat32File, err)
 		}
 		validBytes := valid[:512]
-		if bytes.Compare(validBytes, b) != 0 {
+		if !bytes.Equal(validBytes, b) {
 			t.Error("Mismatched bytes")
 		}
 	})

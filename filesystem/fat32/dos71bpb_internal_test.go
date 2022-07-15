@@ -164,7 +164,7 @@ func TestDos71EBPBToBytes(t *testing.T) {
 		// it should have passed it
 		calculatedLabel := b[60:71]
 		expectedLabel := []byte{97, 98, 99, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20}
-		if bytes.Compare(calculatedLabel, expectedLabel) != 0 {
+		if !bytes.Equal(calculatedLabel, expectedLabel) {
 			t.Log(calculatedLabel)
 			t.Log(expectedLabel)
 			t.Fatal("did not fill short label properly")
@@ -214,7 +214,7 @@ func TestDos71EBPBToBytes(t *testing.T) {
 		// it should have passed it
 		calculatedType := b[71:79]
 		expectedType := []byte{102, 97, 116, 0x20, 0x20, 0x20, 0x20, 0x20}
-		if bytes.Compare(calculatedType, expectedType) != 0 {
+		if !bytes.Equal(calculatedType, expectedType) {
 			t.Log(calculatedType)
 			t.Log(expectedType)
 			t.Fatal("did not fill short FileSystem Type properly")
@@ -264,7 +264,7 @@ func TestDos71EBPBToBytes(t *testing.T) {
 			t.Fatalf("Error reading test fixture data from %s: %v", Fat32File, err)
 		}
 		validBytes := valid[11:90]
-		if bytes.Compare(validBytes, b) != 0 {
+		if !bytes.Equal(validBytes, b) {
 			t.Log(validBytes)
 			t.Log(b)
 			t.Error("Mismatched bytes")

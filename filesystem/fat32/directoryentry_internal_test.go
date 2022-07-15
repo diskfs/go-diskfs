@@ -332,7 +332,7 @@ func TestDirectoryEntryLongFilenameBytes(t *testing.T) {
 			t.Log(tt.err)
 			t.Errorf("mismatched err expected, actual: %v, %v", tt.err, err)
 		}
-		if bytes.Compare(output, tt.b) != 0 {
+		if !bytes.Equal(output, tt.b) {
 			t.Errorf("longFilenameBytes(%s, %s, %s) bytes mismatch", tt.lfn, tt.shortName, tt.extension)
 			t.Log(fmt.Sprintf("actual  : % x", output))
 			t.Log(fmt.Sprintf("expected: % x", tt.b))
@@ -432,7 +432,7 @@ func TestDirectoryEntryStringToASCIIBytes(t *testing.T) {
 	}
 	for _, tt := range tests {
 		output, err := stringToASCIIBytes(tt.input)
-		if bytes.Compare(output, tt.output) != 0 {
+		if !bytes.Equal(output, tt.output) {
 			t.Errorf("stringToASCIIBytes(%s) expected output %v, actual %v", tt.input, tt.output, output)
 		}
 		if (err != nil && tt.err == nil) || (err == nil && tt.err != nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())) {
@@ -562,7 +562,7 @@ func TestDirectoryEntryToBytes(t *testing.T) {
 			t.Errorf("Error converting directory entry to bytes: %v", err)
 			t.Logf("%v", de)
 		} else {
-			if bytes.Compare(b, validBytes[i]) != 0 {
+			if !bytes.Equal(b, validBytes[i]) {
 				t.Errorf("Mismatched bytes %s, actual vs expected", de.filenameShort)
 				t.Log(b)
 				t.Log(validBytes[i])
