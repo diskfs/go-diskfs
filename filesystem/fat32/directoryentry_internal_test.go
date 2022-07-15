@@ -338,7 +338,6 @@ func TestDirectoryEntryLongFilenameBytes(t *testing.T) {
 			t.Log(fmt.Sprintf("expected: % x", tt.b))
 		}
 	}
-
 }
 
 func TestDirectoryEntryLongFilenameEntryFromBytes(t *testing.T) {
@@ -381,7 +380,6 @@ func TestTimeToDateTime(t *testing.T) {
 			t.Errorf("timeToDateTime(%v) expected output %d %d, actual %d %d", tt.rfc, tt.date, tt.time, outDate, outTime)
 		}
 	}
-
 }
 
 func TestDirectoryEntryLfnChecksum(t *testing.T) {
@@ -439,7 +437,6 @@ func TestDirectoryEntryStringToASCIIBytes(t *testing.T) {
 			t.Errorf("mismatched err expected, actual: %v, %v", tt.err, err)
 		}
 	}
-
 }
 
 func TestDirectoryEntryCalculateSlots(t *testing.T) {
@@ -460,7 +457,6 @@ func TestDirectoryEntryCalculateSlots(t *testing.T) {
 			t.Errorf("calculateSlots(%s) expected %d , actual %d", tt.input, tt.slots, slots)
 		}
 	}
-
 }
 
 func TestDirectoryEntryConvertLfnSfn(t *testing.T) {
@@ -486,7 +482,6 @@ func TestDirectoryEntryConvertLfnSfn(t *testing.T) {
 			t.Errorf("convertLfnSfn(%s) expected %s / %s / %t / %t ; actual %s / %s / %t / %t", tt.input, tt.sfn, tt.extension, tt.isLfn, tt.isTruncated, sfn, extension, isLfn, isTruncated)
 		}
 	}
-
 }
 
 func TestDirectoryEntryUCaseValid(t *testing.T) {
@@ -548,7 +543,6 @@ func TestDirectoryEntryParseDirEntries(t *testing.T) {
 			}
 		}
 	}
-
 }
 
 func TestDirectoryEntryToBytes(t *testing.T) {

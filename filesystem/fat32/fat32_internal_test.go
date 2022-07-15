@@ -166,7 +166,6 @@ func TestFat32ReadDirectory(t *testing.T) {
 			}
 		}
 	}
-
 }
 
 func TestFat32AllocateSpace(t *testing.T) {
@@ -268,7 +267,6 @@ func TestFat32MkFile(t *testing.T) {
 		t.Logf("%v", *de)
 		t.Logf("%v", *expected)
 	}
-
 }
 
 func TestFat32ReadDirWithMkdir(t *testing.T) {

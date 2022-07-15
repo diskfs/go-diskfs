@@ -735,7 +735,6 @@ func (fs *FileSystem) readDirWithMkdir(p string, doMake bool) (*Directory, []*di
 				directoryEntry: *e,
 			}
 			break
-
 		}
 
 		// if not, either make it, retrieve its cluster and entries, and loop;

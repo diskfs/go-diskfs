@@ -209,7 +209,6 @@ func TestFat32Create(t *testing.T) {
 			}
 			// we do not match the filesystems here, only check functional accuracy
 		}
-
 	}
 
 	t.Run("entire image", func(t *testing.T) {

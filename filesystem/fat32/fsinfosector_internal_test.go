@@ -43,8 +43,8 @@ func TestFsInformationSectorFromBytes(t *testing.T) {
 		if !strings.HasPrefix(err.Error(), expected) {
 			t.Errorf("Error type %s instead of expected %s", err.Error(), expected)
 		}
-
 	})
+
 	t.Run("invalid start signature", func(t *testing.T) {
 		input, err := ioutil.ReadFile(Fat32File)
 		if err != nil {
