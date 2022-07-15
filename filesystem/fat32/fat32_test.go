@@ -376,8 +376,8 @@ func TestFat32OpenFile(t *testing.T) {
 				{"/CORTO1.TXT", os.O_RDONLY, "Tenemos un archivo corto\n", nil},
 				{"/CORTO1.TXT", os.O_RDWR, "Tenemos un archivo corto\n", nil},
 				// open file for create that already exists
-				//{"/CORTO1.TXT", os.O_CREATE | os.O_RDWR, "Tenemos un archivo corto\n", nil},
-				//{"/CORTO1.TXT", os.O_CREATE | os.O_RDONLY, "Tenemos un archivo corto\n", nil},
+				// {"/CORTO1.TXT", os.O_CREATE | os.O_RDWR, "Tenemos un archivo corto\n", nil},
+				// {"/CORTO1.TXT", os.O_CREATE | os.O_RDONLY, "Tenemos un archivo corto\n", nil},
 			}
 			fileInfo, err := f.Stat()
 			if err != nil {
@@ -634,8 +634,8 @@ func TestFat32OpenFile(t *testing.T) {
 					t.Errorf("%s: readWriter.Write(b) wrote %d bytes instead of expected %d", header, written, len(bWrite))
 				case !bytes.Equal(bWrite, bRead):
 					t.Errorf("%s: mismatched contents, read %d expected %d, actual data then expected:", header, len(bRead), len(bWrite))
-					//t.Log(bRead)
-					//t.Log(bWrite)
+					// t.Log(bRead)
+					// t.Log(bWrite)
 				}
 			}
 		}
@@ -776,8 +776,8 @@ func TestFat32OpenFile(t *testing.T) {
 				t.Errorf("%s: ioutil.ReadAll() unexpected error: %v", header, readErr)
 			case !bytes.Equal(bWrite, bRead):
 				t.Errorf("%s: mismatched contents, read %d expected %d, actual data then expected:", header, len(bRead), len(bWrite))
-				//t.Log(bRead)
-				//t.Log(bWrite)
+				// t.Log(bRead)
+				// t.Log(bWrite)
 			}
 		}
 

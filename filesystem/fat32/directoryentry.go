@@ -171,7 +171,7 @@ func parseDirEntries(b []byte, f *FileSystem) ([]*directoryEntry, error) {
 	// parse the data into Fat32DirectoryEntry
 	lfn := ""
 	// this should be used to count the LFN entries and that they make sense
-	//lfnCount := 0
+	// lfnCount := 0
 byteLoop:
 	for i := 0; i < len(b); i += 32 {
 		// is this the beginning of all empty entries?
@@ -187,7 +187,7 @@ byteLoop:
 			// check if this is the last logical / first physical and how many there are
 			if b[i]&0x40 == 0x40 {
 				lfn = ""
-				//lfnCount = int(b[i] & 0xf)
+				// lfnCount = int(b[i] & 0xf)
 			}
 			// parse the long filename
 			tmpLfn, err := longFilenameEntryFromBytes(b[i : i+32])
