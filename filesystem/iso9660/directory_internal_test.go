@@ -92,7 +92,7 @@ func clearDatesDirectoryBytes(b []byte, blocksize int) []byte {
 	if b == nil {
 		return b
 	}
-	nullBytes := make([]byte, 7, 7)
+	nullBytes := make([]byte, 7)
 	for i := 0; i < len(b); {
 		// get the length of the current record
 		dirlen := int(b[i])

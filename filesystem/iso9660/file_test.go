@@ -42,7 +42,7 @@ func TestLargeFileCopy(t *testing.T) {
 func TestFileWrite(t *testing.T) {
 	// pretty simple: never should be able to write as it is a read-only filesystem
 	f := &iso9660.File{}
-	b := make([]byte, 8, 8)
+	b := make([]byte, 8)
 	written, err := f.Write(b)
 	if err == nil {
 		t.Errorf("received no error when should have been prevented from writing")

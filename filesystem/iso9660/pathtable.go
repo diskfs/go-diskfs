@@ -53,7 +53,7 @@ func (pt *pathTable) toLBytes() []byte {
 			size++
 		}
 
-		b2 := make([]byte, size, size)
+		b2 := make([]byte, size)
 		b2[0] = uint8(nameSize)
 		b2[1] = e.extAttrLength
 		binary.LittleEndian.PutUint32(b2[2:6], e.location)
@@ -76,7 +76,7 @@ func (pt *pathTable) toMBytes() []byte {
 			size++
 		}
 
-		b2 := make([]byte, size, size)
+		b2 := make([]byte, size)
 		b2[0] = uint8(nameSize)
 		b2[1] = e.extAttrLength
 		binary.BigEndian.PutUint32(b2[2:6], e.location)

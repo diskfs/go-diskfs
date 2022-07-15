@@ -376,7 +376,7 @@ func (de *directoryEntry) getLocation(p string) (uint32, uint32, error) {
 	} else {
 		current := parts[0]
 		// read the directory bytes
-		dirb := make([]byte, de.size, de.size)
+		dirb := make([]byte, de.size)
 		n, err := de.filesystem.file.ReadAt(dirb, int64(de.location)*de.filesystem.blocksize)
 		if err != nil {
 			return 0, 0, fmt.Errorf("could not read directory: %v", err)
@@ -523,7 +523,7 @@ func timeToBytes(t time.Time) []byte {
 	minute := t.Minute()
 	hour := t.Hour()
 	_, offset := t.Zone()
-	b := make([]byte, 7, 7)
+	b := make([]byte, 7)
 	b[0] = byte(year - 1900)
 	b[1] = byte(month)
 	b[2] = byte(date)
@@ -560,7 +560,7 @@ func validateFilename(s string, isDir bool) error {
 // convert a string to a byte array, if all characters are valid ascii
 func stringToASCIIBytes(s string) ([]byte, error) {
 	length := len(s)
-	b := make([]byte, length, length)
+	b := make([]byte, length)
 	// convert the name into 11 bytes
 	r := []rune(s)
 	// take the first 8 characters

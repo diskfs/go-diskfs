@@ -146,7 +146,7 @@ func Read(file util.File, size int64, start int64, blocksize int64) (*FileSystem
 
 	// load the information from the disk
 	// read system area
-	systemArea := make([]byte, systemAreaSize, systemAreaSize)
+	systemArea := make([]byte, systemAreaSize)
 	n, err := file.ReadAt(systemArea, start)
 	if err != nil {
 		return nil, fmt.Errorf("could not read bytes from file: %v", err)
@@ -164,7 +164,7 @@ func Read(file util.File, size int64, start int64, blocksize int64) (*FileSystem
 		vd  volumeDescriptor
 	)
 	for i := 0; !terminated; i++ {
-		vdBytes := make([]byte, volumeDescriptorSize, volumeDescriptorSize)
+		vdBytes := make([]byte, volumeDescriptorSize)
 		// read vdBytes
 		read, err = file.ReadAt(vdBytes, start+systemAreaSize+int64(i)*volumeDescriptorSize)
 		if err != nil {
@@ -197,7 +197,7 @@ func Read(file util.File, size int64, start int64, blocksize int64) (*FileSystem
 	)
 	if pvd != nil {
 		rootDirEntry = pvd.rootDirectoryEntry
-		pathTableBytes := make([]byte, pvd.pathTableSize, pvd.pathTableSize)
+		pathTableBytes := make([]byte, pvd.pathTableSize)
 		pathTableLocation := pvd.pathTableLLocation * uint32(pvd.blocksize)
 		read, err = file.ReadAt(pathTableBytes, int64(pathTableLocation))
 		if err != nil {
@@ -463,7 +463,7 @@ func (fs *FileSystem) readDirectory(p string) ([]*directoryEntry, error) {
 	}
 
 	// we have a location, let's read the directories from it
-	b := make([]byte, size, size)
+	b := make([]byte, size)
 	n, err = fs.file.ReadAt(b, int64(location)*fs.blocksize)
 	if err != nil {
 		return nil, fmt.Errorf("could not read directory entries for %s: %v", p, err)

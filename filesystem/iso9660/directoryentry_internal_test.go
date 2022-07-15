@@ -62,7 +62,7 @@ func compareDirectoryEntries(a, b *directoryEntry, compareDates, compareExtensio
 	return shallowMatch && extMatch
 }
 func directoryEntryBytesNullDate(a []byte) []byte {
-	now := make([]byte, 7, 7)
+	now := make([]byte, 7)
 	a1 := make([]byte, len(a))
 	copy(a1[18:18+7], now)
 	return a1

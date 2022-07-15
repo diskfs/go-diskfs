@@ -174,7 +174,7 @@ func volumeDescriptorFromBytes(b []byte) (volumeDescriptor, error) {
 		return nil, fmt.Errorf("cannot read volume descriptor from bytes of length %d, must be %d", len(b), volumeDescriptorSize)
 	}
 	// validate the signature
-	tmpb := make([]byte, 8, 8)
+	tmpb := make([]byte, 8)
 	copy(tmpb[3:8], b[1:6])
 	signature := binary.BigEndian.Uint64(tmpb)
 	if signature != isoIdentifier {
@@ -445,10 +445,10 @@ func (v *partitionVolumeDescriptor) toBytes() []byte {
 
 // utilities
 func volumeDescriptorFirstBytes(t volumeDescriptorType) []byte {
-	b := make([]byte, volumeDescriptorSize, volumeDescriptorSize)
+	b := make([]byte, volumeDescriptorSize)
 
 	b[0] = byte(t)
-	tmpb := make([]byte, 8, 8)
+	tmpb := make([]byte, 8)
 	binary.BigEndian.PutUint64(tmpb[:], isoIdentifier)
 	copy(b[1:6], tmpb[3:8])
 	b[6] = isoVersion
@@ -489,7 +489,7 @@ func timeToDecBytes(t time.Time) []byte {
 	second := strconv.Itoa(t.Second())
 	csec := strconv.Itoa(t.Nanosecond() / 1e+7)
 	_, offset := t.Zone()
-	b := make([]byte, 17, 17)
+	b := make([]byte, 17)
 	copy(b[0:4], []byte(fmt.Sprintf("%04s", year)))
 	copy(b[4:6], []byte(fmt.Sprintf("%02s", month)))
 	copy(b[6:8], []byte(fmt.Sprintf("%02s", date)))
