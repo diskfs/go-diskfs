@@ -152,8 +152,10 @@ func (r rockRidgeExtension) GetFinalizeExtensions(fi *finalizeFileInfo) ([]direc
 	// we look for CL, PL, RE entries
 	ret := []directoryEntrySystemUseExtension{}
 	if fi.trueParent != nil {
-		ret = append(ret, rockRidgeRelocatedDirectory{})
-		ret = append(ret, rockRidgeParentDirectory{location: fi.trueParent.location})
+		ret = append(ret,
+			rockRidgeRelocatedDirectory{},
+			rockRidgeParentDirectory{location: fi.trueParent.location},
+		)
 	}
 	if fi.trueChild != nil {
 		ret = append(ret, rockRidgeChildDirectory{location: fi.trueChild.location})
@@ -554,8 +556,10 @@ func (d rockRidgeSymlink) Bytes() []byte {
 		case ".":
 			cBytes = append(cBytes, []byte{0x2, 0x0})
 		default:
-			cBytes = append(cBytes, []byte{0x0, byte(len(e))})
-			cBytes = append(cBytes, []byte(e))
+			cBytes = append(cBytes,
+				[]byte{0x0, byte(len(e))},
+				[]byte(e),
+			)
 		}
 	}
 	// we now have cBytes, which is all of the component parts
