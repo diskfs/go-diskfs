@@ -13,7 +13,7 @@ func TestFileRead(t *testing.T) {
 	// we use
 	f, content := iso9660.GetTestFile(t)
 
-	b := make([]byte, 20, 20)
+	b := make([]byte, 20)
 	read, err := f.Read(b)
 	if read != 0 && err != io.EOF {
 		t.Errorf("received unexpected error when reading: %v", err)

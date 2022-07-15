@@ -27,7 +27,7 @@ var (
 )
 
 func getOpenMode(mode int) string {
-	modes := make([]string, 0, 0)
+	modes := []string{}
 	if mode&os.O_CREATE == os.O_CREATE {
 		modes = append(modes, "CREATE")
 	}
@@ -55,7 +55,7 @@ func tmpFat32(fill bool, embedPre, embedPost int64) (*os.File, error) {
 		return nil, fmt.Errorf("Failed to read contents of %s: %v", fat32.Fat32File, err)
 	}
 	if embedPre > 0 {
-		empty := make([]byte, embedPre, embedPre)
+		empty := make([]byte, embedPre)
 		written, err := f.Write(empty)
 		if err != nil {
 			return nil, fmt.Errorf("Failed to write %d zeroes at beginning of %s: %v", embedPre, filename, err)
@@ -74,7 +74,7 @@ func tmpFat32(fill bool, embedPre, embedPost int64) (*os.File, error) {
 		}
 	} else {
 		size := int64(len(b))
-		empty := make([]byte, size, size)
+		empty := make([]byte, size)
 		written, err := f.Write(empty)
 		if err != nil {
 			return nil, fmt.Errorf("Failed to write %d zeroes as content of %s: %v", size, filename, err)
@@ -84,7 +84,7 @@ func tmpFat32(fill bool, embedPre, embedPost int64) (*os.File, error) {
 		}
 	}
 	if embedPost > 0 {
-		empty := make([]byte, embedPost, embedPost)
+		empty := make([]byte, embedPost)
 		written, err := f.Write(empty)
 		if err != nil {
 			return nil, fmt.Errorf("Failed to write %d zeroes at end of %s: %v", embedPost, filename, err)
@@ -251,7 +251,7 @@ func TestFat32Read(t *testing.T) {
 			// make any changes needed to corrupt it
 			corrupted := ""
 			if tt.bytechange >= 0 {
-				b := make([]byte, 1, 1)
+				b := make([]byte, 1)
 				rand.Read(b)
 				f.WriteAt(b, tt.bytechange+pre)
 				corrupted = fmt.Sprintf("corrupted %d", tt.bytechange+pre)
@@ -485,7 +485,7 @@ func TestFat32OpenFile(t *testing.T) {
 							continue
 						}
 					} else {
-						b := make([]byte, 512, 512)
+						b := make([]byte, 512)
 						_, err := readWriter.Read(b)
 						if err != nil && err != io.EOF {
 							t.Errorf("%s: ioutil.ReadAll(readWriter) unexpected error: %v", header, err)
@@ -611,7 +611,7 @@ func TestFat32OpenFile(t *testing.T) {
 			mode := os.O_RDWR | os.O_CREATE
 			// each cluster is 512 bytes, so use 10 clusters and a bit of another
 			size := 10*512 + 22
-			bWrite := make([]byte, size, size)
+			bWrite := make([]byte, size)
 			header := fmt.Sprintf("OpenFile(%s, %s)", path, getOpenMode(mode))
 			readWriter, err := fs.OpenFile(path, mode)
 			switch {
@@ -673,7 +673,7 @@ func TestFat32OpenFile(t *testing.T) {
 		mode := os.O_RDWR | os.O_CREATE
 		// each cluster is 512 bytes, so use 10 clusters and a bit of another
 		size := 10*512 + 22
-		bWrite := make([]byte, size, size)
+		bWrite := make([]byte, size)
 		header := fmt.Sprintf("OpenFile(%s, %s)", path, getOpenMode(mode))
 		readWriter, err := fs.OpenFile(path, mode)
 		switch {
@@ -739,7 +739,7 @@ func TestFat32OpenFile(t *testing.T) {
 			mode := os.O_RDWR | os.O_CREATE
 			// each cluster is 512 bytes, so use 10 clusters and a bit of another
 			size := 10*512 + 22
-			bWrite := make([]byte, size, size)
+			bWrite := make([]byte, size)
 			header := fmt.Sprintf("OpenFile(%s, %s)", path, getOpenMode(mode))
 			readWriter, err := fs.OpenFile(path, mode)
 			switch {

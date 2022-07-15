@@ -39,7 +39,7 @@ func TestDos20BPBFromBytes(t *testing.T) {
 	})
 	t.Run("invalid sector size", func(t *testing.T) {
 		size := uint16(511)
-		b := make([]byte, 13, 13)
+		b := make([]byte, 13)
 		binary.LittleEndian.PutUint16(b[0:2], size)
 		bpb, err := dos20BPBFromBytes(b)
 		if err == nil {

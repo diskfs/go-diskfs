@@ -232,7 +232,7 @@ func TestWritePartitionContents(t *testing.T) {
 				Table:             tt.table,
 				Writable:          true,
 			}
-			b := make([]byte, partitionSize, partitionSize)
+			b := make([]byte, partitionSize)
 			rand.Read(b)
 			reader := bytes.NewReader(b)
 			written, err := d.WritePartitionContents(tt.partition, reader)
@@ -301,7 +301,7 @@ func TestReadPartitionContents(t *testing.T) {
 			}
 
 			// get the actual content
-			b2 := make([]byte, partitionSize*512, partitionSize*512)
+			b2 := make([]byte, partitionSize*512)
 			f.ReadAt(b2, int64(partitionStart*512))
 
 			d := &disk.Disk{
@@ -372,7 +372,7 @@ func TestReadPartitionContents(t *testing.T) {
 			}
 
 			// get the actual content
-			b2 := make([]byte, partitionSize*512, partitionSize*512)
+			b2 := make([]byte, partitionSize*512)
 			f.ReadAt(b2, int64(partitionStart*512))
 
 			d := &disk.Disk{

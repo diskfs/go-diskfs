@@ -32,7 +32,7 @@ func (d *Directory) entriesToBytes(bytesPerCluster int) ([]byte, error) {
 	}
 	remainder := len(b) % bytesPerCluster
 	extra := bytesPerCluster - remainder
-	zeroes := make([]byte, extra, extra)
+	zeroes := make([]byte, extra)
 	b = append(b, zeroes...)
 	return b, nil
 }

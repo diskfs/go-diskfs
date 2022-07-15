@@ -38,7 +38,7 @@ func reverseSlice(s interface{}) {
 
 // toBytes return the 128 bytes for this partition
 func (p *Partition) toBytes() ([]byte, error) {
-	b := make([]byte, PartitionEntrySize, PartitionEntrySize)
+	b := make([]byte, PartitionEntrySize)
 
 	// if the Type is Unused, just return all zeroes
 	if p.Type == Unused {
@@ -160,7 +160,7 @@ func (p *Partition) WriteContents(f util.File, contents io.Reader) (uint64, erro
 	}
 
 	// chunks of physical sector size for efficient writing
-	b := make([]byte, pss, pss)
+	b := make([]byte, pss)
 	// we start at the correct byte location
 	start := p.Start * uint64(lss)
 	// loop in physical sector sizes
@@ -200,7 +200,7 @@ func (p *Partition) ReadContents(f util.File, out io.Writer) (int64, error) {
 	pss, _ := p.sectorSizes()
 	total := int64(0)
 	// chunks of physical sector size for efficient writing
-	b := make([]byte, pss, pss)
+	b := make([]byte, pss)
 	// we start at the correct byte location
 	start := p.GetStart()
 	size := p.GetSize()

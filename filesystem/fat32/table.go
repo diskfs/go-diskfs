@@ -60,7 +60,7 @@ func tableFromBytes(b []byte) (*table, error) {
 
 // bytes returns a FAT32 table as bytes ready to be written to disk
 func (t *table) bytes() ([]byte, error) {
-	b := make([]byte, t.size, t.size)
+	b := make([]byte, t.size)
 
 	// FAT ID and fixed values
 	binary.LittleEndian.PutUint32(b[0:4], t.fatID)

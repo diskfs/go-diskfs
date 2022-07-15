@@ -201,7 +201,7 @@ func (t *Table) partitionArraySector(primary bool) uint64 {
 }
 
 func (t *Table) generateProtectiveMBR() []byte {
-	b := make([]byte, 512, 512)
+	b := make([]byte, 512)
 	// we don't do anything to the first 446 bytes
 	copy(b[510:], getMbrSignature())
 	// create the single all disk partition
@@ -239,7 +239,7 @@ func (t *Table) toPartitionArrayBytes() ([]byte, error) {
 
 	// generate the partition bytes
 	partSize := t.partitionEntrySize * uint32(t.partitionArraySize)
-	bpart := make([]byte, partSize, partSize)
+	bpart := make([]byte, partSize)
 	for i, p := range t.Partitions {
 		// write the primary partition entry
 		b2, err := p.toBytes()
@@ -255,7 +255,7 @@ func (t *Table) toPartitionArrayBytes() ([]byte, error) {
 
 // toGPTBytes write just the gpt header to bytes
 func (t *Table) toGPTBytes(primary bool) ([]byte, error) {
-	b := make([]byte, t.LogicalSectorSize, t.LogicalSectorSize)
+	b := make([]byte, t.LogicalSectorSize)
 
 	// 8 bytes "EFI PART" signature - endianness on this?
 	copy(b[0:8], getEfiSignature())
@@ -505,7 +505,7 @@ func (t *Table) Write(f util.File, size int64) error {
 // returns errors if fails at any stage reading the disk or processing the bytes on disk as a GPT
 func Read(f util.File, logicalBlockSize, physicalBlockSize int) (*Table, error) {
 	// read the data off of the disk
-	b := make([]byte, gptSize+logicalBlockSize*2, gptSize+logicalBlockSize*2)
+	b := make([]byte, gptSize+logicalBlockSize*2)
 	read, err := f.ReadAt(b, 0)
 	if err != nil {
 		return nil, fmt.Errorf("Error reading GPT from file: %w", err)
@@ -519,7 +519,7 @@ func Read(f util.File, logicalBlockSize, physicalBlockSize int) (*Table, error) 
 // GetPartitions get the partitions
 func (t *Table) GetPartitions() []part.Partition {
 	// each Partition matches the part.Partition interface, but golang does not accept passing them in a slice
-	parts := make([]part.Partition, len(t.Partitions), len(t.Partitions))
+	parts := make([]part.Partition, len(t.Partitions))
 	for i, p := range t.Partitions {
 		parts[i] = p
 	}

@@ -194,7 +194,7 @@ func TestTableWrite(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Error opening file %s: %v", mbrFile, err)
 		}
-		mbrBytes := make([]byte, 512, 512)
+		mbrBytes := make([]byte, 512)
 		read, err := mbr.ReadAt(mbrBytes, 0)
 		if err != nil {
 			t.Fatalf("Error reading MBR from file %s: %v", mbrFile, err)
@@ -227,7 +227,7 @@ func TestTableWrite(t *testing.T) {
 			t.Errorf("mismatched MBR")
 		}
 		// need to check that bootloader was unchanged
-		bootloaderBytes := make([]byte, 446, 446)
+		bootloaderBytes := make([]byte, 446)
 		read, err = mbr.ReadAt(bootloaderBytes, 0)
 		if err != nil {
 			t.Fatalf("Error reading bootloader from file %s: %v", mbrFile, err)

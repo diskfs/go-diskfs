@@ -61,7 +61,7 @@ func TestMsDosBootSectorFromBytes(t *testing.T) {
 		}
 	})
 	t.Run("mismatched length greater than 512", func(t *testing.T) {
-		b := make([]byte, 513, 513)
+		b := make([]byte, 513)
 		bs, err := msDosBootSectorFromBytes(b)
 		if err == nil {
 			t.Errorf("Did not return expected error")
@@ -200,7 +200,7 @@ func TestMsDosBootSectorToBytes(t *testing.T) {
 		}
 		// it should have passed it
 		calculatedBootCode := b[90:510]
-		expectedBootCode := make([]byte, 420, 420)
+		expectedBootCode := make([]byte, 420)
 		copy(expectedBootCode, bs.bootCode)
 		if bytes.Compare(calculatedBootCode, expectedBootCode) != 0 {
 			t.Log(calculatedBootCode)
@@ -210,7 +210,7 @@ func TestMsDosBootSectorToBytes(t *testing.T) {
 	})
 	t.Run("long boot code", func(t *testing.T) {
 		bs := getValidMsDosBootSector()
-		bc := make([]byte, 600, 600)
+		bc := make([]byte, 600)
 		rand.Read(bc)
 		bs.bootCode = bc
 		b, err := bs.toBytes()

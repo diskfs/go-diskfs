@@ -31,7 +31,7 @@ func TestFsInformationSectorFromBytes(t *testing.T) {
 		}
 	})
 	t.Run("mismatched length greater than 512", func(t *testing.T) {
-		b := make([]byte, 513, 513)
+		b := make([]byte, 513)
 		fsis, err := fsInformationSectorFromBytes(b)
 		if err == nil {
 			t.Errorf("Did not return expected error")

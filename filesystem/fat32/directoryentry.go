@@ -111,7 +111,7 @@ func (de *directoryEntry) toBytes() ([]byte, error) {
 	}
 
 	// this is for the regular 8.3 entry
-	dosBytes := make([]byte, bytesPerSlot, bytesPerSlot)
+	dosBytes := make([]byte, bytesPerSlot)
 	createDate, createTime := timeToDateTime(de.createTime)
 	modifyDate, modifyTime := timeToDateTime(de.modifyTime)
 	accessDate, _ := timeToDateTime(de.accessTime)
@@ -133,7 +133,7 @@ func (de *directoryEntry) toBytes() ([]byte, error) {
 	copy(dosBytes[0:8], shortName)
 	copy(dosBytes[8:11], extension)
 	binary.LittleEndian.PutUint32(dosBytes[28:32], de.fileSize)
-	clusterLocation := make([]byte, 4, 4)
+	clusterLocation := make([]byte, 4)
 	binary.LittleEndian.PutUint32(clusterLocation, de.clusterLocation)
 	dosBytes[26] = clusterLocation[0]
 	dosBytes[27] = clusterLocation[1]
@@ -408,7 +408,7 @@ func stringToValidASCIIBytes(s string) ([]byte, error) {
 // convert a string to a byte array, if all characters are valid ascii
 func stringToASCIIBytes(s string) ([]byte, error) {
 	length := len(s)
-	b := make([]byte, length, length)
+	b := make([]byte, length)
 	// convert the name into 11 bytes
 	r := []rune(s)
 	// take the first 8 characters

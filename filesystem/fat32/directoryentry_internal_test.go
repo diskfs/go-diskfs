@@ -200,7 +200,7 @@ func getValidDirectoryEntries() ([]*directoryEntry, [][]byte, error) {
 
 	// we only have 9 actual 32-byte entries, of which 4 are real and 3 are VFAT extensionBytes
 	//   the rest are all 0s (as they should be), so we will include to exercise it
-	b := make([][]byte, 8, 8)
+	b := make([][]byte, 8)
 	//
 	b[0] = input[start : start+32]
 	b[1] = input[start+32 : start+4*32]
@@ -211,7 +211,7 @@ func getValidDirectoryEntries() ([]*directoryEntry, [][]byte, error) {
 	b[6] = input[start+11*32 : start+12*32]
 	// how many zeroes will come from cluster?
 	remainder := 2048 - (12 * 32)
-	b[7] = make([]byte, remainder, remainder)
+	b[7] = make([]byte, remainder)
 	return entries, b, nil
 }
 
@@ -317,7 +317,7 @@ func getValidDirectoryEntriesExtended() ([]*directoryEntry, [][]byte, error) {
 	// start of foo directory in fat32.img - cluster 3 = sector 349 = bytes 349*512 = 178688 = 0x0002ba00
 	start := 178688
 
-	b := make([][]byte, len(entries), len(entries))
+	b := make([][]byte, len(entries))
 	for i := 0; i < len(entries); i++ {
 		b[i] = input[start+i*32 : start+i*32+32]
 	}

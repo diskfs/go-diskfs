@@ -469,7 +469,7 @@ func TestFinalizeRockRidge(t *testing.T) {
 				continue
 			}
 			// check the contents
-			b := make([]byte, 50, 50)
+			b := make([]byte, 50)
 			read, err = f.Read(b)
 			if err != nil && err != io.EOF {
 				t.Errorf("Error reading from file %s: %v", k, err)

@@ -71,7 +71,7 @@ func TestFileRead(t *testing.T) {
 		}
 
 		filesize := blocksize + 5
-		b := make([]byte, filesize, filesize)
+		b := make([]byte, filesize)
 		read, err := f.Read(b)
 		if err != nil && err != io.EOF {
 			t.Errorf("received unexpected error when reading: %v", err)
@@ -89,7 +89,7 @@ func TestFileRead(t *testing.T) {
 func TestFileWrite(t *testing.T) {
 	// pretty simple: never should be able to write as it is a read-only filesystem
 	f := &squashfs.File{}
-	b := make([]byte, 8, 8)
+	b := make([]byte, 8)
 	written, err := f.Write(b)
 	if err == nil {
 		t.Errorf("received no error when should have been prevented from writing")

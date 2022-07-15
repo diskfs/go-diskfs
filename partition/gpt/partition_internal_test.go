@@ -20,7 +20,7 @@ const (
 
 func TestFromBytes(t *testing.T) {
 	t.Run("Short byte slice", func(t *testing.T) {
-		b := make([]byte, PartitionEntrySize-1, PartitionEntrySize-1)
+		b := make([]byte, PartitionEntrySize-1)
 		rand.Read(b)
 		partition, err := partitionFromBytes(b, 2048, 2048)
 		if partition != nil {
@@ -35,7 +35,7 @@ func TestFromBytes(t *testing.T) {
 		}
 	})
 	t.Run("Long byte slice", func(t *testing.T) {
-		b := make([]byte, PartitionEntrySize+1, PartitionEntrySize+1)
+		b := make([]byte, PartitionEntrySize+1)
 		rand.Read(b)
 		partition, err := partitionFromBytes(b, 2048, 2048)
 		if partition != nil {
@@ -374,7 +374,7 @@ func TestWriteContents(t *testing.T) {
 			Type:       EFISystemPartition,
 		}
 		// make a byte array that is too big
-		b := make([]byte, 2*512, 2*512)
+		b := make([]byte, 2*512)
 		rand.Read(b)
 		reader := bytes.NewReader(b)
 		expected := "Requested to write at least"

@@ -373,7 +373,7 @@ func Read(file util.File, size int64, start int64, blocksize int64) (*FileSystem
 
 	// load the information from the disk
 	// read first 512 bytes from the file
-	bsb := make([]byte, SectorSize512, SectorSize512)
+	bsb := make([]byte, SectorSize512)
 	n, err := file.ReadAt(bsb, start)
 	if err != nil {
 		return nil, fmt.Errorf("Could not read bytes from file: %v", err)
@@ -394,7 +394,7 @@ func Read(file util.File, size int64, start int64, blocksize int64) (*FileSystem
 	fatPrimaryStart := uint64(reservedSectors) * uint64(SectorSize512)
 	fatSecondaryStart := uint64(fatPrimaryStart) + uint64(fatSize)
 
-	fsisBytes := make([]byte, 512, 512)
+	fsisBytes := make([]byte, 512)
 	read, err := file.ReadAt(fsisBytes, int64(bs.biosParameterBlock.fsInformationSector)*int64(blocksize)+int64(start))
 	if err != nil {
 		return nil, fmt.Errorf("Unable to read bytes for FSInformationSector: %v", err)
@@ -407,7 +407,7 @@ func Read(file util.File, size int64, start int64, blocksize int64) (*FileSystem
 		return nil, fmt.Errorf("Error reading FileSystem Information Sector: %v", err)
 	}
 
-	b := make([]byte, fatSize, fatSize)
+	b := make([]byte, fatSize)
 	file.ReadAt(b, int64(fatPrimaryStart)+int64(start))
 	fat, err := tableFromBytes(b)
 
@@ -461,7 +461,7 @@ func (fs *FileSystem) ReadDir(p string) ([]os.FileInfo, error) {
 	// once we have made it here, looping is done. We have found the final entry
 	// we need to return all of the file info
 	count := len(entries)
-	ret := make([]os.FileInfo, count, count)
+	ret := make([]os.FileInfo, count)
 	for i, e := range entries {
 		shortName := e.filenameShort
 		if e.lowercaseShortname {
@@ -619,7 +619,7 @@ func (fs *FileSystem) readDirectory(dir *Directory) ([]*directoryEntry, error) {
 		// bytes where the cluster starts
 		clusterStart := fs.start + int64(fs.dataStart) + int64(cluster-2)*int64(fs.bytesPerCluster)
 		// length of cluster in bytes
-		tmpb := make([]byte, fs.bytesPerCluster, fs.bytesPerCluster)
+		tmpb := make([]byte, fs.bytesPerCluster)
 		// read the entire cluster
 		fs.file.ReadAt(tmpb, clusterStart)
 		b = append(b, tmpb...)

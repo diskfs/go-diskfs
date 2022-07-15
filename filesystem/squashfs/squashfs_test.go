@@ -13,7 +13,7 @@ import (
 )
 
 func getOpenMode(mode int) string {
-	modes := make([]string, 0, 0)
+	modes := make([]string, 0)
 	if mode&os.O_CREATE == os.O_CREATE {
 		modes = append(modes, "CREATE")
 	}

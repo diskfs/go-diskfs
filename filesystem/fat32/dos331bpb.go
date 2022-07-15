@@ -49,7 +49,7 @@ func dos331BPBFromBytes(b []byte) (*dos331BPB, error) {
 
 // ToBytes returns the bytes for a DOS 3.31 BIOS Parameter Block, ready to be written to disk
 func (bpb *dos331BPB) toBytes() ([]byte, error) {
-	b := make([]byte, 25, 25)
+	b := make([]byte, 25)
 	dos20Bytes, err := bpb.dos20BPB.toBytes()
 	if err != nil {
 		return nil, fmt.Errorf("Error converting embedded DOS 2.0 BPB to bytes: %v", err)

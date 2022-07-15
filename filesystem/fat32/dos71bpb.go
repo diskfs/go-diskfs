@@ -134,9 +134,9 @@ func (bpb *dos71EBPB) toBytes() ([]byte, error) {
 	// how many bytes is it? for extended, add the extended-specific stuff
 	switch bpb.extendedBootSignature {
 	case shortDos71EBPB:
-		b = make([]byte, 60, 60)
+		b = make([]byte, 60)
 	case longDos71EBPB:
-		b = make([]byte, 79, 79)
+		b = make([]byte, 79)
 		// do we have a valid volume label?
 		label := bpb.volumeLabel
 		if len(label) > 11 {

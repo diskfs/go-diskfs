@@ -63,7 +63,7 @@ func fsInformationSectorFromBytes(b []byte) (*FSInformationSector, error) {
 
 // ToBytes returns a FAT32 Filesystem Information Sector ready to be written to disk
 func (fsis *FSInformationSector) toBytes() ([]byte, error) {
-	b := make([]byte, SectorSize512, SectorSize512)
+	b := make([]byte, SectorSize512)
 
 	// signatures
 	binary.BigEndian.PutUint32(b[0:4], uint32(fsInfoSectorSignatureStart))

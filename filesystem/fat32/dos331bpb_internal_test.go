@@ -36,7 +36,7 @@ func TestDos331BPBFromBytes(t *testing.T) {
 	})
 	t.Run("invalid Dos20BPB", func(t *testing.T) {
 		size := uint16(511)
-		b := make([]byte, 25, 25)
+		b := make([]byte, 25)
 		binary.LittleEndian.PutUint16(b[0:2], size)
 		bpb, err := dos331BPBFromBytes(b)
 		if err == nil {

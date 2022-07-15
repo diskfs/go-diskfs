@@ -64,7 +64,7 @@ func TestDos71EBPBFromBytes(t *testing.T) {
 		}
 	})
 	t.Run("mismatched length greater than 79", func(t *testing.T) {
-		b := make([]byte, 80, 80)
+		b := make([]byte, 80)
 		bpb, size, err := dos71EBPBFromBytes(b)
 		if err == nil {
 			t.Errorf("Did not return expected error")
@@ -82,7 +82,7 @@ func TestDos71EBPBFromBytes(t *testing.T) {
 	})
 	t.Run("invalid Dos331BPB", func(t *testing.T) {
 		size := uint16(511)
-		b := make([]byte, 25, 25)
+		b := make([]byte, 25)
 		binary.LittleEndian.PutUint16(b[0:2], size)
 		bpb, err := dos331BPBFromBytes(b)
 		if err == nil {

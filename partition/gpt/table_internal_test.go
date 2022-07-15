@@ -49,7 +49,7 @@ func GetValidTable() *Table {
 
 func TestTableFromBytes(t *testing.T) {
 	t.Run("Short byte slice", func(t *testing.T) {
-		b := make([]byte, gptSize+512-1, gptSize+512-1)
+		b := make([]byte, gptSize+512-1)
 		rand.Read(b)
 		table, err := tableFromBytes(b, 512, 512)
 		if table != nil {

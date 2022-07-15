@@ -42,7 +42,7 @@ func dos20BPBFromBytes(b []byte) (*dos20BPB, error) {
 
 // ToBytes returns the bytes for a DOS 2.0 BIOS Parameter Block, ready to be written to disk
 func (bpb *dos20BPB) toBytes() ([]byte, error) {
-	b := make([]byte, 13, 13)
+	b := make([]byte, 13)
 	binary.LittleEndian.PutUint16(b[0:2], uint16(bpb.bytesPerSector))
 	b[2] = bpb.sectorsPerCluster
 	binary.LittleEndian.PutUint16(b[3:5], bpb.reservedSectors)
