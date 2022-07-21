@@ -171,7 +171,7 @@ func (p *Partition) WriteContents(f util.File, contents io.Reader) (uint64, erro
 		}
 		tmpTotal := uint64(read) + total
 		if uint64(tmpTotal) > p.Size {
-			return total, fmt.Errorf("requested to write at least %d bytes to partition but maximum size is %d", tmpTotal, p.Size)
+			return total, fmt.Errorf("Requested to write at least %d bytes to partition but maximum size is %d", tmpTotal, p.Size)
 		}
 		if read > 0 {
 			var written int

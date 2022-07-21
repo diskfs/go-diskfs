@@ -85,7 +85,7 @@ func Create(f util.File, size int64, start int64, blocksize int64, workspace str
 			return nil, fmt.Errorf("Could not stat working directory: %v", err)
 		}
 		if !info.IsDir() {
-			return nil, fmt.Errorf("provided workspace is not a directory: %s", workspace)
+			return nil, fmt.Errorf("Provided workspace is not a directory: %s", workspace)
 		}
 		workdir = workspace
 	} else {
