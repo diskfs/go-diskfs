@@ -71,7 +71,7 @@ fmt-check:
 
 ## Lint the files
 lint: golangci-lint
-	@$(BUILD_CMD) $(LINTER) run --disable-all --enable=revive ./...
+	@$(BUILD_CMD) $(LINTER) run ./...
 
 ## Vet the files
 vet:
