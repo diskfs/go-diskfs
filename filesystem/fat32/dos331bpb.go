@@ -37,7 +37,7 @@ func dos331BPBFromBytes(b []byte) (*dos331BPB, error) {
 	bpb := dos331BPB{}
 	dos20bpb, err := dos20BPBFromBytes(b[0:13])
 	if err != nil {
-		return nil, fmt.Errorf("error reading embedded DOS 2.0 BPB: %v", err)
+		return nil, fmt.Errorf("Error reading embedded DOS 2.0 BPB: %v", err)
 	}
 	bpb.dos20BPB = dos20bpb
 	bpb.sectorsPerTrack = binary.LittleEndian.Uint16(b[13:15])
@@ -52,7 +52,7 @@ func (bpb *dos331BPB) toBytes() ([]byte, error) {
 	b := make([]byte, 25)
 	dos20Bytes, err := bpb.dos20BPB.toBytes()
 	if err != nil {
-		return nil, fmt.Errorf("error converting embedded DOS 2.0 BPB to bytes: %v", err)
+		return nil, fmt.Errorf("Error converting embedded DOS 2.0 BPB to bytes: %v", err)
 	}
 	copy(b[0:13], dos20Bytes)
 	binary.LittleEndian.PutUint16(b[13:15], bpb.sectorsPerTrack)

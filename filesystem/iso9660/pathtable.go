@@ -96,7 +96,7 @@ func (pt *pathTable) getLocation(p string) (uint32, error) {
 	// break path down into parts and levels
 	parts, err := splitPath(p)
 	if err != nil {
-		return 0, fmt.Errorf("could not parse path: %v", err)
+		return 0, fmt.Errorf("Could not parse path: %v", err)
 	}
 	// level represents the level of the parent
 	var level uint16 = 1

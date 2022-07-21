@@ -12,7 +12,7 @@ func TestParseXAttrIndex(t *testing.T) {
 		x   *xAttrIndex
 		err error
 	}{
-		{[]byte{0x0, 0x1}, nil, fmt.Errorf("cannot parse xAttr Index of size %d less than minimum %d", 2, xAttrIDEntrySize)},
+		{[]byte{0x0, 0x1}, nil, fmt.Errorf("Cannot parse xAttr Index of size %d less than minimum %d", 2, xAttrIDEntrySize)},
 		{[]byte{
 			0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7,
 			0x8, 0x9, 0xa, 0xb,

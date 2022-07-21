@@ -171,7 +171,7 @@ func (v *primaryVolumeDescriptor) toBytes() []byte {
 // volumeDescriptorFromBytes create a volumeDescriptor struct from bytes
 func volumeDescriptorFromBytes(b []byte) (volumeDescriptor, error) {
 	if len(b) != int(volumeDescriptorSize) {
-		return nil, fmt.Errorf("cannot read volume descriptor from bytes of length %d, must be %d", len(b), volumeDescriptorSize)
+		return nil, fmt.Errorf("Cannot read volume descriptor from bytes of length %d, must be %d", len(b), volumeDescriptorSize)
 	}
 	// validate the signature
 	tmpb := make([]byte, 8)
@@ -194,12 +194,12 @@ func volumeDescriptorFromBytes(b []byte) (volumeDescriptor, error) {
 	case volumeDescriptorPrimary:
 		vd, err = parsePrimaryVolumeDescriptor(b)
 		if err != nil {
-			return nil, fmt.Errorf("unable to parse primary volume descriptor bytes: %v", err)
+			return nil, fmt.Errorf("Unable to parse primary volume descriptor bytes: %v", err)
 		}
 	case volumeDescriptorBoot:
 		vd, err = parseBootVolumeDescriptor(b)
 		if err != nil {
-			return nil, fmt.Errorf("unable to parse primary volume descriptor bytes: %v", err)
+			return nil, fmt.Errorf("Unable to parse primary volume descriptor bytes: %v", err)
 		}
 	case volumeDescriptorTerminator:
 		vd = &terminatorVolumeDescriptor{}
@@ -210,10 +210,10 @@ func volumeDescriptorFromBytes(b []byte) (volumeDescriptor, error) {
 	case volumeDescriptorSupplementary:
 		vd, err = parseSupplementaryVolumeDescriptor(b)
 		if err != nil {
-			return nil, fmt.Errorf("unable to parse primary volume descriptor bytes: %v", err)
+			return nil, fmt.Errorf("Unable to parse primary volume descriptor bytes: %v", err)
 		}
 	default:
-		return nil, fmt.Errorf("unknown volume descriptor type %d", vdType)
+		return nil, fmt.Errorf("Unknown volume descriptor type %d", vdType)
 	}
 	return vd, nil
 }
@@ -223,11 +223,11 @@ func parsePrimaryVolumeDescriptor(b []byte) (*primaryVolumeDescriptor, error) {
 
 	creation, err := decBytesToTime(b[813 : 813+17])
 	if err != nil {
-		return nil, fmt.Errorf("unable to convert creation date/time from bytes: %v", err)
+		return nil, fmt.Errorf("Unable to convert creation date/time from bytes: %v", err)
 	}
 	modification, err := decBytesToTime(b[830 : 830+17])
 	if err != nil {
-		return nil, fmt.Errorf("unable to convert modification date/time from bytes: %v", err)
+		return nil, fmt.Errorf("Unable to convert modification date/time from bytes: %v", err)
 	}
 	// expiration can be never
 	nullBytes := []byte{48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 0}
@@ -237,19 +237,19 @@ func parsePrimaryVolumeDescriptor(b []byte) (*primaryVolumeDescriptor, error) {
 	if !bytes.Equal(expirationBytes, nullBytes) {
 		expiration, err = decBytesToTime(expirationBytes)
 		if err != nil {
-			return nil, fmt.Errorf("unable to convert expiration date/time from bytes: %v", err)
+			return nil, fmt.Errorf("Unable to convert expiration date/time from bytes: %v", err)
 		}
 	}
 	if !bytes.Equal(effectiveBytes, nullBytes) {
 		effective, err = decBytesToTime(effectiveBytes)
 		if err != nil {
-			return nil, fmt.Errorf("unable to convert effective date/time from bytes: %v", err)
+			return nil, fmt.Errorf("Unable to convert effective date/time from bytes: %v", err)
 		}
 	}
 
 	rootDirEntry, err := dirEntryFromBytes(b[156:156+34], nil)
 	if err != nil {
-		return nil, fmt.Errorf("unable to read root directory entry: %v", err)
+		return nil, fmt.Errorf("Unable to read root directory entry: %v", err)
 	}
 
 	return &primaryVolumeDescriptor{
@@ -324,11 +324,11 @@ func parseSupplementaryVolumeDescriptor(b []byte) (*supplementaryVolumeDescripto
 
 	creation, err := decBytesToTime(b[813 : 813+17])
 	if err != nil {
-		return nil, fmt.Errorf("unable to convert creation date/time from bytes: %v", err)
+		return nil, fmt.Errorf("Unable to convert creation date/time from bytes: %v", err)
 	}
 	modification, err := decBytesToTime(b[830 : 830+17])
 	if err != nil {
-		return nil, fmt.Errorf("unable to convert modification date/time from bytes: %v", err)
+		return nil, fmt.Errorf("Unable to convert modification date/time from bytes: %v", err)
 	}
 	// expiration can be never
 	nullBytes := []byte{48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 0}
@@ -338,20 +338,20 @@ func parseSupplementaryVolumeDescriptor(b []byte) (*supplementaryVolumeDescripto
 	if !bytes.Equal(expirationBytes, nullBytes) {
 		expiration, err = decBytesToTime(expirationBytes)
 		if err != nil {
-			return nil, fmt.Errorf("unable to convert expiration date/time from bytes: %v", err)
+			return nil, fmt.Errorf("Unable to convert expiration date/time from bytes: %v", err)
 		}
 	}
 	if !bytes.Equal(effectiveBytes, nullBytes) {
 		effective, err = decBytesToTime(effectiveBytes)
 		if err != nil {
-			return nil, fmt.Errorf("unable to convert effective date/time from bytes: %v", err)
+			return nil, fmt.Errorf("Unable to convert effective date/time from bytes: %v", err)
 		}
 	}
 
 	// no susp extensions for the dir entry in the volume descriptor
 	rootDirEntry, err := dirEntryFromBytes(b[156:156+34], nil)
 	if err != nil {
-		return nil, fmt.Errorf("unable to read root directory entry: %v", err)
+		return nil, fmt.Errorf("Unable to read root directory entry: %v", err)
 	}
 
 	return &supplementaryVolumeDescriptor{

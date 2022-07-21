@@ -89,7 +89,7 @@ func tableFromBytes(b []byte, logicalBlockSize, physicalBlockSize int) (*Table, 
 
 	// validate signature
 	if bytes.Compare(mbrSignature, getMbrSignature()) != 0 {
-		return nil, fmt.Errorf("invalid MBR Signature %v", mbrSignature)
+		return nil, fmt.Errorf("Invalid MBR Signature %v", mbrSignature)
 	}
 
 	parts := make([]*Partition, 0, partitionEntriesCount)
@@ -100,7 +100,7 @@ func tableFromBytes(b []byte, logicalBlockSize, physicalBlockSize int) (*Table, 
 		end := start + partitionEntrySize
 		p, err := partitionFromBytes(b[start:end], logicalSectorSize, physicalSectorSize)
 		if err != nil {
-			return nil, fmt.Errorf("error reading partition entry %d: %v", i, err)
+			return nil, fmt.Errorf("Error reading partition entry %d: %v", i, err)
 		}
 		parts = append(parts, p)
 	}
@@ -125,7 +125,7 @@ func Read(f util.File, logicalBlockSize, physicalBlockSize int) (*Table, error) 
 	b := make([]byte, mbrSize, mbrSize)
 	read, err := f.ReadAt(b, 0)
 	if err != nil {
-		return nil, fmt.Errorf("error reading MBR from file: %v", err)
+		return nil, fmt.Errorf("Error reading MBR from file: %v", err)
 	}
 	if read != len(b) {
 		return nil, fmt.Errorf("read only %d bytes of MBR from file instead of expected %d", read, len(b))
@@ -143,7 +143,7 @@ func (t *Table) toBytes() ([]byte, error) {
 		if i < len(t.Partitions) {
 			btmp, err := t.Partitions[i].toBytes()
 			if err != nil {
-				return nil, fmt.Errorf("could not prepare partition %d to write on disk: %v", i, err)
+				return nil, fmt.Errorf("Could not prepare partition %d to write on disk: %v", i, err)
 			}
 			b = append(b, btmp...)
 		} else {
@@ -161,12 +161,12 @@ func (t *Table) toBytes() ([]byte, error) {
 func (t *Table) Write(f util.File, size int64) error {
 	b, err := t.toBytes()
 	if err != nil {
-		return fmt.Errorf("error preparing partition table for writing to disk: %v", err)
+		return fmt.Errorf("Error preparing partition table for writing to disk: %v", err)
 	}
 
 	written, err := f.WriteAt(b, partitionEntriesStart)
 	if err != nil {
-		return fmt.Errorf("error writing partition table to disk: %v", err)
+		return fmt.Errorf("Error writing partition table to disk: %v", err)
 	}
 	if written != len(b) {
 		return fmt.Errorf("Partition table wrote %d bytes to disk instead of the expected %d", written, len(b))

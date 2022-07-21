@@ -97,7 +97,7 @@ func partitionFromBytes(b []byte, logicalSectorSize, physicalSectorSize int) (*P
 	case 0x80:
 		bootable = true
 	default:
-		return nil, fmt.Errorf("invalid partition")
+		return nil, fmt.Errorf("Invalid partition")
 	}
 
 	return &Partition{
@@ -132,7 +132,7 @@ func (p *Partition) WriteContents(f util.File, contents io.Reader) (uint64, erro
 	for {
 		read, err := contents.Read(b)
 		if err != nil && err != io.EOF {
-			return total, fmt.Errorf("could not read contents to pass to partition: %v", err)
+			return total, fmt.Errorf("Could not read contents to pass to partition: %v", err)
 		}
 		tmpTotal := uint64(read) + total
 		if uint32(tmpTotal) > size {
@@ -142,7 +142,7 @@ func (p *Partition) WriteContents(f util.File, contents io.Reader) (uint64, erro
 		if read > 0 {
 			written, err = f.WriteAt(b[:read], int64(start)+int64(total))
 			if err != nil {
-				return total, fmt.Errorf("error writing to file: %v", err)
+				return total, fmt.Errorf("Error writing to file: %v", err)
 			}
 			// increment our total
 			total = total + uint64(written)
@@ -174,7 +174,7 @@ func (p *Partition) ReadContents(f util.File, out io.Writer) (int64, error) {
 	for {
 		read, err := f.ReadAt(b, int64(start)+total)
 		if err != nil && err != io.EOF {
-			return total, fmt.Errorf("error reading from file: %v", err)
+			return total, fmt.Errorf("Error reading from file: %v", err)
 		}
 		if read > 0 {
 			out.Write(b[:read])

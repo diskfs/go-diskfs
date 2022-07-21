@@ -33,7 +33,7 @@ func tmpSquashfsFile() (*os.File, error) {
 	filename := "squashfs_test.sqs"
 	f, err := ioutil.TempFile("", filename)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create tempfile %s :%v", filename, err)
+		return nil, fmt.Errorf("Failed to create tempfile %s :%v", filename, err)
 	}
 	return f, nil
 }
@@ -42,7 +42,7 @@ func getValidSquashfsFSWorkspace() (*squashfs.FileSystem, error) {
 	// create the filesystem
 	f, err := tmpSquashfsFile()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create squashfs tmpfile: %v", err)
+		return nil, fmt.Errorf("Failed to create squashfs tmpfile: %v", err)
 	}
 	return squashfs.Create(f, 0, 0, 4096)
 }
@@ -50,7 +50,7 @@ func getValidSquashfsFSWorkspace() (*squashfs.FileSystem, error) {
 func getValidSquashfsFSReadOnly() (*squashfs.FileSystem, error) {
 	f, err := os.Open(squashfs.Squashfsfile)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read squashfs testfile %s: %v", squashfs.Squashfsfile, err)
+		return nil, fmt.Errorf("Failed to read squashfs testfile %s: %v", squashfs.Squashfsfile, err)
 	}
 	return squashfs.Read(f, 0, 0, 4096)
 }
@@ -230,11 +230,11 @@ func TestSquashfsOpenFile(t *testing.T) {
 			}
 			tests := []testStruct{
 				// error opening a directory
-				{"/", os.O_RDONLY, "", fmt.Errorf("cannot open directory %s as file", "/")},
-				{"/abcdefg", os.O_RDONLY, "", fmt.Errorf("target file %s does not exist", "/abcdefg")},
+				{"/", os.O_RDONLY, "", fmt.Errorf("Cannot open directory %s as file", "/")},
+				{"/abcdefg", os.O_RDONLY, "", fmt.Errorf("Target file %s does not exist", "/abcdefg")},
 				{"/foo/filename_10", os.O_RDONLY, "filename_10\n", nil},
 				{"/foo/filename_75", os.O_RDONLY, "filename_75\n", nil},
-				{"/README.MD", os.O_RDONLY, "", fmt.Errorf("target file %s does not exist", "/README.MD")},
+				{"/README.MD", os.O_RDONLY, "", fmt.Errorf("Target file %s does not exist", "/README.MD")},
 				{"/README.md", os.O_RDONLY, "README\n", nil},
 			}
 			runTests(t, fs, tests)
@@ -255,9 +255,9 @@ func TestSquashfsOpenFile(t *testing.T) {
 			}
 			tests := []testStruct{
 				// error opening a directory
-				{"/", os.O_RDONLY, "", fmt.Errorf("cannot open directory %s as file", "/")},
+				{"/", os.O_RDONLY, "", fmt.Errorf("Cannot open directory %s as file", "/")},
 				// open non-existent file for read or read write
-				{"/abcdefg", os.O_RDONLY, "", fmt.Errorf("target file %s does not exist", "/abcdefg")},
+				{"/abcdefg", os.O_RDONLY, "", fmt.Errorf("Target file %s does not exist", "/abcdefg")},
 				// open file for read or read write and check contents
 				{"/FOO/FILENA01", os.O_RDONLY, "filename_1\n", nil},
 				{"/FOO/FILENA75", os.O_RDONLY, "filename_75\n", nil},

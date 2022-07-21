@@ -27,7 +27,7 @@ func dos20BPBFromBytes(b []byte) (*dos20BPB, error) {
 	// make sure we have a valid sector size
 	sectorSize := binary.LittleEndian.Uint16(b[0:2])
 	if sectorSize != uint16(SectorSize512) {
-		return nil, fmt.Errorf("invalid sector size %d provided in DOS 2.0 BPB. Must be %d", sectorSize, SectorSize512)
+		return nil, fmt.Errorf("Invalid sector size %d provided in DOS 2.0 BPB. Must be %d", sectorSize, SectorSize512)
 	}
 	bpb.bytesPerSector = SectorSize512
 	bpb.sectorsPerCluster = uint8(b[2])

@@ -23,7 +23,7 @@ func TestRead(t *testing.T) {
 	}{
 		{"./mbr/testdata/mbr.img", "mbr", nil},
 		{"./gpt/testdata/gpt.img", "gpt", nil},
-		{"", "", fmt.Errorf("unknown disk partition type")},
+		{"", "", fmt.Errorf("Unknown disk partition type")},
 	}
 	for _, tt := range tests {
 		// create a blank file if we did not provide a path to a test file

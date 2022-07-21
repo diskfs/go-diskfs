@@ -16,7 +16,7 @@ func get9660PathTable() (*pathTable, []byte, []byte, error) {
 	// read correct bytes off of disk
 	input, err := os.ReadFile(ISO9660File)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("error reading data from iso9660 test fixture %s: %v", ISO9660File, err)
+		return nil, nil, nil, fmt.Errorf("Error reading data from iso9660 test fixture %s: %v", ISO9660File, err)
 	}
 
 	startL := pathTableLSector * blocksize // start of pathtable in file.iso
@@ -62,7 +62,7 @@ func getRockRidgePathTable() (*pathTable, []byte, []byte, error) {
 	// read correct bytes off of disk
 	input, err := os.ReadFile(RockRidgeFile)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("error reading data from iso9660 test fixture %s: %v", RockRidgeFile, err)
+		return nil, nil, nil, fmt.Errorf("Error reading data from iso9660 test fixture %s: %v", RockRidgeFile, err)
 	}
 
 	startL := pathTableLSector * blocksize // start of pathtable in file.iso

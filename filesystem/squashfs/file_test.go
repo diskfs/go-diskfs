@@ -109,7 +109,7 @@ func TestFileSeek(t *testing.T) {
 		{100, io.SeekStart, 100, nil},
 		{100, io.SeekCurrent, 100, nil},
 		{50, io.SeekEnd, 150, nil},
-		{250, io.SeekEnd, 0, fmt.Errorf("cannot set offset %d before start of file", 250)},
+		{250, io.SeekEnd, 0, fmt.Errorf("Cannot set offset %d before start of file", 250)},
 	}
 
 	for i, tt := range tests {

@@ -57,7 +57,7 @@ type FinalizeOptions struct {
 // Finalize finalize a read-only filesystem by writing it out to a read-only format
 func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 	if fs.workspace == "" {
-		return fmt.Errorf("cannot finalize an already finalized filesystem")
+		return fmt.Errorf("Cannot finalize an already finalized filesystem")
 	}
 
 	/*
@@ -97,7 +97,7 @@ func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 	// or file
 	fileList, err := walkTree(fs.Workspace())
 	if err != nil {
-		return fmt.Errorf("error walking tree: %v", err)
+		return fmt.Errorf("Error walking tree: %v", err)
 	}
 
 	// location holds where we are writing in our file
@@ -124,7 +124,7 @@ func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 	//
 	dataWritten, err := writeDataBlocks(fileList, f, fs.workspace, blocksize, compressor, location)
 	if err != nil {
-		return fmt.Errorf("error writing file data blocks: %v", err)
+		return fmt.Errorf("Error writing file data blocks: %v", err)
 	}
 	location += int64(dataWritten)
 
@@ -134,7 +134,7 @@ func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 	fragmentBlockStart := location
 	fragmentBlocks, fragsWritten, err := writeFragmentBlocks(fileList, f, fs.workspace, blocksize, options, fragmentBlockStart)
 	if err != nil {
-		return fmt.Errorf("error writing file fragment blocks: %v", err)
+		return fmt.Errorf("Error writing file fragment blocks: %v", err)
 	}
 	location += int64(fragsWritten)
 
@@ -215,14 +215,14 @@ func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 	// write the inodes to the file
 	inodesWritten, inodeTableLocation, err := writeInodes(fileList, f, compressor, location)
 	if err != nil {
-		return fmt.Errorf("error writing inode data blocks: %v", err)
+		return fmt.Errorf("Error writing inode data blocks: %v", err)
 	}
 	location += int64(inodesWritten)
 
 	// write directory data
 	dirsWritten, dirTableLocation, err := writeDirectories(directories, f, compressor, location)
 	if err != nil {
-		return fmt.Errorf("error writing directory data blocks: %v", err)
+		return fmt.Errorf("Error writing directory data blocks: %v", err)
 	}
 	location += int64(dirsWritten)
 
@@ -268,7 +268,7 @@ func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 	// write the fragment table and its index
 	fragmentTableWritten, fragmentTableLocation, err := writeFragmentTable(fragmentBlocks, fragmentBlockStart, f, compressor, location)
 	if err != nil {
-		return fmt.Errorf("error writing fragment table: %v", err)
+		return fmt.Errorf("Error writing fragment table: %v", err)
 	}
 	location += int64(fragmentTableWritten)
 
@@ -280,7 +280,7 @@ func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 	if !options.NonExportable {
 		exportTableWritten, exportTableLocation, err = writeExportTable(fileList, f, compressor, location)
 		if err != nil {
-			return fmt.Errorf("error writing export table: %v", err)
+			return fmt.Errorf("Error writing export table: %v", err)
 		}
 		location += int64(exportTableWritten)
 	}
@@ -288,7 +288,7 @@ func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 	// write the uidgid table
 	idTableWritten, idTableLocation, err := writeIDTable(idtable, f, compressor, location)
 	if err != nil {
-		return fmt.Errorf("error writing uidgid table: %v", err)
+		return fmt.Errorf("Error writing uidgid table: %v", err)
 	}
 	location += int64(idTableWritten)
 
@@ -300,7 +300,7 @@ func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 		var xAttrsWritten int
 		xAttrsWritten, xAttrsLocation, err = writeXattrs(xattrs, f, compressor, location)
 		if err != nil {
-			return fmt.Errorf("error writing xattrs table: %v", err)
+			return fmt.Errorf("Error writing xattrs table: %v", err)
 		}
 		location += int64(xAttrsWritten)
 	}
@@ -374,7 +374,7 @@ func copyFileData(from, to util.File, fromOffset, toOffset, blocksize int64, c C
 		if c != nil {
 			out, err := c.compress(buf)
 			if err != nil {
-				return 0, 0, nil, fmt.Errorf("error compressing block: %v", err)
+				return 0, 0, nil, fmt.Errorf("Error compressing block: %v", err)
 			}
 			if len(out) < len(buf) {
 				isCompressed = true
@@ -398,7 +398,7 @@ func finalizeFragment(buf []byte, to util.File, toOffset int64, c Compressor) (i
 	if c != nil {
 		out, err := c.compress(buf)
 		if err != nil {
-			return 0, compressed, fmt.Errorf("error compressing fragment block: %v", err)
+			return 0, compressed, fmt.Errorf("Error compressing fragment block: %v", err)
 		}
 		if len(out) < len(buf) {
 			buf = out
@@ -419,7 +419,7 @@ func finalizeFragment(buf []byte, to util.File, toOffset int64, c Compressor) (i
 func walkTree(workspace string) ([]*finalizeFileInfo, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
-		return nil, fmt.Errorf("could not get pwd: %v", err)
+		return nil, fmt.Errorf("Could not get pwd: %v", err)
 	}
 	// make everything relative to the workspace
 	os.Chdir(workspace)
@@ -449,13 +449,13 @@ func walkTree(workspace string) ([]*finalizeFileInfo, error) {
 		}
 		xattrNames, err := xattr.List(fp)
 		if err != nil {
-			return fmt.Errorf("unable to list xattrs for %s: %v", fp, err)
+			return fmt.Errorf("Unable to list xattrs for %s: %v", fp, err)
 		}
 		xattrs := map[string]string{}
 		for _, name := range xattrNames {
 			val, err := xattr.Get(fp, name)
 			if err != nil {
-				return fmt.Errorf("unable to get xattr %s for %s: %v", name, fp, err)
+				return fmt.Errorf("Unable to get xattr %s for %s: %v", name, fp, err)
 			}
 			xattrs[name] = string(val)
 		}
@@ -519,7 +519,7 @@ func writeFileDataBlocks(e *finalizeFileInfo, to util.File, ws string, startBloc
 	defer from.Close()
 	raw, compressed, blocks, err := copyFileData(from, to, 0, location, int64(blocksize), compressor)
 	if err != nil {
-		return 0, 0, fmt.Errorf("error copying file %s: %v", e.Name(), err)
+		return 0, 0, fmt.Errorf("Error copying file %s: %v", e.Name(), err)
 	}
 	if raw%blocksize != 0 {
 		return 0, 0, fmt.Errorf("Copying file %s copied %d which is not a multiple of blocksize %d", e.Name(), raw, blocksize)
@@ -541,7 +541,7 @@ func writeMetadataBlock(buf []byte, to util.File, c Compressor, location int64) 
 	if c != nil {
 		out, err := c.compress(buf)
 		if err != nil {
-			return 0, fmt.Errorf("error compressing block: %v", err)
+			return 0, fmt.Errorf("Error compressing block: %v", err)
 		}
 		if len(out) < len(buf) {
 			isCompressed = true
@@ -574,7 +574,7 @@ func writeDataBlocks(fileList []*finalizeFileInfo, f util.File, ws string, block
 
 		blocks, written, err := writeFileDataBlocks(e, f, ws, uint64(allBlocks), blocksize, compressor, location)
 		if err != nil {
-			return allWritten, fmt.Errorf("error writing data for %s to file: %v", e.path, err)
+			return allWritten, fmt.Errorf("Error writing data for %s to file: %v", e.path, err)
 		}
 		allBlocks += blocks
 		allWritten += written
@@ -640,10 +640,10 @@ func writeFragmentBlocks(fileList []*finalizeFileInfo, f util.File, ws string, b
 		buf := make([]byte, remainder)
 		n, err := from.ReadAt(buf, e.Size()-remainder)
 		if err != nil && err != io.EOF {
-			return fragmentBlocks, 0, fmt.Errorf("error reading final %d bytes from file %s: %v", remainder, e.Name(), err)
+			return fragmentBlocks, 0, fmt.Errorf("Error reading final %d bytes from file %s: %v", remainder, e.Name(), err)
 		}
 		if n != len(buf) {
-			return fragmentBlocks, 0, fmt.Errorf("failed reading final %d bytes from file %s, only read %d", remainder, e.Name(), n)
+			return fragmentBlocks, 0, fmt.Errorf("Failed reading final %d bytes from file %s, only read %d", remainder, e.Name(), n)
 		}
 		from.Close()
 		fragmentData = append(fragmentData, buf...)
@@ -1130,7 +1130,7 @@ func createInodes(fileList []*finalizeFileInfo, idtable map[uint32]uint16, optio
 			*/
 			target, err := os.Readlink(e.path)
 			if err != nil {
-				return fmt.Errorf("unable to read target for symlink at %s: %v", e.path, err)
+				return fmt.Errorf("Unable to read target for symlink at %s: %v", e.path, err)
 			}
 			if len(e.xattrs) > 0 {
 				in = &extendedSymlink{
@@ -1174,7 +1174,7 @@ func createInodes(fileList []*finalizeFileInfo, idtable map[uint32]uint16, optio
 		case fileBlock:
 			major, minor, err := getDeviceNumbers(e.path)
 			if err != nil {
-				return fmt.Errorf("unable to read major/minor device numbers for block device at %s: %v", e.path, err)
+				return fmt.Errorf("Unable to read major/minor device numbers for block device at %s: %v", e.path, err)
 			}
 			if len(e.xattrs) > 0 {
 				in = &extendedBlock{
@@ -1199,7 +1199,7 @@ func createInodes(fileList []*finalizeFileInfo, idtable map[uint32]uint16, optio
 		case fileChar:
 			major, minor, err := getDeviceNumbers(e.path)
 			if err != nil {
-				return fmt.Errorf("unable to read major/minor device numbers for char device at %s: %v", e.path, err)
+				return fmt.Errorf("Unable to read major/minor device numbers for char device at %s: %v", e.path, err)
 			}
 			if len(e.xattrs) > 0 {
 				in = &extendedChar{

@@ -80,7 +80,7 @@ func (fl *File) Read(b []byte) (int, error) {
 		if i >= startBlock {
 			input, err := fs.readBlock(location, block.compressed, block.size)
 			if err != nil {
-				return read, fmt.Errorf("error reading data block %d from squashfs: %v", i, err)
+				return read, fmt.Errorf("Error reading data block %d from squashfs: %v", i, err)
 			}
 			// we do not need to limit it to the remaining space of b, since copy() only will copy
 			//   to what space it has in b
@@ -95,7 +95,7 @@ func (fl *File) Read(b []byte) (int, error) {
 	if fragments {
 		input, err := fs.readFragment(fl.fragmentBlockIndex, fl.fragmentOffset, int64(fl.size())%fs.blocksize)
 		if err != nil {
-			return read, fmt.Errorf("error reading fragment block %d from squashfs: %v", fl.fragmentBlockIndex, err)
+			return read, fmt.Errorf("Error reading fragment block %d from squashfs: %v", fl.fragmentBlockIndex, err)
 		}
 		copy(b[read:], input)
 	}
@@ -110,7 +110,7 @@ func (fl *File) Read(b []byte) (int, error) {
 // Write writes len(b) bytes to the File.
 //  you cannot write to a finished squashfs, so this returns an error
 func (fl *File) Write(p []byte) (int, error) {
-	return 0, fmt.Errorf("cannot write to a read-only squashfs filesystem")
+	return 0, fmt.Errorf("Cannot write to a read-only squashfs filesystem")
 }
 
 // Seek set the offset to a particular point in the file
@@ -128,7 +128,7 @@ func (fl *File) Seek(offset int64, whence int) (int64, error) {
 		newOffset = fl.offset + offset
 	}
 	if newOffset < 0 {
-		return fl.offset, fmt.Errorf("cannot set offset %d before start of file", offset)
+		return fl.offset, fmt.Errorf("Cannot set offset %d before start of file", offset)
 	}
 	fl.offset = newOffset
 	return fl.offset, nil

@@ -60,7 +60,7 @@ func (fl *File) Read(b []byte) (int, error) {
 // Write writes len(b) bytes to the File.
 //  you cannot write to an iso, so this returns an error
 func (fl *File) Write(p []byte) (int, error) {
-	return 0, fmt.Errorf("cannot write to a read-only iso filesystem")
+	return 0, fmt.Errorf("Cannot write to a read-only iso filesystem")
 }
 
 // Seek set the offset to a particular point in the file
@@ -78,7 +78,7 @@ func (fl *File) Seek(offset int64, whence int) (int64, error) {
 		newOffset = fl.offset + offset
 	}
 	if newOffset < 0 {
-		return fl.offset, fmt.Errorf("cannot set offset %d before start of file", offset)
+		return fl.offset, fmt.Errorf("Cannot set offset %d before start of file", offset)
 	}
 	fl.offset = newOffset
 	return fl.offset, nil

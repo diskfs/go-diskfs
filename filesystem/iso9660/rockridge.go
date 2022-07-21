@@ -75,7 +75,7 @@ func (r rockRidgeExtension) Process(signature string, b []byte) (directoryEntryS
 		return nil, ErrSuspNoHandler
 	}
 	if err != nil {
-		return nil, fmt.Errorf("error parsing %s extension by Rock Ridge : %v", signature, err)
+		return nil, fmt.Errorf("Error parsing %s extension by Rock Ridge : %v", signature, err)
 	}
 	return entry, nil
 }
@@ -92,7 +92,7 @@ func (r rockRidgeExtension) GetFilename(de *directoryEntry) (string, error) {
 		}
 	}
 	if !found {
-		return "", fmt.Errorf("could not find Rock Ridge filename property")
+		return "", fmt.Errorf("Could not find Rock Ridge filename property")
 	}
 	return name, nil
 }
@@ -102,12 +102,12 @@ func (r rockRidgeExtension) GetFileExtensions(fp string, isSelf, isParent bool) 
 	// do not follow symlinks
 	fi, err := os.Lstat(fp)
 	if err != nil {
-		return nil, fmt.Errorf("error reading file %s: %v", fp, err)
+		return nil, fmt.Errorf("Error reading file %s: %v", fp, err)
 	}
 
 	t, err := times.Lstat(fp)
 	if err != nil {
-		return nil, fmt.Errorf("error reading times %s: %v", fp, err)
+		return nil, fmt.Errorf("Error reading times %s: %v", fp, err)
 	}
 
 	// PX
@@ -140,7 +140,7 @@ func (r rockRidgeExtension) GetFileExtensions(fp string, isSelf, isParent bool) 
 		// need the target if it is a symlink
 		target, err := os.Readlink(fp)
 		if err != nil {
-			return nil, fmt.Errorf("error reading symlink target at %s", fp)
+			return nil, fmt.Errorf("Error reading symlink target at %s", fp)
 		}
 		ret = append(ret, rockRidgeSymlink{continued: false, name: target})
 	}
@@ -190,7 +190,7 @@ func (r rockRidgeExtension) Relocate(dirs map[string]*finalizeFileInfo) ([]*fina
 	root := dirs["."]
 	relocationDir := root
 	if relocationDir.depth == 8 {
-		return nil, nil, fmt.Errorf("cannot relocate when relocation parent already is max depth 8")
+		return nil, nil, fmt.Errorf("Cannot relocate when relocation parent already is max depth 8")
 	}
 	/* logic:
 	 * 1. go down the directories
@@ -909,7 +909,7 @@ func (r rockRidgeExtension) parseTimestamps(b []byte) (directoryEntrySystemUseEx
 			if longForm {
 				t, err = decBytesToTime(timeBytes)
 				if err != nil {
-					return nil, fmt.Errorf("could not process timestamp %d bytes to long form bytes: %v % x", tf, err, timeBytes)
+					return nil, fmt.Errorf("Could not process timestamp %d bytes to long form bytes: %v % x", tf, err, timeBytes)
 				}
 			} else {
 				t = bytesToTime(timeBytes)

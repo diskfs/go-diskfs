@@ -195,7 +195,7 @@ func readAndProcessDirs(parts []string, location, size uint32, f *os.File) error
 		current, parts := parts[0], parts[1:]
 		child := findChild(current, dirs)
 		if child == nil {
-			return fmt.Errorf("could not find directory %s", current)
+			return fmt.Errorf("Could not find directory %s", current)
 		}
 		readAndProcessDirs(parts, child.location, child.size, f)
 	}
@@ -307,7 +307,7 @@ func universalizePath(p string) (string, error) {
 	// globalize the separator
 	ps := strings.Replace(p, "\\", "/", 0)
 	if ps[0] != '/' {
-		return "", errors.New("must use absolute paths")
+		return "", errors.New("Must use absolute paths")
 	}
 	return ps, nil
 }

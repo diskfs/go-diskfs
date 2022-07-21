@@ -82,7 +82,7 @@ func getValidVolumeDescriptors() ([]volumeDescriptor, []byte, error) {
 	// read correct bytes off of disk
 	b, err := os.ReadFile(volRecordsFile)
 	if err != nil {
-		return nil, nil, fmt.Errorf("error reading data from volrecords test fixture %s: %v", volRecordsFile, err)
+		return nil, nil, fmt.Errorf("Error reading data from volrecords test fixture %s: %v", volRecordsFile, err)
 	}
 
 	// sector 0 - Primary Volume Descriptor
@@ -161,7 +161,7 @@ func get9660PrimaryVolumeDescriptor() (*primaryVolumeDescriptor, []byte, error) 
 	// read correct bytes off of disk
 	input, err := os.ReadFile(ISO9660File)
 	if err != nil {
-		return nil, nil, fmt.Errorf("error reading data from iso9660 test fixture %s: %v", ISO9660File, err)
+		return nil, nil, fmt.Errorf("Error reading data from iso9660 test fixture %s: %v", ISO9660File, err)
 	}
 
 	start := pvdSector * blocksize // PVD sector

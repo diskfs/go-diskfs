@@ -21,7 +21,7 @@ func universalizePath(p string) (string, error) {
 	// globalize the separator
 	ps := strings.Replace(p, `\`, "/", -1)
 	//if ps[0] != '/' {
-	//return "", errors.New("must use absolute paths")
+	//return "", errors.New("Must use absolute paths")
 	//}
 	return ps, nil
 }

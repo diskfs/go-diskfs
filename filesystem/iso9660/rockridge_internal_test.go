@@ -26,7 +26,7 @@ func TestRockRidgeGetFilename(t *testing.T) {
 		filename string
 		err      error
 	}{
-		{&directoryEntry{filename: "ABC"}, "", fmt.Errorf("could not find Rock Ridge filename property")},
+		{&directoryEntry{filename: "ABC"}, "", fmt.Errorf("Could not find Rock Ridge filename property")},
 		{&directoryEntry{filename: "ABC", extensions: []directoryEntrySystemUseExtension{rockRidgeName{name: "abc"}}}, "abc", nil},
 	}
 	rr := &rockRidgeExtension{}

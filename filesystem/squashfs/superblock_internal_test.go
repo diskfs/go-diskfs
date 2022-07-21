@@ -39,12 +39,12 @@ func testGetValidSuperblock() ([]byte, *superblock, error) {
 	file, err := os.Open(SquashfsUncompressedfile)
 	defer file.Close()
 	if err != nil {
-		return nil, nil, fmt.Errorf("could not open file %s to read: %v", Squashfsfile, err)
+		return nil, nil, fmt.Errorf("Could not open file %s to read: %v", Squashfsfile, err)
 	}
 	b := make([]byte, superblockSize)
 	read, err := file.ReadAt(b, 0)
 	if err != nil {
-		return nil, nil, fmt.Errorf("could not read from %s: %v", Squashfsfile, err)
+		return nil, nil, fmt.Errorf("Could not read from %s: %v", Squashfsfile, err)
 	}
 	if read != len(b) {
 		return nil, nil, fmt.Errorf("read %d bytes instead of expected %d from %s", read, len(b), Squashfsfile)

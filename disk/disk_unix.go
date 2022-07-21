@@ -1,4 +1,3 @@
-//go:build aix || darwin || dragonfly || freebsd || linux || netbsd || openbsd || solaris
 // +build aix darwin dragonfly freebsd linux netbsd openbsd solaris
 
 package disk
@@ -21,7 +20,7 @@ func (d *Disk) ReReadPartitionTable() error {
 	fd := d.File.Fd()
 	_, err := unix.IoctlGetInt(int(fd), blkrrpart)
 	if err != nil {
-		return fmt.Errorf("unable to re-read partition table: %v", err)
+		return fmt.Errorf("Unable to re-read partition table: %v", err)
 	}
 	return nil
 }
