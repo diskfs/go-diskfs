@@ -20,41 +20,40 @@ linters-settings:
 linters:
   disable-all: true
   enable:
-    - bodyclose
-    - deadcode
-    - depguard
-    - dogsled
-    - dupl
-    - errcheck
-    - exportloopref
-    - exhaustive
-    - gocritic
-    - gofmt
-    - goimports
-    - gocyclo
-    - gosec
-    - gosimple
-    - govet
-    - ineffassign
-    - misspell
-    - nolintlint
-    - nakedret
-    - prealloc
-    - predeclared
+    ## remove a comment here -->
+    # - bodyclose
+    # - deadcode
+    # - depguard
+    # - dogsled
+    # - dupl
+    # - errcheck
+    # - exportloopref
+    # - exhaustive
+    # - gocritic
+    # - gofmt
+    # - goimports
+    # - gocyclo
+    # - gosec
+    # - gosimple
+    # - govet
+    # - ineffassign
+    # - misspell
+    # - nolintlint
+    # - nakedret
+    # - prealloc
+    # - predeclared
+    # - staticcheck
+    # - structcheck
+    # - stylecheck
+    # - thelper
+    # - tparallel
+    # - typecheck
+    # - unconvert
+    # - unparam
+    # - varcheck
+    # - whitespace
+    ## <-- remove a comment here 
     - revive
-    - staticcheck
-    - structcheck
-    - stylecheck
-    - thelper
-    - tparallel
-    - typecheck
-    - unconvert
-    - unparam
-    - varcheck
-    - whitespace
-    # - wsl # лишние пустые строки и т.д., чистый стиль
-    # - goconst # проверка на наличие переменных, которых следовало бы вынести в const
-    # - gomnd # поиск всяких "магических" чисел, переменных
 
 run:
   issues-exit-code: 1
