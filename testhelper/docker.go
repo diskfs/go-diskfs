@@ -10,10 +10,10 @@ import (
 
 // DockerRun run a docker container
 // thanks to moby/tool, which is licensed apache 2.0
-func DockerRun(input io.Reader, output io.Writer, trust bool, rm bool, mounts map[string]string, img string, args ...string) error {
+func DockerRun(input io.Reader, output io.Writer, trust, rm bool, mounts map[string]string, img string, args ...string) error {
 	docker, err := exec.LookPath("docker")
 	if err != nil {
-		return errors.New("Docker does not seem to be installed")
+		return errors.New("docker does not seem to be installed")
 	}
 
 	env := os.Environ()

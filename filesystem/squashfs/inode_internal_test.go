@@ -8,6 +8,7 @@ import (
 )
 
 // inode implementation for testing
+//nolint:structcheck // ignore unused entries, which we keep for reference
 type inodeTestImpl struct {
 	iIndex   uint32
 	fileSize int64
@@ -77,7 +78,7 @@ func TestInodeHeader(t *testing.T) {
 		err    error
 	}{
 		{goodHeader, testGetFirstInodeHeader(), nil},
-		{goodHeader[:10], nil, fmt.Errorf("Received only %d bytes instead of minimum %d", 10, inodeHeaderSize)},
+		{goodHeader[:10], nil, fmt.Errorf("received only %d bytes instead of minimum %d", 10, inodeHeaderSize)},
 	}
 	t.Run("parse", func(t *testing.T) {
 		for i, tt := range tests {
@@ -100,13 +101,12 @@ func TestInodeHeader(t *testing.T) {
 				continue
 			}
 			b := tt.header.toBytes()
-			if bytes.Compare(b, tt.b) != 0 {
+			if !bytes.Equal(b, tt.b) {
 				t.Errorf("%d: mismatched results, actual then expected", i)
 				t.Logf("% x", b)
 				t.Logf("% x", tt.b)
 			}
 		}
-
 	})
 }
 
@@ -150,8 +150,8 @@ func TestBasicDirectory(t *testing.T) {
 		dir *basicDirectory
 		err error
 	}{
-		{inodeB[:], dir, nil},
-		{inodeB[:10], nil, fmt.Errorf("Received %d bytes, fewer than minimum %d", 10, 16)},
+		{inodeB, dir, nil},
+		{inodeB[:10], nil, fmt.Errorf("received %d bytes, fewer than minimum %d", 10, 16)},
 	}
 
 	t.Run("toBytes", func(t *testing.T) {
@@ -160,7 +160,7 @@ func TestBasicDirectory(t *testing.T) {
 				continue
 			}
 			b := tt.dir.toBytes()
-			if bytes.Compare(b, tt.b) != 0 {
+			if !bytes.Equal(b, tt.b) {
 				t.Errorf("%d: mismatched output, actual then expected", i)
 				t.Logf("% x", b)
 				t.Logf("% x", tt.b)
@@ -193,7 +193,7 @@ func TestBasicDirectory(t *testing.T) {
 func TestExtendedDirectory(t *testing.T) {
 	// do some day when we have good raw data
 
-	//func (i extendedDirectory) toBytes() []byte {
+	// func (i extendedDirectory) toBytes() []byte {
 	// func (i extendedDirectory) size() int64 {
 	// func parseExtendedDirectory(b []byte) (*extendedDirectory, error) {
 }
@@ -211,8 +211,8 @@ func TestBasicFile(t *testing.T) {
 		file *basicFile
 		err  error
 	}{
-		{inodeB[:], f, nil},
-		{inodeB[:10], nil, fmt.Errorf("Received %d bytes, fewer than minimum %d", 10, 16)},
+		{inodeB, f, nil},
+		{inodeB[:10], nil, fmt.Errorf("received %d bytes, fewer than minimum %d", 10, 16)},
 	}
 
 	t.Run("toBytes", func(t *testing.T) {
@@ -221,7 +221,7 @@ func TestBasicFile(t *testing.T) {
 				continue
 			}
 			b := tt.file.toBytes()
-			if bytes.Compare(b, tt.b) != 0 {
+			if !bytes.Equal(b, tt.b) {
 				t.Errorf("%d: mismatched output, actual then expected", i)
 				t.Logf("% x", b)
 				t.Logf("% x", tt.b)
@@ -234,6 +234,7 @@ func TestBasicFile(t *testing.T) {
 			t.Errorf("mismatched sizes, actual %d expected %d", size, f.fileSize)
 		}
 	})
+	//nolint:dupl // these functions vary slightly from one another
 	t.Run("parse", func(t *testing.T) {
 		for i, tt := range tests {
 			fl, _, err := parseBasicFile(tt.b, int(testValidBlocksize))
@@ -285,8 +286,8 @@ func TestExtendedFile(t *testing.T) {
 		file *extendedFile
 		err  error
 	}{
-		{inodeB[:], f, nil},
-		{inodeB[:10], nil, fmt.Errorf("Received %d bytes instead of expected minimal %d", 10, 40)},
+		{inodeB, f, nil},
+		{inodeB[:10], nil, fmt.Errorf("received %d bytes instead of expected minimal %d", 10, 40)},
 	}
 
 	t.Run("toBytes", func(t *testing.T) {
@@ -295,7 +296,7 @@ func TestExtendedFile(t *testing.T) {
 				continue
 			}
 			b := tt.file.toBytes()
-			if bytes.Compare(b, tt.b) != 0 {
+			if !bytes.Equal(b, tt.b) {
 				t.Errorf("%d: mismatched output, actual then expected", i)
 				t.Logf("% x", b)
 				t.Logf("% x", tt.b)
@@ -308,6 +309,7 @@ func TestExtendedFile(t *testing.T) {
 			t.Errorf("mismatched sizes, actual %d expected %d", size, f.fileSize)
 		}
 	})
+	//nolint:dupl // these functions vary slightly from one another
 	t.Run("parse", func(t *testing.T) {
 		for i, tt := range tests {
 			fl, _, err := parseExtendedFile(tt.b, int(testValidBlocksize))
@@ -323,7 +325,6 @@ func TestExtendedFile(t *testing.T) {
 			}
 		}
 	})
-
 }
 
 func TestBasicSymlink(t *testing.T) {
@@ -339,8 +340,8 @@ func TestBasicSymlink(t *testing.T) {
 		sym *basicSymlink
 		err error
 	}{
-		{inodeB[:], s, nil},
-		{inodeB[:7], nil, fmt.Errorf("Received %d bytes instead of expected minimal %d", 7, 8)},
+		{inodeB, s, nil},
+		{inodeB[:7], nil, fmt.Errorf("received %d bytes instead of expected minimal %d", 7, 8)},
 	}
 
 	t.Run("toBytes", func(t *testing.T) {
@@ -349,7 +350,7 @@ func TestBasicSymlink(t *testing.T) {
 				continue
 			}
 			b := tt.sym.toBytes()
-			if bytes.Compare(b, tt.b) != 0 {
+			if !bytes.Equal(b, tt.b) {
 				t.Errorf("%d: mismatched output, actual then expected", i)
 				t.Logf("% x", b)
 				t.Logf("% x", tt.b)
@@ -377,44 +378,43 @@ func TestBasicSymlink(t *testing.T) {
 			}
 		}
 	})
-
 }
 
 func TestExtendedSymlink(t *testing.T) {
 	// when we have more data with which to work
 
-	//func (i extendedSymlink) toBytes() []byte {
+	// func (i extendedSymlink) toBytes() []byte {
 	// func (i extendedSymlink) size() int64 {
 	// func parseExtendedSymlink(b []byte) (*extendedSymlink, error) {
 }
 
 func TestBasicDevice(t *testing.T) {
-	// when we have more data withh which to work
+	// when we have more data with which to work
 
-	//func (i basicDevice) toBytes() []byte {
+	// func (i basicDevice) toBytes() []byte {
 	// func (i basicDevice) size() int64 {
 	// func parseBasicDevice(b []byte) (*basicDevice, error) {
 }
 
 func TestExtendedDevice(t *testing.T) {
-	// when we have more data withh which to work
+	// when we have more data with which to work
 
-	//func (i extendedDevice) toBytes() []byte {
+	// func (i extendedDevice) toBytes() []byte {
 	// func (i extendedDevice) size() int64 {
 	// func parseExtendedDevice(b []byte) (*extendedDevice, error) {
 
 }
 
 func TestBasicIPC(t *testing.T) {
-	// when we have more data withh which to work
+	// when we have more data with which to work
 
-	//func (i basicIPC) toBytes() []byte {
+	// func (i basicIPC) toBytes() []byte {
 	// func (i basicIPC) size() int64 {
 	// func parseBasicIPC(b []byte) (*basicIPC, error) {
 }
 
 func TestExtendedIPC(t *testing.T) {
-	// when we have more data withh which to work
+	// when we have more data with which to work
 
 	// func (i extendedIPC) toBytes() []byte {
 	// func (i extendedIPC) size() int64 {
@@ -436,8 +436,8 @@ func TestInode(t *testing.T) {
 		i   *inodeImpl
 		err error
 	}{
-		{inodeB[:], in, nil},
-		{inodeB[:10], nil, fmt.Errorf("Received %d bytes, insufficient for minimum %d for header and inode", 10, 17)},
+		{inodeB, in, nil},
+		{inodeB[:10], nil, fmt.Errorf("received %d bytes, insufficient for minimum %d for header and inode", 10, 17)},
 	}
 
 	t.Run("toBytes", func(t *testing.T) {
@@ -446,7 +446,7 @@ func TestInode(t *testing.T) {
 				continue
 			}
 			b := tt.i.toBytes()
-			if bytes.Compare(b, tt.b) != 0 {
+			if !bytes.Equal(b, tt.b) {
 				t.Errorf("%d: mismatched output, actual then expected", i)
 				t.Logf("% x", b)
 				t.Logf("% x", tt.b)

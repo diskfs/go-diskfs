@@ -3,8 +3,7 @@ package fat32
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
-	"io/ioutil"
+	"os"
 	"strings"
 	"testing"
 )
@@ -27,41 +26,41 @@ func TestDos331BPBFromBytes(t *testing.T) {
 			t.Errorf("Did not return expected error")
 		}
 		if bpb != nil {
-			t.Fatalf("Returned bpb was non-nil")
+			t.Fatalf("returned bpb was non-nil")
 		}
 		expected := "cannot read DOS 3.31 BPB from invalid byte slice"
 		if !strings.HasPrefix(err.Error(), expected) {
-			t.Errorf("Error type %s instead of expected %s", err.Error(), expected)
+			t.Errorf("error type %s instead of expected %s", err.Error(), expected)
 		}
 	})
 	t.Run("invalid Dos20BPB", func(t *testing.T) {
 		size := uint16(511)
-		b := make([]byte, 25, 25)
+		b := make([]byte, 25)
 		binary.LittleEndian.PutUint16(b[0:2], size)
 		bpb, err := dos331BPBFromBytes(b)
 		if err == nil {
 			t.Errorf("Did not return expected error")
 		}
 		if bpb != nil {
-			t.Fatalf("Returned bpb was non-nil")
+			t.Fatalf("returned bpb was non-nil")
 		}
-		expected := fmt.Sprintf("Error reading embedded DOS 2.0 BPB")
+		expected := "error reading embedded DOS 2.0 BPB"
 		if !strings.HasPrefix(err.Error(), expected) {
-			t.Errorf("Error type %s instead of expected %s", err.Error(), expected)
+			t.Errorf("error type %s instead of expected %s", err.Error(), expected)
 		}
 	})
 	t.Run("valid data", func(t *testing.T) {
-		input, err := ioutil.ReadFile(Fat32File)
+		input, err := os.ReadFile(Fat32File)
 		if err != nil {
-			t.Fatalf("Error reading test fixture data from %s: %v", Fat32File, err)
+			t.Fatalf("error reading test fixture data from %s: %v", Fat32File, err)
 		}
 		inputBytes := input[11:36]
 		bpb, err := dos331BPBFromBytes(inputBytes)
 		if err != nil {
-			t.Errorf("Returned unexpected non-nil error: %v", err)
+			t.Errorf("returned unexpected non-nil error: %v", err)
 		}
 		if bpb == nil {
-			t.Fatalf("Returned bpb was nil")
+			t.Fatalf("returned bpb was nil")
 		}
 		valid := getValidDos331BPB()
 		if !bpb.equal(valid) {
@@ -74,19 +73,16 @@ func TestDos331BPBFromBytes(t *testing.T) {
 
 func TestDos331BPBToBytes(t *testing.T) {
 	bpb := getValidDos331BPB()
-	b, err := bpb.toBytes()
-	if err != nil {
-		t.Errorf("Error was not nil, instead %v", err)
-	}
+	b := bpb.toBytes()
 	if b == nil {
 		t.Fatal("b was nil unexpectedly")
 	}
-	valid, err := ioutil.ReadFile(Fat32File)
+	valid, err := os.ReadFile(Fat32File)
 	if err != nil {
-		t.Fatalf("Error reading test fixture data from %s: %v", Fat32File, err)
+		t.Fatalf("error reading test fixture data from %s: %v", Fat32File, err)
 	}
 	validBytes := valid[11:36]
-	if bytes.Compare(validBytes, b) != 0 {
+	if !bytes.Equal(validBytes, b) {
 		t.Log(validBytes)
 		t.Log(b)
 		t.Error("Mismatched bytes")

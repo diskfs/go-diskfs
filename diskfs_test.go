@@ -1,13 +1,16 @@
 package diskfs_test
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/diskfs/go-diskfs"
+	diskfs "github.com/diskfs/go-diskfs"
 	"github.com/diskfs/go-diskfs/disk"
 )
 
@@ -23,9 +26,9 @@ func tmpDisk(source string) (*os.File, error) {
 	// either copy the contents of the source file over, or make a file of appropriate size
 	if source == "" {
 		// make it a 10MB file
-		f.Truncate(10 * 1024 * 1024)
+		_ = f.Truncate(10 * 1024 * 1024)
 	} else {
-		b, err := ioutil.ReadFile(source)
+		b, err := os.ReadFile(source)
 		if err != nil {
 			return nil, fmt.Errorf("Failed to read contents of %s: %v", source, err)
 		}
@@ -34,24 +37,38 @@ func tmpDisk(source string) (*os.File, error) {
 			return nil, fmt.Errorf("Failed to write contents of %s to %s: %v", source, filename, err)
 		}
 		if written != len(b) {
-			return nil, fmt.Errorf("Wrote only %d bytes of %s to %s instead of %d", written, source, filename, len(b))
+			return nil, fmt.Errorf("wrote only %d bytes of %s to %s instead of %d", written, source, filename, len(b))
 		}
 	}
 
 	return f, nil
 }
 
+//nolint:thelper // this is not a helper function
+func checkDiskfsErrs(t *testing.T, msg string, err, tterr error, d, ttd *disk.Disk) {
+	switch {
+	case (err == nil && tterr != nil) || (err != nil && tterr == nil) || (err != nil && tterr != nil && !strings.HasPrefix(err.Error(), tterr.Error())):
+		t.Errorf("%s: mismatched errors, actual %v expected %v", msg, err, tterr)
+	case (d == nil && ttd != nil) || (d != nil && ttd == nil):
+		t.Errorf("%s: mismatched disk, actual %v expected %v", msg, d, ttd)
+	case d != nil && (d.LogicalBlocksize != ttd.LogicalBlocksize || d.PhysicalBlocksize != ttd.PhysicalBlocksize || d.Size != ttd.Size || d.Type != ttd.Type):
+		t.Errorf("%s: mismatched disk, actual then expected", msg)
+		t.Logf("%v", d)
+		t.Logf("%v", ttd)
+	}
+}
+
 func TestOpen(t *testing.T) {
 	f, err := tmpDisk("./partition/mbr/testdata/mbr.img")
 	if err != nil {
-		t.Fatalf("Error creating new temporary disk: %v", err)
+		t.Fatalf("error creating new temporary disk: %v", err)
 	}
 	defer f.Close()
 	path := f.Name()
 	defer os.Remove(path)
 	fileInfo, err := f.Stat()
 	if err != nil {
-		t.Fatalf("Unable to stat temporary file %s: %v", path, err)
+		t.Fatalf("unable to stat temporary file %s: %v", path, err)
 	}
 	size := fileInfo.Size()
 
@@ -65,39 +82,24 @@ func TestOpen(t *testing.T) {
 		{path, &disk.Disk{Type: disk.File, LogicalBlocksize: 512, PhysicalBlocksize: 512, Size: size}, nil},
 	}
 
-	for _, tt := range tests {
+	// open default
+	for i, tt := range tests {
 		d, err := diskfs.Open(tt.path)
-		msg := fmt.Sprintf("Open(%s)", tt.path)
-		switch {
-		case (err == nil && tt.err != nil) || (err != nil && tt.err == nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
-			t.Errorf("%s: mismatched errors, actual %v expected %v", msg, err, tt.err)
-		case (d == nil && tt.disk != nil) || (d != nil && tt.disk == nil):
-			t.Errorf("%s: mismatched disk, actual %v expected %v", msg, d, tt.disk)
-		case d != nil && (d.LogicalBlocksize != tt.disk.LogicalBlocksize || d.PhysicalBlocksize != tt.disk.PhysicalBlocksize || d.Size != tt.disk.Size || d.Type != tt.disk.Type):
-			t.Errorf("%s: mismatched disk, actual then expected", msg)
-			t.Logf("%v", d)
-			t.Logf("%v", tt.disk)
-		}
+		msg := fmt.Sprintf("%d: Open(%s)", i, tt.path)
+		checkDiskfsErrs(t, msg, err, tt.err, d, tt.disk)
 	}
 
+	// open WithOpenMode
 	for i, tt := range tests {
 		d, err := diskfs.Open(tt.path, diskfs.WithOpenMode(diskfs.ReadOnly))
-		msg := fmt.Sprintf("%d: Open(%s)", i, tt.path)
-		switch {
-		case (err == nil && tt.err != nil) || (err != nil && tt.err == nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
-			t.Errorf("%s: mismatched errors, actual %v expected %v", msg, err, tt.err)
-		case (d == nil && tt.disk != nil) || (d != nil && tt.disk == nil):
-			t.Errorf("%s: mismatched disk, actual %v expected %v", msg, d, tt.disk)
-		case d != nil && (d.LogicalBlocksize != tt.disk.LogicalBlocksize || d.PhysicalBlocksize != tt.disk.PhysicalBlocksize || d.Size != tt.disk.Size || d.Type != tt.disk.Type):
-			t.Errorf("%s: mismatched disk, actual then expected", msg)
-			t.Logf("%v", d)
-			t.Logf("%v", tt.disk)
-		}
+		msg := fmt.Sprintf("%d: Open WithOpenMode(%s, diskfs.ReadOnly)", i, tt.path)
+		checkDiskfsErrs(t, msg, err, tt.err, d, tt.disk)
 	}
 }
 
 func TestCreate(t *testing.T) {
 	tests := []struct {
+		name       string
 		path       string
 		size       int64
 		format     diskfs.Format
@@ -105,30 +107,33 @@ func TestCreate(t *testing.T) {
 		disk       *disk.Disk
 		err        error
 	}{
-		{"", 10 * oneMB, diskfs.Raw, diskfs.SectorSizeDefault, nil, fmt.Errorf("must pass device name")},
-		{"/tmp/disk.img", 0, diskfs.Raw, diskfs.SectorSizeDefault, nil, fmt.Errorf("must pass valid device size to create")},
-		{"/tmp/disk.img", -1, diskfs.Raw, diskfs.SectorSizeDefault, nil, fmt.Errorf("must pass valid device size to create")},
-		{"/tmp/foo/bar/232323/23/2322/disk.img", 10 * oneMB, diskfs.Raw, diskfs.SectorSizeDefault, nil, fmt.Errorf("Could not create device")},
-		{"/tmp/disk.img", 10 * oneMB, diskfs.Raw, diskfs.SectorSizeDefault, &disk.Disk{LogicalBlocksize: 512, PhysicalBlocksize: 512, Size: 10 * oneMB, Type: disk.File}, nil},
-		{"/tmp/disk.img", 10 * oneMB, diskfs.Raw, diskfs.SectorSize512, &disk.Disk{LogicalBlocksize: 512, PhysicalBlocksize: 512, Size: 10 * oneMB, Type: disk.File}, nil},
-		{"/tmp/disk.img", 10 * oneMB, diskfs.Raw, diskfs.SectorSize4k, &disk.Disk{LogicalBlocksize: 4096, PhysicalBlocksize: 4096, Size: 10 * oneMB, Type: disk.File}, nil},
+		{"no file", "", 10 * oneMB, diskfs.Raw, diskfs.SectorSizeDefault, nil, fmt.Errorf("must pass device name")},
+		{"zero size", "disk", 0, diskfs.Raw, diskfs.SectorSizeDefault, nil, fmt.Errorf("must pass valid device size to create")},
+		{"negative size", "disk", -1, diskfs.Raw, diskfs.SectorSizeDefault, nil, fmt.Errorf("must pass valid device size to create")},
+		{"directory does not exist", "foo/bar/232323/23/2322/disk", 10 * oneMB, diskfs.Raw, diskfs.SectorSizeDefault, nil, fmt.Errorf("could not create device")},
+		{"10MB with default sector size", "disk", 10 * oneMB, diskfs.Raw, diskfs.SectorSizeDefault, &disk.Disk{LogicalBlocksize: 512, PhysicalBlocksize: 512, Size: 10 * oneMB, Type: disk.File}, nil},
+		{"10MB with 512 sector size", "disk", 10 * oneMB, diskfs.Raw, diskfs.SectorSize512, &disk.Disk{LogicalBlocksize: 512, PhysicalBlocksize: 512, Size: 10 * oneMB, Type: disk.File}, nil},
+		{"10MB with 2048 sector size", "disk", 10 * oneMB, diskfs.Raw, diskfs.SectorSize4k, &disk.Disk{LogicalBlocksize: 4096, PhysicalBlocksize: 4096, Size: 10 * oneMB, Type: disk.File}, nil},
 	}
 
 	for i, tt := range tests {
-		disk, err := diskfs.Create(tt.path, tt.size, tt.format, tt.sectorSize)
-		msg := fmt.Sprintf("%d: Create(%s, %d, %v, %d)", i, tt.path, tt.size, tt.format, tt.sectorSize)
-		switch {
-		case (err == nil && tt.err != nil) || (err != nil && tt.err == nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
-			t.Errorf("%s: mismatched errors, actual %v expected %v", msg, err, tt.err)
-		case (disk == nil && tt.disk != nil) || (disk != nil && tt.disk == nil):
-			t.Errorf("%s: mismatched disk, actual %v expected %v", msg, disk, tt.disk)
-		case disk != nil && (disk.LogicalBlocksize != tt.disk.LogicalBlocksize || disk.PhysicalBlocksize != tt.disk.PhysicalBlocksize || disk.Size != tt.disk.Size || disk.Type != tt.disk.Type):
-			t.Errorf("%s: mismatched disk, actual then expected", msg)
-			t.Logf("%#v", disk)
-			t.Logf("%#v", tt.disk)
-		}
-		if disk != nil {
-			os.Remove(tt.path)
-		}
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			var filename string
+			if tt.path != "" {
+				filename = testTmpFilename(t, "diskfs_test"+tt.path, ".img")
+			}
+			d, err := diskfs.Create(filename, tt.size, tt.format, tt.sectorSize)
+			defer os.RemoveAll(filename)
+			msg := fmt.Sprintf("%d: Create(%s, %d, %v, %d)", i, filename, tt.size, tt.format, tt.sectorSize)
+			checkDiskfsErrs(t, msg, err, tt.err, d, tt.disk)
+		})
 	}
+}
+
+func testTmpFilename(t *testing.T, prefix, suffix string) string {
+	t.Helper()
+	randBytes := make([]byte, 16)
+	_, _ = rand.Read(randBytes)
+	return filepath.Join(os.TempDir(), prefix+hex.EncodeToString(randBytes)+suffix)
 }

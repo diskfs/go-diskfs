@@ -20,7 +20,7 @@ func TestNewCompressor(t *testing.T) {
 		{compressionXz, &CompressorXz{}, nil},
 		{compressionLz4, &CompressorLz4{}, nil},
 		{compressionZstd, nil, fmt.Errorf("zstd compression not yet supported")},
-		{100, nil, fmt.Errorf("Unknown compression type")},
+		{100, nil, fmt.Errorf("unknown compression type")},
 	}
 
 	for i, tt := range tests {
@@ -53,13 +53,14 @@ var testCompressUncompressed = []byte{
 //  instead, we test that our decompression works, and then test that we can compress
 //   followed by (already validated) decompression
 
+//nolint:thelper // this is not a helper function
 func testCompressAndDecompress(t *testing.T, c Compressor, compressed []byte) {
 	t.Run("decompress", func(t *testing.T) {
 		out, err := c.decompress(compressed)
 		switch {
 		case err != nil:
 			t.Errorf("unexpected error: %v", err)
-		case bytes.Compare(out, testCompressUncompressed) != 0:
+		case !bytes.Equal(out, testCompressUncompressed):
 			t.Errorf("Mismatched decompressed, actual then expected")
 			t.Logf("% x", out)
 			t.Logf("% x", testCompressUncompressed)
@@ -75,7 +76,7 @@ func testCompressAndDecompress(t *testing.T, c Compressor, compressed []byte) {
 		switch {
 		case err != nil:
 			t.Errorf("unexpected error: %v", err)
-		case bytes.Compare(decompressed, testCompressUncompressed) != 0:
+		case !bytes.Equal(decompressed, testCompressUncompressed):
 			t.Errorf("Mismatched decompression, actual then expected")
 			t.Logf("% x", decompressed)
 			t.Logf("% x", testCompressUncompressed)
@@ -98,7 +99,7 @@ func TestCompressionGzip(t *testing.T) {
 	}
 
 	c := CompressorGzip{CompressionLevel: 2}
-	testCompressAndDecompress(t, c, compressed)
+	testCompressAndDecompress(t, &c, compressed)
 }
 func TestCompressionLzma(t *testing.T) {
 	compressed := []byte{
@@ -115,7 +116,7 @@ func TestCompressionLzma(t *testing.T) {
 		0x99, 0x88, 0xf3, 0x0e, 0xf6, 0xff, 0xff, 0xe2, 0xeb, 0x00, 0x00,
 	}
 	c := CompressorLzma{}
-	testCompressAndDecompress(t, c, compressed)
+	testCompressAndDecompress(t, &c, compressed)
 }
 func TestCompressionXz(t *testing.T) {
 	compressed := []byte{
@@ -134,7 +135,7 @@ func TestCompressionXz(t *testing.T) {
 		0x1f, 0xb6, 0xf3, 0x7d, 0x01, 0x00, 0x00, 0x00, 0x00, 0x04, 0x59, 0x5a,
 	}
 	c := CompressorXz{}
-	testCompressAndDecompress(t, c, compressed)
+	testCompressAndDecompress(t, &c, compressed)
 }
 func TestCompressionLz4(t *testing.T) {
 	compressed := []byte{
@@ -150,5 +151,5 @@ func TestCompressionLz4(t *testing.T) {
 		0x8c, 0x10, 0x1a, 0x00, 0x00, 0x00, 0x00, 0x0c, 0xda, 0x4b, 0x2b,
 	}
 	c := CompressorLz4{}
-	testCompressAndDecompress(t, c, compressed)
+	testCompressAndDecompress(t, &c, compressed)
 }

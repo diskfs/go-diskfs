@@ -3,7 +3,7 @@ package gpt
 import (
 	"crypto/rand"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"strings"
 	"testing"
 )
@@ -47,10 +47,11 @@ func GetValidTable() *Table {
 	return &table
 }
 
+//nolint:gocyclo // we really do not care about the cyclomatic complexity of a test function. Maybe someday we will improve it.
 func TestTableFromBytes(t *testing.T) {
 	t.Run("Short byte slice", func(t *testing.T) {
-		b := make([]byte, gptSize+512-1, gptSize+512-1)
-		rand.Read(b)
+		b := make([]byte, gptSize+512-1)
+		_, _ = rand.Read(b)
 		table, err := tableFromBytes(b, 512, 512)
 		if table != nil {
 			t.Error("should return nil table")
@@ -58,15 +59,15 @@ func TestTableFromBytes(t *testing.T) {
 		if err == nil {
 			t.Error("should not return nil error")
 		}
-		expected := fmt.Sprintf("Data for partition was %d bytes", len(b))
+		expected := fmt.Sprintf("data for partition was %d bytes", len(b))
 		if !strings.HasPrefix(err.Error(), expected) {
-			t.Errorf("Error type %s instead of expected %s", err.Error(), expected)
+			t.Errorf("error type %s instead of expected %s", err.Error(), expected)
 		}
 	})
-	t.Run("Invalid EFI Signature", func(t *testing.T) {
-		b, err := ioutil.ReadFile(gptFile)
+	t.Run("invalid EFI Signature", func(t *testing.T) {
+		b, err := os.ReadFile(gptFile)
 		if err != nil {
-			t.Fatalf("Unable to read test fixture file %s: %v", gptFile, err)
+			t.Fatalf("unable to read test fixture file %s: %v", gptFile, err)
 		}
 		b[512] = 0x00
 		table, err := tableFromBytes(b, 512, 512)
@@ -76,15 +77,15 @@ func TestTableFromBytes(t *testing.T) {
 		if err == nil {
 			t.Error("should not return nil error")
 		}
-		expected := fmt.Sprintf("Invalid EFI Signature")
+		expected := "invalid EFI Signature"
 		if !strings.HasPrefix(err.Error(), expected) {
-			t.Errorf("Error type %s instead of expected %s", err.Error(), expected)
+			t.Errorf("error type %s instead of expected %s", err.Error(), expected)
 		}
 	})
-	t.Run("Invalid EFI Revision", func(t *testing.T) {
-		b, err := ioutil.ReadFile(gptFile)
+	t.Run("invalid EFI Revision", func(t *testing.T) {
+		b, err := os.ReadFile(gptFile)
 		if err != nil {
-			t.Fatalf("Unable to read test fixture file %s: %v", gptFile, err)
+			t.Fatalf("unable to read test fixture file %s: %v", gptFile, err)
 		}
 		b[512+10] = 0xff
 		table, err := tableFromBytes(b, 512, 512)
@@ -94,17 +95,17 @@ func TestTableFromBytes(t *testing.T) {
 		if err == nil {
 			t.Error("should not return nil error")
 		}
-		expected := fmt.Sprintf("Invalid EFI Revision")
+		expected := "invalid EFI Revision"
 		if !strings.HasPrefix(err.Error(), expected) {
-			t.Errorf("Error type %s instead of expected %s", err.Error(), expected)
+			t.Errorf("error type %s instead of expected %s", err.Error(), expected)
 		}
 	})
-	t.Run("Invalid EFI Header Size", func(t *testing.T) {
-		b, err := ioutil.ReadFile(gptFile)
+	t.Run("invalid EFI Header Size", func(t *testing.T) {
+		b, err := os.ReadFile(gptFile)
 		if err != nil {
-			t.Fatalf("Unable to read test fixture file %s: %v", gptFile, err)
+			t.Fatalf("unable to read test fixture file %s: %v", gptFile, err)
 		}
-		b[512+12] = b[512+12] + 1
+		b[512+12]++
 		table, err := tableFromBytes(b, 512, 512)
 		if table != nil {
 			t.Error("should return nil table")
@@ -112,15 +113,15 @@ func TestTableFromBytes(t *testing.T) {
 		if err == nil {
 			t.Error("should not return nil error")
 		}
-		expected := fmt.Sprintf("Invalid EFI Header size")
+		expected := "invalid EFI Header size"
 		if !strings.HasPrefix(err.Error(), expected) {
-			t.Errorf("Error type %s instead of expected %s", err.Error(), expected)
+			t.Errorf("error type %s instead of expected %s", err.Error(), expected)
 		}
 	})
-	t.Run("Invalid EFI Zeroes", func(t *testing.T) {
-		b, err := ioutil.ReadFile(gptFile)
+	t.Run("invalid EFI Zeroes", func(t *testing.T) {
+		b, err := os.ReadFile(gptFile)
 		if err != nil {
-			t.Fatalf("Unable to read test fixture file %s: %v", gptFile, err)
+			t.Fatalf("unable to read test fixture file %s: %v", gptFile, err)
 		}
 		b[512+20] = 0x01
 		table, err := tableFromBytes(b, 512, 512)
@@ -130,17 +131,17 @@ func TestTableFromBytes(t *testing.T) {
 		if err == nil {
 			t.Error("should not return nil error")
 		}
-		expected := fmt.Sprintf("Invalid EFI Header, expected zeroes")
+		expected := "invalid EFI Header, expected zeroes"
 		if !strings.HasPrefix(err.Error(), expected) {
-			t.Errorf("Error type %s instead of expected %s", err.Error(), expected)
+			t.Errorf("error type %s instead of expected %s", err.Error(), expected)
 		}
 	})
-	t.Run("Invalid EFI Header Checksum", func(t *testing.T) {
-		b, err := ioutil.ReadFile(gptFile)
+	t.Run("invalid EFI Header Checksum", func(t *testing.T) {
+		b, err := os.ReadFile(gptFile)
 		if err != nil {
-			t.Fatalf("Unable to read test fixture file %s: %v", gptFile, err)
+			t.Fatalf("unable to read test fixture file %s: %v", gptFile, err)
 		}
-		b[512+16] = b[512+16] + 1
+		b[512+16]++
 		table, err := tableFromBytes(b, 512, 512)
 		if table != nil {
 			t.Error("should return nil table")
@@ -148,18 +149,18 @@ func TestTableFromBytes(t *testing.T) {
 		if err == nil {
 			t.Error("should not return nil error")
 		}
-		expected := fmt.Sprintf("Invalid EFI Header Checksum")
+		expected := "invalid EFI Header Checksum"
 		if !strings.HasPrefix(err.Error(), expected) {
-			t.Errorf("Error type %s instead of expected %s", err.Error(), expected)
+			t.Errorf("error type %s instead of expected %s", err.Error(), expected)
 		}
 	})
-	t.Run("Invalid EFI Partition Checksum", func(t *testing.T) {
-		b, err := ioutil.ReadFile(gptFile)
+	t.Run("invalid EFI Partition Checksum", func(t *testing.T) {
+		b, err := os.ReadFile(gptFile)
 		if err != nil {
-			t.Fatalf("Unable to read test fixture file %s: %v", gptFile, err)
+			t.Fatalf("unable to read test fixture file %s: %v", gptFile, err)
 		}
 		// change a single byte in a partition entry
-		b[512+512+400] = b[512+512+400] + 1
+		b[512+512+400]++
 		table, err := tableFromBytes(b, 512, 512)
 		if table != nil {
 			t.Error("should return nil table")
@@ -167,15 +168,15 @@ func TestTableFromBytes(t *testing.T) {
 		if err == nil {
 			t.Error("should not return nil error")
 		}
-		expected := fmt.Sprintf("Invalid EFI Partition Entry Checksum")
+		expected := "invalid EFI Partition Entry Checksum"
 		if !strings.HasPrefix(err.Error(), expected) {
-			t.Errorf("Error type %s instead of expected %s", err.Error(), expected)
+			t.Errorf("error type %s instead of expected %s", err.Error(), expected)
 		}
 	})
 	t.Run("Valid table", func(t *testing.T) {
-		b, err := ioutil.ReadFile(gptFile)
+		b, err := os.ReadFile(gptFile)
 		if err != nil {
-			t.Fatalf("Unable to read test fixture file %s: %v", gptFile, err)
+			t.Fatalf("unable to read test fixture file %s: %v", gptFile, err)
 		}
 		table, err := tableFromBytes(b, 512, 512)
 		if table == nil {

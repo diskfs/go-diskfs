@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -28,7 +29,7 @@ func TestCopyFileData(t *testing.T) {
 	}
 
 	if _, err = from.Write(b); err != nil {
-		t.Fatal("Error writing random bytes to 'from' tmpfile", err)
+		t.Fatal("error writing random bytes to 'from' tmpfile", err)
 	}
 
 	// create a target file
@@ -47,16 +48,16 @@ func TestCopyFileData(t *testing.T) {
 		t.Fatalf("copied %d bytes instead of expected %d", copied, blen)
 	}
 
-	_, err = to.Seek(0, os.SEEK_SET)
+	_, err = to.Seek(0, io.SeekStart)
 	if err != nil {
-		t.Fatal("Error resetting 'to' file", err)
+		t.Fatal("error resetting 'to' file", err)
 	}
 	c := make([]byte, blen)
 	if _, err = to.Read(c); err != nil {
-		t.Fatal("Error reading 'to' tmpfile", err)
+		t.Fatal("error reading 'to' tmpfile", err)
 	}
 
-	if bytes.Compare(b, c) != 0 {
+	if !bytes.Equal(b, c) {
 		t.Fatalf("Mismatched content between 'from' and 'to' files, 'from' then 'to'\n%#x\n%#x", b, c)
 	}
 

@@ -21,10 +21,10 @@ func TestDirectoryEntriesFromBytes(t *testing.T) {
 	}
 
 	d := &Directory{}
-	err = d.entriesFromBytes(b, nil)
+	err = d.entriesFromBytes(b)
 	switch {
 	case err != nil:
-		t.Errorf("Unexpected non-nil error: %v", err)
+		t.Errorf("unexpected non-nil error: %v", err)
 	case d.entries == nil:
 		t.Errorf("unexpected nil entries")
 	case len(d.entries) != len(validDe):
@@ -34,12 +34,11 @@ func TestDirectoryEntriesFromBytes(t *testing.T) {
 		for i, de := range d.entries {
 			if *de != *validDe[i] {
 				t.Errorf("%d: directoryEntry mismatch, actual then valid:", i)
-				t.Log(de)
-				t.Log(validDe[i])
+				t.Logf("%#v", *de)
+				t.Logf("%#v", *validDe[i])
 			}
 		}
 	}
-
 }
 
 func TestDirectoryEntriesToBytes(t *testing.T) {
@@ -71,7 +70,7 @@ func TestDirectoryEntriesToBytes(t *testing.T) {
 		t.Errorf("unexpected 0 length byte slice")
 	case len(output) != len(b):
 		t.Errorf("mismatched byte slice length actual %d, expected %d", len(output), len(b))
-	case bytes.Compare(output, b) != 0:
+	case !bytes.Equal(output, b):
 		t.Errorf("Mismatched output of bytes. Actual then expected:")
 		t.Logf("%v", output)
 		t.Logf("%v", b)

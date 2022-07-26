@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -37,9 +38,9 @@ func tmpDisk(source string, size int64) (*os.File, error) {
 	// either copy the contents of the source file over, or make a file of appropriate size
 	if source == "" {
 		// make it a 10MB file
-		f.Truncate(size)
+		_ = f.Truncate(size)
 	} else {
-		b, err := ioutil.ReadFile(source)
+		b, err := os.ReadFile(source)
 		if err != nil {
 			return nil, fmt.Errorf("Failed to read contents of %s: %v", source, err)
 		}
@@ -48,7 +49,7 @@ func tmpDisk(source string, size int64) (*os.File, error) {
 			return nil, fmt.Errorf("Failed to write contents of %s to %s: %v", source, filename, err)
 		}
 		if written != len(b) {
-			return nil, fmt.Errorf("Wrote only %d bytes of %s to %s instead of %d", written, source, filename, len(b))
+			return nil, fmt.Errorf("wrote only %d bytes of %s to %s instead of %d", written, source, filename, len(b))
 		}
 	}
 
@@ -80,7 +81,7 @@ func compareMBRBytes(b1, b2 []byte) bool {
 	if !mbr.PartitionEqualBytes(b1[48:64], b2[48:64]) {
 		return false
 	}
-	if bytes.Compare(b1[64:66], b2[64:66]) != 0 {
+	if !bytes.Equal(b1[64:66], b2[64:66]) {
 		return false
 	}
 	return true
@@ -97,26 +98,26 @@ func TestTableType(t *testing.T) {
 
 func TestTableRead(t *testing.T) {
 	t.Run("error reading file", func(t *testing.T) {
-		expected := "Error reading MBR from file"
+		expected := "error reading MBR from file"
 		f := &testhelper.FileImpl{
 			Reader: func(b []byte, offset int64) (int, error) {
-				return 0, fmt.Errorf(expected)
+				return 0, errors.New(expected)
 			},
 		}
 		table, err := mbr.Read(f, 512, 512)
 		if table != nil {
-			t.Errorf("Returned table instead of nil")
+			t.Errorf("returned table instead of nil")
 		}
 		if err == nil {
-			t.Errorf("Returned nil error instead of actual errors")
+			t.Errorf("returned nil error instead of actual errors")
 		}
 		if !strings.HasPrefix(err.Error(), expected) {
-			t.Errorf("Error type %s instead of expected %s", err.Error(), expected)
+			t.Errorf("error type %s instead of expected %s", err.Error(), expected)
 		}
 	})
 	t.Run("insufficient data read", func(t *testing.T) {
 		size := 100
-		expected := fmt.Sprintf("Read only %d bytes of MBR", size)
+		expected := fmt.Sprintf("read only %d bytes of MBR", size)
 		f := &testhelper.FileImpl{
 			Reader: func(b []byte, offset int64) (int, error) {
 				return size, nil
@@ -124,27 +125,27 @@ func TestTableRead(t *testing.T) {
 		}
 		table, err := mbr.Read(f, 512, 512)
 		if table != nil {
-			t.Errorf("Returned table instead of nil")
+			t.Errorf("returned table instead of nil")
 		}
 		if err == nil {
-			t.Errorf("Returned nil error instead of actual errors")
+			t.Errorf("returned nil error instead of actual errors")
 		}
 		if !strings.HasPrefix(err.Error(), expected) {
-			t.Errorf("Error type %s instead of expected %s", err.Error(), expected)
+			t.Errorf("error type %s instead of expected %s", err.Error(), expected)
 		}
 	})
 	t.Run("successful read", func(t *testing.T) {
 		f, err := os.Open(mbrFile)
+		if err != nil {
+			t.Fatalf("error opening file %s to read: %v", mbrFile, err)
+		}
 		defer f.Close()
-		if err != nil {
-			t.Fatalf("Error opening file %s to read: %v", mbrFile, err)
-		}
 		table, err := mbr.Read(f, 512, 512)
-		if table == nil {
-			t.Errorf("Returned nil instead of table")
-		}
 		if err != nil {
-			t.Errorf("Returned error %v instead of nil", err)
+			t.Errorf("returned error %v instead of nil", err)
+		}
+		if table == nil {
+			t.Errorf("returned nil instead of table")
 		}
 		expected := mbr.GetValidTable()
 		if table == nil && expected != nil || !table.Equal(expected) {
@@ -155,18 +156,18 @@ func TestTableRead(t *testing.T) {
 func TestTableWrite(t *testing.T) {
 	t.Run("error writing file", func(t *testing.T) {
 		table := mbr.GetValidTable()
-		expected := "Error writing partition table to disk"
+		expected := "error writing partition table to disk"
 		f := &testhelper.FileImpl{
 			Writer: func(b []byte, offset int64) (int, error) {
-				return 0, fmt.Errorf(expected)
+				return 0, errors.New(expected)
 			},
 		}
 		err := table.Write(f, tenMB)
 		if err == nil {
-			t.Errorf("Returned nil error instead of actual errors")
+			t.Errorf("returned nil error instead of actual errors")
 		}
 		if !strings.HasPrefix(err.Error(), expected) {
-			t.Errorf("Error type %s instead of expected %s", err.Error(), expected)
+			t.Errorf("error type %s instead of expected %s", err.Error(), expected)
 		}
 	})
 	t.Run("insufficient data written", func(t *testing.T) {
@@ -179,28 +180,28 @@ func TestTableWrite(t *testing.T) {
 			},
 		}
 		err := table.Write(f, tenMB)
-		expected := fmt.Sprintf("Partition table wrote %d bytes to disk", size)
+		expected := fmt.Sprintf("partition table wrote %d bytes to disk", size)
 		if err == nil {
-			t.Errorf("Returned nil error instead of actual errors")
+			t.Errorf("returned nil error instead of actual errors")
 		}
 		if !strings.HasPrefix(err.Error(), expected) {
-			t.Errorf("Error type %s instead of expected %s", err.Error(), expected)
+			t.Errorf("error type %s instead of expected %s", err.Error(), expected)
 		}
 	})
 	t.Run("successful write", func(t *testing.T) {
 		table := mbr.GetValidTable()
-		mbr, err := os.Open(mbrFile)
-		defer mbr.Close()
+		mbrFileHandle, err := os.Open(mbrFile)
 		if err != nil {
-			t.Fatalf("Error opening file %s: %v", mbrFile, err)
+			t.Fatalf("error opening file %s: %v", mbrFile, err)
 		}
-		mbrBytes := make([]byte, 512, 512)
-		read, err := mbr.ReadAt(mbrBytes, 0)
+		defer mbrFileHandle.Close()
+		mbrBytes := make([]byte, 512)
+		read, err := mbrFileHandle.ReadAt(mbrBytes, 0)
 		if err != nil {
-			t.Fatalf("Error reading MBR from file %s: %v", mbrFile, err)
+			t.Fatalf("error reading MBR from file %s: %v", mbrFile, err)
 		}
 		if read != len(mbrBytes) {
-			t.Fatalf("Read %d instead of %d bytes MBR from file %s", read, len(mbrBytes), mbrFile)
+			t.Fatalf("read %d instead of %d bytes MBR from file %s", read, len(mbrBytes), mbrFile)
 		}
 		bootloader := mbrBytes[:446]
 		remainder := mbrBytes[446:]
@@ -219,7 +220,7 @@ func TestTableWrite(t *testing.T) {
 		}
 		err = table.Write(f, tenMB)
 		if err != nil {
-			t.Errorf("Returned error %v instead of nil", err)
+			t.Errorf("returned error %v instead of nil", err)
 		}
 		if !compareMBRBytes(remainder, tableBytes) {
 			t.Log(remainder)
@@ -227,22 +228,22 @@ func TestTableWrite(t *testing.T) {
 			t.Errorf("mismatched MBR")
 		}
 		// need to check that bootloader was unchanged
-		bootloaderBytes := make([]byte, 446, 446)
-		read, err = mbr.ReadAt(bootloaderBytes, 0)
+		bootloaderBytes := make([]byte, 446)
+		read, err = mbrFileHandle.ReadAt(bootloaderBytes, 0)
 		if err != nil {
-			t.Fatalf("Error reading bootloader from file %s: %v", mbrFile, err)
+			t.Fatalf("error reading bootloader from file %s: %v", mbrFile, err)
 		}
 		if read != len(bootloaderBytes) {
-			t.Fatalf("Read %d instead of %d bytes bootloader from file %s", read, len(bootloaderBytes), mbrFile)
+			t.Fatalf("read %d instead of %d bytes bootloader from file %s", read, len(bootloaderBytes), mbrFile)
 		}
-		if bytes.Compare(bootloader, bootloaderBytes) != 0 {
+		if !bytes.Equal(bootloader, bootloaderBytes) {
 			t.Error("bootloader was changed when it should not be")
 		}
 	})
 	t.Run("successful full test", func(t *testing.T) {
 		f, err := tmpDisk("", 10*1024*1024)
 		if err != nil {
-			t.Fatalf("Error creating new temporary disk: %v", err)
+			t.Fatalf("error creating new temporary disk: %v", err)
 		}
 		defer f.Close()
 
@@ -254,7 +255,7 @@ func TestTableWrite(t *testing.T) {
 
 		fileInfo, err := f.Stat()
 		if err != nil {
-			t.Fatalf("Error reading info on temporary disk: %v", err)
+			t.Fatalf("error reading info on temporary disk: %v", err)
 		}
 
 		// this is partition start and end in sectors, not bytes
@@ -273,7 +274,7 @@ func TestTableWrite(t *testing.T) {
 		err = table.Write(f, fileInfo.Size())
 		switch {
 		case err != nil:
-			t.Errorf("Unexpected err: %v", err)
+			t.Errorf("unexpected err: %v", err)
 		default:
 			// we only run this if we have a real image
 			if intImage == "" {
@@ -288,7 +289,7 @@ func TestTableWrite(t *testing.T) {
 			err := testhelper.DockerRun(nil, output, false, true, mounts, intImage, "sfdisk", "-l", mpath)
 			outString := output.String()
 			if err != nil {
-				t.Errorf("Unexpected err: %v", err)
+				t.Errorf("unexpected err: %v", err)
 				t.Log(outString)
 			}
 
@@ -308,7 +309,7 @@ func TestTableWrite(t *testing.T) {
 			partitionParts := partitionMatcher.FindStringSubmatch(outString)
 
 			if len(partitionParts) < 9 {
-				t.Errorf("Unable to retrieve partition parts %v", partitionParts)
+				t.Errorf("unable to retrieve partition parts %v", partitionParts)
 				return
 			}
 
@@ -347,7 +348,7 @@ func TestGetPartitionSize(t *testing.T) {
 	size := table.Partitions[request].GetSize()
 	expected := table.Partitions[request].Size
 	if size != int64(expected) {
-		t.Errorf("Received size %d instead of %d", size, expected)
+		t.Errorf("received size %d instead of %d", size, expected)
 	}
 }
 func TestGetPartitionStart(t *testing.T) {
@@ -357,7 +358,7 @@ func TestGetPartitionStart(t *testing.T) {
 	start := table.Partitions[request].GetStart()
 	expected := table.Partitions[request].Start
 	if start != int64(expected) {
-		t.Errorf("Received start %d instead of %d", start, expected)
+		t.Errorf("received start %d instead of %d", start, expected)
 	}
 }
 func TestReadPartitionContents(t *testing.T) {
@@ -367,8 +368,8 @@ func TestReadPartitionContents(t *testing.T) {
 	var b bytes.Buffer
 	writer := bufio.NewWriter(&b)
 	size := 100
-	b2 := make([]byte, size, size)
-	rand.Read(b2)
+	b2 := make([]byte, size)
+	_, _ = rand.Read(b2)
 	f := &testhelper.FileImpl{
 		Reader: func(b []byte, offset int64) (int, error) {
 			copy(b, b2)
@@ -377,13 +378,13 @@ func TestReadPartitionContents(t *testing.T) {
 	}
 	read, err := table.Partitions[request].ReadContents(f, writer)
 	if read != int64(size) {
-		t.Errorf("Returned %d bytes read instead of %d", read, size)
+		t.Errorf("returned %d bytes read instead of %d", read, size)
 	}
 	if err != nil {
-		t.Errorf("Error was not nil")
+		t.Errorf("error was not nil")
 	}
 	writer.Flush()
-	if bytes.Compare(b.Bytes(), b2) != 0 {
+	if !bytes.Equal(b.Bytes(), b2) {
 		t.Errorf("Mismatched bytes data")
 		t.Log(b.Bytes())
 		t.Log(b2)
@@ -393,8 +394,8 @@ func TestWritePartitionContents(t *testing.T) {
 	table := mbr.GetValidTable()
 	request := 0
 	size := table.Partitions[request].Size * uint32(table.LogicalSectorSize)
-	b := make([]byte, size, size)
-	rand.Read(b)
+	b := make([]byte, size)
+	_, _ = rand.Read(b)
 	reader := bytes.NewReader(b)
 	b2 := make([]byte, 0, size)
 	f := &testhelper.FileImpl{
@@ -405,12 +406,12 @@ func TestWritePartitionContents(t *testing.T) {
 	}
 	written, err := table.Partitions[request].WriteContents(f, reader)
 	if written != uint64(size) {
-		t.Errorf("Returned %d bytes written instead of %d", written, size)
+		t.Errorf("returned %d bytes written instead of %d", written, size)
 	}
 	if err != nil {
-		t.Errorf("Error was not nil: %v", err)
+		t.Errorf("error was not nil: %v", err)
 	}
-	if bytes.Compare(b2, b) != 0 {
+	if !bytes.Equal(b2, b) {
 		t.Errorf("Bytes mismatch")
 		t.Log(b)
 		t.Log(b2)

@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"strings"
 	"testing"
 )
@@ -53,32 +53,31 @@ func TestMsDosBootSectorFromBytes(t *testing.T) {
 			t.Errorf("Did not return expected error")
 		}
 		if bs != nil {
-			t.Fatalf("Returned MsDosBootSector was non-nil")
+			t.Fatalf("returned MsDosBootSector was non-nil")
 		}
-		expected := fmt.Sprintf("Cannot parse MS-DOS Boot Sector from %d bytes", len(b))
+		expected := fmt.Sprintf("cannot parse MS-DOS Boot Sector from %d bytes", len(b))
 		if !strings.HasPrefix(err.Error(), expected) {
-			t.Errorf("Error type %s instead of expected %s", err.Error(), expected)
+			t.Errorf("error type %s instead of expected %s", err.Error(), expected)
 		}
 	})
 	t.Run("mismatched length greater than 512", func(t *testing.T) {
-		b := make([]byte, 513, 513)
+		b := make([]byte, 513)
 		bs, err := msDosBootSectorFromBytes(b)
 		if err == nil {
 			t.Errorf("Did not return expected error")
 		}
 		if bs != nil {
-			t.Fatalf("Returned MsDosBootSector was non-nil")
+			t.Fatalf("returned MsDosBootSector was non-nil")
 		}
-		expected := fmt.Sprintf("Cannot parse MS-DOS Boot Sector from %d bytes", len(b))
+		expected := fmt.Sprintf("cannot parse MS-DOS Boot Sector from %d bytes", len(b))
 		if !strings.HasPrefix(err.Error(), expected) {
-			t.Errorf("Error type %s instead of expected %s", err.Error(), expected)
+			t.Errorf("error type %s instead of expected %s", err.Error(), expected)
 		}
-
 	})
 	t.Run("invalid Dos71EBPB", func(t *testing.T) {
-		input, err := ioutil.ReadFile(Fat32File)
+		input, err := os.ReadFile(Fat32File)
 		if err != nil {
-			t.Fatalf("Error reading test fixture data from %s: %v", Fat32File, err)
+			t.Fatalf("error reading test fixture data from %s: %v", Fat32File, err)
 		}
 		b := input[0:512]
 		// now to pervert one key byte
@@ -89,17 +88,17 @@ func TestMsDosBootSectorFromBytes(t *testing.T) {
 			t.Errorf("Did not return expected error")
 		}
 		if bs != nil {
-			t.Fatalf("Returned MsDosBootSector was non-nil")
+			t.Fatalf("returned MsDosBootSector was non-nil")
 		}
-		expected := fmt.Sprintf("Could not read FAT32 BIOS Parameter Block from boot sector")
+		expected := "could not read FAT32 BIOS Parameter Block from boot sector"
 		if !strings.HasPrefix(err.Error(), expected) {
-			t.Errorf("Error type %s instead of expected %s", err.Error(), expected)
+			t.Errorf("error type %s instead of expected %s", err.Error(), expected)
 		}
 	})
 	t.Run("invalid signature", func(t *testing.T) {
-		input, err := ioutil.ReadFile(Fat32File)
+		input, err := os.ReadFile(Fat32File)
 		if err != nil {
-			t.Fatalf("Error reading test fixture data from %s: %v", Fat32File, err)
+			t.Fatalf("error reading test fixture data from %s: %v", Fat32File, err)
 		}
 		b := input[0:512]
 		b[510] = 0x5e
@@ -108,25 +107,25 @@ func TestMsDosBootSectorFromBytes(t *testing.T) {
 			t.Errorf("Did not return expected error")
 		}
 		if bs != nil {
-			t.Fatalf("Returned MsDosBootSector was non-nil")
+			t.Fatalf("returned MsDosBootSector was non-nil")
 		}
-		expected := fmt.Sprintf("Invalid signature in last 2 bytes of boot sector")
+		expected := "invalid signature in last 2 bytes of boot sector"
 		if !strings.HasPrefix(err.Error(), expected) {
-			t.Errorf("Error type %s instead of expected %s", err.Error(), expected)
+			t.Errorf("error type %s instead of expected %s", err.Error(), expected)
 		}
 	})
 	t.Run("valid MsDosBootSector", func(t *testing.T) {
-		input, err := ioutil.ReadFile(Fat32File)
+		input, err := os.ReadFile(Fat32File)
 		if err != nil {
-			t.Fatalf("Error reading test fixture data from %s: %v", Fat32File, err)
+			t.Fatalf("error reading test fixture data from %s: %v", Fat32File, err)
 		}
 		b := input[0:512]
 		bs, err := msDosBootSectorFromBytes(b)
 		if err != nil {
-			t.Errorf("Return unexpected error: %v", err)
+			t.Errorf("return unexpected error: %v", err)
 		}
 		if bs == nil {
-			t.Fatalf("Returned MsDosBootSector was nil unexpectedly")
+			t.Fatalf("returned MsDosBootSector was nil unexpectedly")
 		}
 		valid := getValidMsDosBootSector()
 		if !bs.equal(valid) {
@@ -144,7 +143,7 @@ func TestMsDosBootSectorToBytes(t *testing.T) {
 		bs.oemName = name
 		b, err := bs.toBytes()
 		if err != nil {
-			t.Errorf("Error was not nil, instead %v", err)
+			t.Errorf("error was not nil, instead %v", err)
 		}
 		if b == nil {
 			t.Fatal("b was nil unexpectedly")
@@ -152,7 +151,7 @@ func TestMsDosBootSectorToBytes(t *testing.T) {
 		// it should have passed it
 		calculatedName := b[3:11]
 		expectedName := []byte{97, 98, 99, 0x20, 0x20, 0x20, 0x20, 0x20}
-		if bytes.Compare(calculatedName, expectedName) != 0 {
+		if !bytes.Equal(calculatedName, expectedName) {
 			t.Log(calculatedName)
 			t.Log(expectedName)
 			t.Fatal("did not fill short OEM name properly")
@@ -163,14 +162,14 @@ func TestMsDosBootSectorToBytes(t *testing.T) {
 		bs.oemName = "abcdefghijklmnop"
 		b, err := bs.toBytes()
 		if err == nil {
-			t.Error("Error was nil unexpectedly")
+			t.Error("error was nil unexpectedly")
 		}
 		if b != nil {
 			t.Fatal("b was not nil")
 		}
-		expected := fmt.Sprintf("Cannot use OEM Name > 8 bytes")
+		expected := "cannot use OEM Name > 8 bytes"
 		if !strings.HasPrefix(err.Error(), expected) {
-			t.Errorf("Error type %s instead of expected %s", err.Error(), expected)
+			t.Errorf("error type %s instead of expected %s", err.Error(), expected)
 		}
 	})
 	t.Run("non-ascii OEM Name", func(t *testing.T) {
@@ -178,14 +177,14 @@ func TestMsDosBootSectorToBytes(t *testing.T) {
 		bs.oemName = "\u0061\u6785"
 		b, err := bs.toBytes()
 		if err == nil {
-			t.Error("Error was nil unexpectedly")
+			t.Error("error was nil unexpectedly")
 		}
 		if b != nil {
 			t.Fatal("b was not nil")
 		}
-		expected := fmt.Sprintf("Invalid OEM Name: non-ascii characters")
+		expected := "invalid OEM Name: non-ascii characters"
 		if !strings.HasPrefix(err.Error(), expected) {
-			t.Errorf("Error type %s instead of expected %s", err.Error(), expected)
+			t.Errorf("error type %s instead of expected %s", err.Error(), expected)
 		}
 	})
 	t.Run("short boot code", func(t *testing.T) {
@@ -193,16 +192,16 @@ func TestMsDosBootSectorToBytes(t *testing.T) {
 		bs.bootCode = []byte{0x45, 0x56}
 		b, err := bs.toBytes()
 		if err != nil {
-			t.Errorf("Error was not nil, instead %v", err)
+			t.Errorf("error was not nil, instead %v", err)
 		}
 		if b == nil {
 			t.Fatal("b was nil unexpectedly")
 		}
 		// it should have passed it
 		calculatedBootCode := b[90:510]
-		expectedBootCode := make([]byte, 420, 420)
+		expectedBootCode := make([]byte, 420)
 		copy(expectedBootCode, bs.bootCode)
-		if bytes.Compare(calculatedBootCode, expectedBootCode) != 0 {
+		if !bytes.Equal(calculatedBootCode, expectedBootCode) {
 			t.Log(calculatedBootCode)
 			t.Log(expectedBootCode)
 			t.Fatal("did not fill boot code properly")
@@ -210,36 +209,36 @@ func TestMsDosBootSectorToBytes(t *testing.T) {
 	})
 	t.Run("long boot code", func(t *testing.T) {
 		bs := getValidMsDosBootSector()
-		bc := make([]byte, 600, 600)
-		rand.Read(bc)
+		bc := make([]byte, 600)
+		_, _ = rand.Read(bc)
 		bs.bootCode = bc
 		b, err := bs.toBytes()
 		if err == nil {
-			t.Error("Error was nil unexpectedly")
+			t.Error("error was nil unexpectedly")
 		}
 		if b != nil {
 			t.Fatal("b was not nil unexpectedly")
 		}
-		expected := fmt.Sprintf("boot code too long")
+		expected := "boot code too long"
 		if !strings.HasPrefix(err.Error(), expected) {
-			t.Errorf("Error type %s instead of expected %s", err.Error(), expected)
+			t.Errorf("error type %s instead of expected %s", err.Error(), expected)
 		}
 	})
 	t.Run("valid Boot Sector", func(t *testing.T) {
 		bs := getValidMsDosBootSector()
 		b, err := bs.toBytes()
 		if err != nil {
-			t.Errorf("Error was not nil, instead %v", err)
+			t.Errorf("error was not nil, instead %v", err)
 		}
 		if b == nil {
 			t.Fatal("b was nil unexpectedly")
 		}
-		valid, err := ioutil.ReadFile(Fat32File)
+		valid, err := os.ReadFile(Fat32File)
 		if err != nil {
-			t.Fatalf("Error reading test fixture data from %s: %v", Fat32File, err)
+			t.Fatalf("error reading test fixture data from %s: %v", Fat32File, err)
 		}
 		validBytes := valid[:512]
-		if bytes.Compare(validBytes, b) != 0 {
+		if !bytes.Equal(validBytes, b) {
 			t.Error("Mismatched bytes")
 		}
 	})

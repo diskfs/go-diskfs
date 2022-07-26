@@ -82,16 +82,16 @@ func TestFinalizeSquashfs(t *testing.T) {
 
 		err = fs.Finalize(squashfs.FinalizeOptions{})
 		if err != nil {
-			t.Fatal("Unexpected error fs.Finalize()", err)
+			t.Fatal("unexpected error fs.Finalize()", err)
 		}
 		// now need to check contents
 		fi, err := f.Stat()
 		if err != nil {
-			t.Fatalf("Error trying to Stat() squashfs file: %v", err)
+			t.Fatalf("error trying to Stat() squashfs file: %v", err)
 		}
 		// we made two 5MB files, so should be at least 10MB
 		if fi.Size() < 10*1024*1024 {
-			t.Fatalf("Resultant file too small after finalizing %d", fi.Size())
+			t.Fatalf("resultant file too small after finalizing %d", fi.Size())
 		}
 
 		// now check the contents
@@ -134,14 +134,14 @@ func TestFinalizeSquashfs(t *testing.T) {
 
 			f, err = fs.OpenFile(k, os.O_RDONLY)
 			if err != nil {
-				t.Errorf("Error opening file %s: %v", k, err)
+				t.Errorf("error opening file %s: %v", k, err)
 				continue
 			}
 			// check the contents
-			b := make([]byte, 50, 50)
+			b := make([]byte, 50)
 			read, err = f.Read(b)
 			if err != nil && err != io.EOF {
-				t.Errorf("Error reading from file %s: %v", k, err)
+				t.Errorf("error reading from file %s: %v", k, err)
 			}
 			actual := string(b[:read])
 			if actual != v {
@@ -154,11 +154,12 @@ func TestFinalizeSquashfs(t *testing.T) {
 		// close the file
 		err = f.Close()
 		if err != nil {
-			t.Fatalf("Could not close squashfs file: %v", err)
+			t.Fatalf("could not close squashfs file: %v", err)
 		}
 	})
 }
 
+//nolint:thelper // this is not a helper function
 func validateSquashfs(t *testing.T, f *os.File) {
 	// only do this test if os.Getenv("TEST_IMAGE") contains a real image for integration testing
 	if intImage == "" {
@@ -176,13 +177,13 @@ func validateSquashfs(t *testing.T, f *os.File) {
 	err := testhelper.DockerRun(nil, output, false, true, mounts, intImage, "unsquashfs", "-ll", mpath)
 	outString := output.String()
 	if err != nil {
-		t.Errorf("Unexpected err: %v", err)
+		t.Errorf("unexpected err: %v", err)
 		t.Log(outString)
 	}
 	err = testhelper.DockerRun(nil, output, false, true, mounts, intImage, "unsquashfs", "-s", mpath)
 	outString = output.String()
 	if err != nil {
-		t.Errorf("Unexpected err: %v", err)
+		t.Errorf("unexpected err: %v", err)
 		t.Log(outString)
 	}
 }

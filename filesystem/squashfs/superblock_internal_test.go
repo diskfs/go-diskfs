@@ -23,8 +23,8 @@ var superblockFlagsTests = []struct {
 	err   error
 }{
 	// we built these test numbers manually...
-	{[]byte{1}, nil, fmt.Errorf("Received 1")},
-	{[]byte{1, 2, 3}, nil, fmt.Errorf("Received 3")},
+	{[]byte{1}, nil, fmt.Errorf("received 1")},
+	{[]byte{1, 2, 3}, nil, fmt.Errorf("received 3")},
 	// all of them flagged
 	{[]byte{0xfb, 0xf}, &superblockFlags{true, true, true, true, true, true, true, true, true, true, true}, nil},
 	// none of them flagged
@@ -37,14 +37,17 @@ var superblockFlagsTests = []struct {
 
 func testGetValidSuperblock() ([]byte, *superblock, error) {
 	file, err := os.Open(SquashfsUncompressedfile)
+	if err != nil {
+		return nil, nil, fmt.Errorf("error opening uncompressed file %s: %v", SquashfsUncompressedfile, err)
+	}
 	defer file.Close()
 	if err != nil {
-		return nil, nil, fmt.Errorf("Could not open file %s to read: %v", Squashfsfile, err)
+		return nil, nil, fmt.Errorf("could not open file %s to read: %v", Squashfsfile, err)
 	}
 	b := make([]byte, superblockSize)
 	read, err := file.ReadAt(b, 0)
 	if err != nil {
-		return nil, nil, fmt.Errorf("Could not read from %s: %v", Squashfsfile, err)
+		return nil, nil, fmt.Errorf("could not read from %s: %v", Squashfsfile, err)
 	}
 	if read != len(b) {
 		return nil, nil, fmt.Errorf("read %d bytes instead of expected %d from %s", read, len(b), Squashfsfile)
@@ -54,6 +57,7 @@ func testGetValidSuperblock() ([]byte, *superblock, error) {
 
 func TestParseFlags(t *testing.T) {
 	tests := superblockFlagsTests
+	//nolint:dupl // these functions vary slightly from one another
 	for i, tt := range tests {
 		flags, err := parseFlags(tt.b)
 		switch {
@@ -80,11 +84,11 @@ func TestParseSuperblock(t *testing.T) {
 		err error
 	}{
 		// too many bytes
-		{append(b, []byte{1, 2, 3}...), nil, fmt.Errorf("Superblock had %d bytes", superblockSize+3)},
+		{append(b, []byte{1, 2, 3}...), nil, fmt.Errorf("superblock had %d bytes", superblockSize+3)},
 		// not enough bytes
-		{b[2:], nil, fmt.Errorf("Superblock had %d bytes", superblockSize-2)},
+		{b[2:], nil, fmt.Errorf("superblock had %d bytes", superblockSize-2)},
 		// corrupted magic bytes
-		{append([]byte{0x10, 0x20}, b[2:]...), nil, fmt.Errorf("Superblock had magic of")},
+		{append([]byte{0x10, 0x20}, b[2:]...), nil, fmt.Errorf("superblock had magic of")},
 		// valid
 		{b, s, nil},
 	}
@@ -111,8 +115,8 @@ func TestSuperblockToBytes(t *testing.T) {
 	// strip the dates, which are in positions 8:12
 	copy(b[8:12], []byte{0, 0, 0, 0})
 	copy(output[8:12], []byte{0, 0, 0, 0})
-	if bytes.Compare(output, b) != 0 {
-		t.Errorf("Mismatched bytes, actual then expected")
+	if !bytes.Equal(output, b) {
+		t.Errorf("mismatched bytes, actual then expected")
 		t.Logf("%x", output)
 		t.Logf("%x", b)
 	}
@@ -124,7 +128,7 @@ func TestParseRootInode(t *testing.T) {
 		output := parseRootInode(tt.number)
 		switch {
 		case output == nil:
-			t.Errorf("%d: Unexpected nil output", i)
+			t.Errorf("%d: unexpected nil output", i)
 		case (output == nil && tt.inode != nil) || (output != nil && tt.inode == nil) || (*output != *tt.inode):
 			t.Errorf("%d: mismatched results, actual then expected", i)
 			t.Logf("%v", output)
@@ -151,11 +155,10 @@ func TestSuperblockFlagsUint16(t *testing.T) {
 			continue
 		}
 		b := tt.flags.bytes()
-		if bytes.Compare(b, tt.b) != 0 {
+		if !bytes.Equal(b, tt.b) {
 			t.Errorf("%d: mismatched results, actual then expected", i)
 			t.Logf("%v", b)
 			t.Logf("%v", tt.b)
 		}
 	}
-
 }

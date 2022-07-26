@@ -3,7 +3,7 @@ package mbr
 import (
 	"crypto/rand"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"strings"
 	"testing"
 )
@@ -41,44 +41,44 @@ func GetValidTable() *Table {
 
 func TestTableFromBytes(t *testing.T) {
 	t.Run("Short byte slice", func(t *testing.T) {
-		b := make([]byte, 512-1, 512-1)
-		rand.Read(b)
-		table, err := tableFromBytes(b, 512, 512)
+		b := make([]byte, 512-1)
+		_, _ = rand.Read(b)
+		table, err := tableFromBytes(b)
 		if table != nil {
 			t.Error("should return nil table")
 		}
 		if err == nil {
 			t.Error("should not return nil error")
 		}
-		expected := fmt.Sprintf("Data for partition was %d bytes", len(b))
+		expected := fmt.Sprintf("data for partition was %d bytes", len(b))
 		if !strings.HasPrefix(err.Error(), expected) {
-			t.Errorf("Error type %s instead of expected %s", err.Error(), expected)
+			t.Errorf("error type %s instead of expected %s", err.Error(), expected)
 		}
 	})
-	t.Run("Invalid MBR Signature", func(t *testing.T) {
-		b, err := ioutil.ReadFile(mbrFile)
+	t.Run("invalid MBR Signature", func(t *testing.T) {
+		b, err := os.ReadFile(mbrFile)
 		if err != nil {
-			t.Fatalf("Unable to read test fixture file %s: %v", mbrFile, err)
+			t.Fatalf("unable to read test fixture file %s: %v", mbrFile, err)
 		}
 		b[511] = 0x00
-		table, err := tableFromBytes(b[:512], 512, 512)
+		table, err := tableFromBytes(b[:512])
 		if table != nil {
 			t.Error("should return nil table")
 		}
 		if err == nil {
 			t.Error("should not return nil error")
 		}
-		expected := fmt.Sprintf("Invalid MBR Signature")
+		expected := "invalid MBR Signature"
 		if !strings.HasPrefix(err.Error(), expected) {
-			t.Errorf("Error type %s instead of expected %s", err.Error(), expected)
+			t.Errorf("error type %s instead of expected %s", err.Error(), expected)
 		}
 	})
 	t.Run("Valid table", func(t *testing.T) {
-		b, err := ioutil.ReadFile(mbrFile)
+		b, err := os.ReadFile(mbrFile)
 		if err != nil {
-			t.Fatalf("Unable to read test fixture file %s: %v", mbrFile, err)
+			t.Fatalf("unable to read test fixture file %s: %v", mbrFile, err)
 		}
-		table, err := tableFromBytes(b[:512], 512, 512)
+		table, err := tableFromBytes(b[:512])
 		if table == nil {
 			t.Error("should not return nil table")
 		}

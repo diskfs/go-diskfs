@@ -117,7 +117,7 @@ err = disk.Partition(table)
 /*
  * create an ESP partition with some contents
  */
-kernel, err := ioutil.ReadFile("/some/kernel/file")
+kernel, err := os.ReadFile("/some/kernel/file")
 
 fs, err := disk.CreateFilesystem(0, diskfs.TypeFat32)
 

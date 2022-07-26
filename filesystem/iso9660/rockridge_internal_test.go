@@ -26,7 +26,7 @@ func TestRockRidgeGetFilename(t *testing.T) {
 		filename string
 		err      error
 	}{
-		{&directoryEntry{filename: "ABC"}, "", fmt.Errorf("Could not find Rock Ridge filename property")},
+		{&directoryEntry{filename: "ABC"}, "", fmt.Errorf("could not find Rock Ridge filename property")},
 		{&directoryEntry{filename: "ABC", extensions: []directoryEntrySystemUseExtension{rockRidgeName{name: "abc"}}}, "abc", nil},
 	}
 	rr := &rockRidgeExtension{}
@@ -135,15 +135,15 @@ func TestGetExtensions(t *testing.T) {
 
 	self, err := user.Current()
 	if err != nil {
-		t.Fatalf("Unable to get current uid/gid: %v", err)
+		t.Fatalf("unable to get current uid/gid: %v", err)
 	}
 	uidI, err := strconv.Atoi(self.Uid)
 	if err != nil {
-		t.Fatalf("Unable to convert uid to int: %v", err)
+		t.Fatalf("unable to convert uid to int: %v", err)
 	}
 	gidI, err := strconv.Atoi(self.Gid)
 	if err != nil {
-		t.Fatalf("Unable to convert gid to int: %v", err)
+		t.Fatalf("unable to convert gid to int: %v", err)
 	}
 	uid := uint32(uidI)
 	gid := uint32(gidI)
@@ -158,7 +158,7 @@ func TestGetExtensions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to ready file info for test symlink: %v", err)
 	}
-	symMode := fi.Mode() & 0777
+	symMode := fi.Mode() & 0o777
 
 	tests := []struct {
 		name       string
@@ -169,40 +169,40 @@ func TestGetExtensions(t *testing.T) {
 	}{
 		// regular file
 		{"regular01", false, false, []directoryEntrySystemUseExtension{
-			rockRidgePosixAttributes{mode: 0764, linkCount: 1, uid: uid, gid: gid, length: pxLength},
+			rockRidgePosixAttributes{mode: 0o764, linkCount: 1, uid: uid, gid: gid, length: pxLength},
 			rockRidgeTimestamps{stamps: []rockRidgeTimestamp{
-				rockRidgeTimestamp{timestampType: rockRidgeTimestampModify, time: now},
-				rockRidgeTimestamp{timestampType: rockRidgeTimestampAccess, time: now},
-				rockRidgeTimestamp{timestampType: rockRidgeTimestampAttribute, time: now},
+				{timestampType: rockRidgeTimestampModify, time: now},
+				{timestampType: rockRidgeTimestampAccess, time: now},
+				{timestampType: rockRidgeTimestampAttribute, time: now},
 			},
 			},
 			rockRidgeName{name: "regular01"},
 		}, func(path string) {
-			if err := ioutil.WriteFile(path, []byte("some data"), 0764); err != nil {
+			if err := os.WriteFile(path, []byte("some data"), 0o600); err != nil {
 				t.Fatalf("unable to create regular file %s: %v", path, err)
 			}
 			// because of umask, must set explicitly
-			if err := os.Chmod(path, 0764); err != nil {
+			if err := os.Chmod(path, 0o764); err != nil {
 				t.Fatalf("unable to chmod %s: %v", path, err)
 			}
 		},
 		},
 		// directory
 		{"directory02", false, false, []directoryEntrySystemUseExtension{
-			rockRidgePosixAttributes{mode: 0754 | os.ModeDir, linkCount: 2, uid: uid, gid: gid, length: pxLength},
+			rockRidgePosixAttributes{mode: 0o754 | os.ModeDir, linkCount: 2, uid: uid, gid: gid, length: pxLength},
 			rockRidgeTimestamps{stamps: []rockRidgeTimestamp{
-				rockRidgeTimestamp{timestampType: rockRidgeTimestampModify, time: now},
-				rockRidgeTimestamp{timestampType: rockRidgeTimestampAccess, time: now},
-				rockRidgeTimestamp{timestampType: rockRidgeTimestampAttribute, time: now},
+				{timestampType: rockRidgeTimestampModify, time: now},
+				{timestampType: rockRidgeTimestampAccess, time: now},
+				{timestampType: rockRidgeTimestampAttribute, time: now},
 			},
 			},
 			rockRidgeName{name: "directory02"},
 		}, func(path string) {
-			if err := os.Mkdir(path, 0754); err != nil {
+			if err := os.Mkdir(path, 0o754); err != nil {
 				t.Fatalf("unable to create directory %s: %v", path, err)
 			}
 			// because of umask, must set explicitly
-			if err := os.Chmod(path, 0754); err != nil {
+			if err := os.Chmod(path, 0o754); err != nil {
 				t.Fatalf("unable to chmod %s: %v", path, err)
 			}
 		},
@@ -211,9 +211,9 @@ func TestGetExtensions(t *testing.T) {
 		{"symlink03", false, false, []directoryEntrySystemUseExtension{
 			rockRidgePosixAttributes{mode: symMode | os.ModeSymlink, linkCount: 1, uid: uid, gid: gid, length: pxLength},
 			rockRidgeTimestamps{stamps: []rockRidgeTimestamp{
-				rockRidgeTimestamp{timestampType: rockRidgeTimestampModify, time: now},
-				rockRidgeTimestamp{timestampType: rockRidgeTimestampAccess, time: now},
-				rockRidgeTimestamp{timestampType: rockRidgeTimestampAttribute, time: now},
+				{timestampType: rockRidgeTimestampModify, time: now},
+				{timestampType: rockRidgeTimestampAccess, time: now},
+				{timestampType: rockRidgeTimestampAttribute, time: now},
 			},
 			},
 			rockRidgeName{name: "symlink03"},
@@ -226,30 +226,30 @@ func TestGetExtensions(t *testing.T) {
 		},
 		// parent
 		{"directoryparent", false, true, []directoryEntrySystemUseExtension{
-			rockRidgePosixAttributes{mode: 0754 | os.ModeDir, linkCount: 2, uid: uid, gid: gid, length: pxLength},
+			rockRidgePosixAttributes{mode: 0o754 | os.ModeDir, linkCount: 2, uid: uid, gid: gid, length: pxLength},
 			rockRidgeTimestamps{stamps: []rockRidgeTimestamp{
-				rockRidgeTimestamp{timestampType: rockRidgeTimestampModify, time: now},
-				rockRidgeTimestamp{timestampType: rockRidgeTimestampAccess, time: now},
-				rockRidgeTimestamp{timestampType: rockRidgeTimestampAttribute, time: now},
+				{timestampType: rockRidgeTimestampModify, time: now},
+				{timestampType: rockRidgeTimestampAccess, time: now},
+				{timestampType: rockRidgeTimestampAttribute, time: now},
 			},
 			},
 		}, func(path string) {
-			if err := os.Mkdir(path, 0754); err != nil {
+			if err := os.Mkdir(path, 0o754); err != nil {
 				t.Fatalf("unable to create parent directory %s: %v", path, err)
 			}
 		},
 		},
 		// self
 		{"directoryself", true, false, []directoryEntrySystemUseExtension{
-			rockRidgePosixAttributes{mode: 0754 | os.ModeDir, linkCount: 2, uid: uid, gid: gid, length: pxLength},
+			rockRidgePosixAttributes{mode: 0o754 | os.ModeDir, linkCount: 2, uid: uid, gid: gid, length: pxLength},
 			rockRidgeTimestamps{stamps: []rockRidgeTimestamp{
-				rockRidgeTimestamp{timestampType: rockRidgeTimestampModify, time: now},
-				rockRidgeTimestamp{timestampType: rockRidgeTimestampAccess, time: now},
-				rockRidgeTimestamp{timestampType: rockRidgeTimestampAttribute, time: now},
+				{timestampType: rockRidgeTimestampModify, time: now},
+				{timestampType: rockRidgeTimestampAccess, time: now},
+				{timestampType: rockRidgeTimestampAttribute, time: now},
 			},
 			},
 		}, func(path string) {
-			if err := os.Mkdir(path, 0754); err != nil {
+			if err := os.Mkdir(path, 0o754); err != nil {
 				t.Fatalf("unable to create self directory %s: %v", path, err)
 			}
 		},

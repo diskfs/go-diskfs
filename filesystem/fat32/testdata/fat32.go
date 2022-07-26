@@ -22,7 +22,7 @@ func mkfs(name string) filesystem.FileSystem {
 	size := int64(10 * 1024 * 1024)
 	d, err := diskfs.Create(name, size, diskfs.Raw, diskfs.SectorSizeDefault)
 	if err != nil {
-		fmt.Printf("Error creating disk: %v", err)
+		fmt.Printf("error creating disk: %v", err)
 		os.Exit(1)
 	}
 
@@ -44,7 +44,7 @@ func mkfile(fs filesystem.FileSystem, name string) {
 		panic(err)
 	}
 
-	_, err = rw.Write([]byte("Hello World"))
+	_, err = rw.Write([]byte("hello World"))
 	if err != nil {
 		panic(err)
 	}

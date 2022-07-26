@@ -3,7 +3,7 @@ package fat32
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -54,12 +54,12 @@ var (
 		err       error
 	}{
 		// first several tests use invalid shortname char or too long
-		{"foo", "TXT", "very long filename indeed", nil, fmt.Errorf("Could not calculate checksum for 8.3 filename: Invalid shortname character in filename")},
-		{"א", "TXT", "very long filename indeed", nil, fmt.Errorf("Could not calculate checksum for 8.3 filename: Invalid shortname character in filename")},
-		{"abcdefghuk", "TXT", "very long filename indeed", nil, fmt.Errorf("Could not calculate checksum for 8.3 filename: Invalid shortname character in filename")},
-		{"FOO", "א", "very long filename indeed", nil, fmt.Errorf("Could not calculate checksum for 8.3 filename: Invalid shortname character in extension")},
-		{"FOO", "TXT234", "very long filename indeed", nil, fmt.Errorf("Could not calculate checksum for 8.3 filename: Extension for file is longer")},
-		{"FOO", "txt", "very long filename indeed", nil, fmt.Errorf("Could not calculate checksum for 8.3 filename: Invalid shortname character in extension")},
+		{"foo", "TXT", "very long filename indeed", nil, fmt.Errorf("could not calculate checksum for 8.3 filename: invalid shortname character in filename")},
+		{"א", "TXT", "very long filename indeed", nil, fmt.Errorf("could not calculate checksum for 8.3 filename: invalid shortname character in filename")},
+		{"abcdefghuk", "TXT", "very long filename indeed", nil, fmt.Errorf("could not calculate checksum for 8.3 filename: invalid shortname character in filename")},
+		{"FOO", "א", "very long filename indeed", nil, fmt.Errorf("could not calculate checksum for 8.3 filename: invalid shortname character in extension")},
+		{"FOO", "TXT234", "very long filename indeed", nil, fmt.Errorf("could not calculate checksum for 8.3 filename: extension for file is longer")},
+		{"FOO", "txt", "very long filename indeed", nil, fmt.Errorf("could not calculate checksum for 8.3 filename: invalid shortname character in extension")},
 		// rest are valid
 		{"UNARCH~1", "DAT", "Un archivo con nombre largo.dat", unarcBytes, nil},
 	}
@@ -183,9 +183,9 @@ func getValidDirectoryEntries() ([]*directoryEntry, [][]byte, error) {
 	}
 
 	// read correct bytes off of disk
-	input, err := ioutil.ReadFile(Fat32File)
+	input, err := os.ReadFile(Fat32File)
 	if err != nil {
-		return nil, nil, fmt.Errorf("Error reading data from fat32 test fixture %s: %v", Fat32File, err)
+		return nil, nil, fmt.Errorf("error reading data from fat32 test fixture %s: %v", Fat32File, err)
 	}
 
 	// start of root directory in fat32.img - sector 348
@@ -200,7 +200,7 @@ func getValidDirectoryEntries() ([]*directoryEntry, [][]byte, error) {
 
 	// we only have 9 actual 32-byte entries, of which 4 are real and 3 are VFAT extensionBytes
 	//   the rest are all 0s (as they should be), so we will include to exercise it
-	b := make([][]byte, 8, 8)
+	b := make([][]byte, 8)
 	//
 	b[0] = input[start : start+32]
 	b[1] = input[start+32 : start+4*32]
@@ -211,15 +211,16 @@ func getValidDirectoryEntries() ([]*directoryEntry, [][]byte, error) {
 	b[6] = input[start+11*32 : start+12*32]
 	// how many zeroes will come from cluster?
 	remainder := 2048 - (12 * 32)
-	b[7] = make([]byte, remainder, remainder)
+	b[7] = make([]byte, remainder)
 	return entries, b, nil
 }
 
-func getValidDirectoryEntriesExtended() ([]*directoryEntry, [][]byte, error) {
+//nolint:unparam // nothing uses the content, but we want to keep it for future usage
+func getValidDirectoryEntriesExtended() (entries []*directoryEntry, content [][]byte, err error) {
 	// these are taken from the file ./testdata/fat32.img, see ./testdata/README.md
 	t1, _ := time.Parse(time.RFC3339, "2017-11-26T07:53:16Z")
 	t10, _ := time.Parse(time.RFC3339, "2017-11-26T00:00:00Z")
-	entries := []*directoryEntry{
+	entries = []*directoryEntry{
 		// FilenameShort, FileExtension,FilenameLong,IsReadOnly,IsHidden,IsSystem,IsVolumeLabel,IsSubdirectory,IsArchiveDirty,IsDevice,LowercaseShortname,LowercaseExtension,CreateTime,ModifyTime,AccessTime,AcccessRights,clusterLocation,FileSize,filesystem,start,longFilenameSlots,isNew,
 		{".", "", "", false, false, false, false, true, false, false, false, false, t1, t1, t10, accessRightsUnlimited, 3, 0, nil, 0, false},
 		{"..", "", "", false, false, false, false, true, false, false, false, false, t1, t1, t10, accessRightsUnlimited, 0, 0, nil, 0, false},
@@ -309,15 +310,15 @@ func getValidDirectoryEntriesExtended() ([]*directoryEntry, [][]byte, error) {
 	}
 
 	// read correct bytes off of disk
-	input, err := ioutil.ReadFile(Fat32File)
+	input, err := os.ReadFile(Fat32File)
 	if err != nil {
-		return nil, nil, fmt.Errorf("Error reading data from fat32 test fixture %s: %v", Fat32File, err)
+		return nil, nil, fmt.Errorf("error reading data from fat32 test fixture %s: %v", Fat32File, err)
 	}
 
 	// start of foo directory in fat32.img - cluster 3 = sector 349 = bytes 349*512 = 178688 = 0x0002ba00
 	start := 178688
 
-	b := make([][]byte, len(entries), len(entries))
+	b := make([][]byte, len(entries))
 	for i := 0; i < len(entries); i++ {
 		b[i] = input[start+i*32 : start+i*32+32]
 	}
@@ -332,13 +333,12 @@ func TestDirectoryEntryLongFilenameBytes(t *testing.T) {
 			t.Log(tt.err)
 			t.Errorf("mismatched err expected, actual: %v, %v", tt.err, err)
 		}
-		if bytes.Compare(output, tt.b) != 0 {
+		if !bytes.Equal(output, tt.b) {
 			t.Errorf("longFilenameBytes(%s, %s, %s) bytes mismatch", tt.lfn, tt.shortName, tt.extension)
 			t.Log(fmt.Sprintf("actual  : % x", output))
 			t.Log(fmt.Sprintf("expected: % x", tt.b))
 		}
 	}
-
 }
 
 func TestDirectoryEntryLongFilenameEntryFromBytes(t *testing.T) {
@@ -358,7 +358,7 @@ func TestDateTimeToTime(t *testing.T) {
 		output := dateTimeToTime(tt.date, tt.time)
 		expected, err := time.Parse(time.RFC3339, tt.rfc)
 		if err != nil {
-			t.Fatalf("Error parsing expected date: %v", err)
+			t.Fatalf("error parsing expected date: %v", err)
 		}
 		// handle odd error case
 		if expected.Second()%2 != 0 {
@@ -374,14 +374,13 @@ func TestTimeToDateTime(t *testing.T) {
 	for _, tt := range timeDateTimeTests {
 		input, err := time.Parse(time.RFC3339, tt.rfc)
 		if err != nil {
-			t.Fatalf("Error parsing input date: %v", err)
+			t.Fatalf("error parsing input date: %v", err)
 		}
 		outDate, outTime := timeToDateTime(input)
 		if outDate != tt.date || outTime != tt.time {
 			t.Errorf("timeToDateTime(%v) expected output %d %d, actual %d %d", tt.rfc, tt.date, tt.time, outDate, outTime)
 		}
 	}
-
 }
 
 func TestDirectoryEntryLfnChecksum(t *testing.T) {
@@ -396,12 +395,12 @@ func TestDirectoryEntryLfnChecksum(t *testing.T) {
 		err       error
 	}{
 		// first all of the error cases
-		{"abc\u2378", "F", 0x00, fmt.Errorf("Invalid shortname character in filename")},
-		{"abc", "F", 0x00, fmt.Errorf("Invalid shortname character in filename")},
-		{"ABC", "F\u2378", 0x00, fmt.Errorf("Invalid shortname character in extension")},
-		{"ABC", "f", 0x00, fmt.Errorf("Invalid shortname character in extension")},
-		{"ABCDEFGHIJ", "F", 0x00, fmt.Errorf("Short name for file is longer than")},
-		{"ABCD", "FUUYY", 0x00, fmt.Errorf("Extension for file is longer than")},
+		{"abc\u2378", "F", 0x00, fmt.Errorf("invalid shortname character in filename")},
+		{"abc", "F", 0x00, fmt.Errorf("invalid shortname character in filename")},
+		{"ABC", "F\u2378", 0x00, fmt.Errorf("invalid shortname character in extension")},
+		{"ABC", "f", 0x00, fmt.Errorf("invalid shortname character in extension")},
+		{"ABCDEFGHIJ", "F", 0x00, fmt.Errorf("short name for file is longer than")},
+		{"ABCD", "FUUYY", 0x00, fmt.Errorf("extension for file is longer than")},
 		// valid exact length of each
 		{"ABCDEFGH", "TXT", 0xf6, nil},
 		// shortened each
@@ -428,18 +427,17 @@ func TestDirectoryEntryStringToASCIIBytes(t *testing.T) {
 	}{
 		{"abc", []byte{0x61, 0x62, 0x63}, nil},
 		{"abcdefg", []byte{0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67}, nil},
-		{"abcdef\u2318", nil, fmt.Errorf("Non-ASCII character in name: %s", "abcdef\u2318")},
+		{"abcdef\u2318", nil, fmt.Errorf("non-ASCII character in name: %s", "abcdef\u2318")},
 	}
 	for _, tt := range tests {
 		output, err := stringToASCIIBytes(tt.input)
-		if bytes.Compare(output, tt.output) != 0 {
+		if !bytes.Equal(output, tt.output) {
 			t.Errorf("stringToASCIIBytes(%s) expected output %v, actual %v", tt.input, tt.output, output)
 		}
 		if (err != nil && tt.err == nil) || (err == nil && tt.err != nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())) {
 			t.Errorf("mismatched err expected, actual: %v, %v", tt.err, err)
 		}
 	}
-
 }
 
 func TestDirectoryEntryCalculateSlots(t *testing.T) {
@@ -460,7 +458,6 @@ func TestDirectoryEntryCalculateSlots(t *testing.T) {
 			t.Errorf("calculateSlots(%s) expected %d , actual %d", tt.input, tt.slots, slots)
 		}
 	}
-
 }
 
 func TestDirectoryEntryConvertLfnSfn(t *testing.T) {
@@ -486,7 +483,6 @@ func TestDirectoryEntryConvertLfnSfn(t *testing.T) {
 			t.Errorf("convertLfnSfn(%s) expected %s / %s / %t / %t ; actual %s / %s / %t / %t", tt.input, tt.sfn, tt.extension, tt.isLfn, tt.isTruncated, sfn, extension, isLfn, isTruncated)
 		}
 	}
-
 }
 
 func TestDirectoryEntryUCaseValid(t *testing.T) {
@@ -528,7 +524,7 @@ func TestDirectoryEntryParseDirEntries(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		output, err := parseDirEntries(tt.b, nil)
+		output, err := parseDirEntries(tt.b)
 		switch {
 		case (err != nil && tt.err == nil) || (err == nil && tt.err != nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
 			t.Log(err)
@@ -548,7 +544,6 @@ func TestDirectoryEntryParseDirEntries(t *testing.T) {
 			}
 		}
 	}
-
 }
 
 func TestDirectoryEntryToBytes(t *testing.T) {
@@ -559,14 +554,12 @@ func TestDirectoryEntryToBytes(t *testing.T) {
 	for i, de := range validDe {
 		b, err := de.toBytes()
 		if err != nil {
-			t.Errorf("Error converting directory entry to bytes: %v", err)
+			t.Errorf("error converting directory entry to bytes: %v", err)
 			t.Logf("%v", de)
-		} else {
-			if bytes.Compare(b, validBytes[i]) != 0 {
-				t.Errorf("Mismatched bytes %s, actual vs expected", de.filenameShort)
-				t.Log(b)
-				t.Log(validBytes[i])
-			}
+		} else if !bytes.Equal(b, validBytes[i]) {
+			t.Errorf("Mismatched bytes %s, actual vs expected", de.filenameShort)
+			t.Log(b)
+			t.Log(validBytes[i])
 		}
 	}
 }
