@@ -26,7 +26,6 @@ func TestFinalizeElTorito(t *testing.T) {
 	blocksize := int64(2048)
 	f, err := ioutil.TempFile("", "iso_finalize_test")
 	defer os.Remove(f.Name())
-	//fmt.Println(f.Name())
 	if err != nil {
 		t.Fatalf("Failed to create tmpfile: %v", err)
 	}
@@ -65,10 +64,10 @@ func TestFinalizeElTorito(t *testing.T) {
 	},
 	})
 	if err != nil {
-		t.Fatal("Unexpected error fs.Finalize()", err)
+		t.Fatal("unexpected error fs.Finalize()", err)
 	}
 	if err != nil {
-		t.Fatalf("Error trying to Stat() iso file: %v", err)
+		t.Fatalf("error trying to Stat() iso file: %v", err)
 	}
 
 	// now check the contents
@@ -84,7 +83,7 @@ func TestFinalizeElTorito(t *testing.T) {
 	}
 	_, err = fs.OpenFile("/BOOT2.IMG", os.O_RDONLY)
 	if err != nil {
-		t.Errorf("Error opening file %s: %v", "/BOOT2.IMG", err)
+		t.Errorf("error opening file %s: %v", "/BOOT2.IMG", err)
 	}
 
 	validateIso(t, f)
@@ -94,17 +93,17 @@ func TestFinalizeElTorito(t *testing.T) {
 	// close the file
 	err = f.Close()
 	if err != nil {
-		t.Fatalf("Could not close iso file: %v", err)
+		t.Fatalf("could not close iso file: %v", err)
 	}
 }
 
 // full test - create some files, finalize, check the output
+//nolint:gocyclo // we really do not care about the cyclomatic complexity of a test function. Maybe someday we will improve it.
 func TestFinalize9660(t *testing.T) {
 	blocksize := int64(2048)
 	t.Run("deep dir", func(t *testing.T) {
 		f, err := ioutil.TempFile("", "iso_finalize_test")
 		defer os.Remove(f.Name())
-		//fmt.Println(f.Name())
 		if err != nil {
 			t.Fatalf("Failed to create tmpfile: %v", err)
 		}
@@ -121,13 +120,12 @@ func TestFinalize9660(t *testing.T) {
 
 		err = fs.Finalize(iso9660.FinalizeOptions{})
 		if err == nil {
-			t.Fatal("Unexpected lack of error fs.Finalize()", err)
+			t.Fatal("unexpected lack of error fs.Finalize()", err)
 		}
 	})
 	t.Run("valid", func(t *testing.T) {
 		f, err := ioutil.TempFile("", "iso_finalize_test")
 		defer os.Remove(f.Name())
-		//fmt.Println(f.Name())
 		if err != nil {
 			t.Fatalf("Failed to create tmpfile: %v", err)
 		}
@@ -185,16 +183,16 @@ func TestFinalize9660(t *testing.T) {
 
 		err = fs.Finalize(iso9660.FinalizeOptions{})
 		if err != nil {
-			t.Fatal("Unexpected error fs.Finalize()", err)
+			t.Fatal("unexpected error fs.Finalize()", err)
 		}
 		// now need to check contents
 		fi, err := f.Stat()
 		if err != nil {
-			t.Fatalf("Error trying to Stat() iso file: %v", err)
+			t.Fatalf("error trying to Stat() iso file: %v", err)
 		}
 		// we made two 5MB files, so should be at least 10MB
 		if fi.Size() < 10*1024*1024 {
-			t.Fatalf("Resultant file too small after finalizing %d", fi.Size())
+			t.Fatalf("resultant file too small after finalizing %d", fi.Size())
 		}
 
 		// now check the contents
@@ -237,14 +235,14 @@ func TestFinalize9660(t *testing.T) {
 
 			f, err = fs.OpenFile(k, os.O_RDONLY)
 			if err != nil {
-				t.Errorf("Error opening file %s: %v", k, err)
+				t.Errorf("error opening file %s: %v", k, err)
 				continue
 			}
 			// check the contents
-			b := make([]byte, 50, 50)
+			b := make([]byte, 50)
 			read, err = f.Read(b)
 			if err != nil && err != io.EOF {
-				t.Errorf("Error reading from file %s: %v", k, err)
+				t.Errorf("error reading from file %s: %v", k, err)
 			}
 			actual := string(b[:read])
 			if actual != v {
@@ -257,7 +255,7 @@ func TestFinalize9660(t *testing.T) {
 		// close the file
 		err = f.Close()
 		if err != nil {
-			t.Fatalf("Could not close iso file: %v", err)
+			t.Fatalf("could not close iso file: %v", err)
 		}
 	})
 
@@ -268,15 +266,15 @@ func TestFinalize9660(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create tmpdir: %v", err)
 		}
-		err = os.MkdirAll(filepath.Join(dir, "a/b/c"), 0775)
+		err = os.MkdirAll(filepath.Join(dir, "a", "b", "c"), 0o775)
 		if err != nil {
 			t.Fatalf("Failed to create test dirs: %v", err)
 		}
-		err = ioutil.WriteFile(filepath.Join(dir, "file"), []byte("somecontent"), 0644)
+		err = os.WriteFile(filepath.Join(dir, "file"), []byte("somecontent"), 0o600)
 		if err != nil {
 			t.Fatalf("Failed to write test file: %v", err)
 		}
-		err = ioutil.WriteFile(filepath.Join(dir, "a/b/c/foo"), []byte("someothercontent"), 0644)
+		err = os.WriteFile(filepath.Join(dir, "a", "b", "c", "foo"), []byte("someothercontent"), 0o600)
 		if err != nil {
 			t.Fatalf("Failed to write test file: %v", err)
 		}
@@ -293,7 +291,7 @@ func TestFinalize9660(t *testing.T) {
 		}
 		err = fs.Finalize(iso9660.FinalizeOptions{})
 		if err != nil {
-			t.Fatal("Unexpected error fs.Finalize()", err)
+			t.Fatal("unexpected error fs.Finalize()", err)
 		}
 
 		// now check the contents
@@ -305,7 +303,7 @@ func TestFinalize9660(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to open top-level file from iso: %v", err)
 		}
-		content, err := ioutil.ReadAll(isoFile)
+		content, err := io.ReadAll(isoFile)
 		if err != nil {
 			t.Fatalf("Failed to read top-level file from iso: %v", err)
 		}
@@ -318,7 +316,7 @@ func TestFinalize9660(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to open file from iso: %v", err)
 		}
-		content, err = ioutil.ReadAll(isoFile)
+		content, err = io.ReadAll(isoFile)
 		if err != nil {
 			t.Fatalf("Failed to read file from iso: %v", err)
 		}
@@ -332,17 +330,17 @@ func TestFinalize9660(t *testing.T) {
 		// close the file
 		err = f.Close()
 		if err != nil {
-			t.Fatalf("Could not close iso file: %v", err)
+			t.Fatalf("could not close iso file: %v", err)
 		}
 	})
 }
 
+//nolint:gocyclo // we really do not care about the cyclomatic complexity of a test function. Maybe someday we will improve it.
 func TestFinalizeRockRidge(t *testing.T) {
 	blocksize := int64(2048)
 	t.Run("valid", func(t *testing.T) {
 		f, err := ioutil.TempFile("", "iso_finalize_test")
 		defer os.Remove(f.Name())
-		//fmt.Println(f.Name())
 		if err != nil {
 			t.Fatalf("Failed to create tmpfile: %v", err)
 		}
@@ -408,7 +406,7 @@ func TestFinalizeRockRidge(t *testing.T) {
 
 		err = fs.Finalize(iso9660.FinalizeOptions{RockRidge: true})
 		if err != nil {
-			t.Fatal("Unexpected error fs.Finalize({RockRidge: true})", err)
+			t.Fatal("unexpected error fs.Finalize({RockRidge: true})", err)
 		}
 
 		if _, err := os.Stat(workspace); !os.IsNotExist(err) {
@@ -418,11 +416,11 @@ func TestFinalizeRockRidge(t *testing.T) {
 		// now need to check contents
 		fi, err := f.Stat()
 		if err != nil {
-			t.Fatalf("Error trying to Stat() iso file: %v", err)
+			t.Fatalf("error trying to Stat() iso file: %v", err)
 		}
 		// we made two 5MB files, so should be at least 10MB
 		if fi.Size() < 10*1024*1024 {
-			t.Fatalf("Resultant file too small after finalizing %d", fi.Size())
+			t.Fatalf("resultant file too small after finalizing %d", fi.Size())
 		}
 
 		// now check the contents
@@ -465,14 +463,14 @@ func TestFinalizeRockRidge(t *testing.T) {
 
 			f, err = fs.OpenFile(k, os.O_RDONLY)
 			if err != nil {
-				t.Errorf("Error opening file %s: %v", k, err)
+				t.Errorf("error opening file %s: %v", k, err)
 				continue
 			}
 			// check the contents
-			b := make([]byte, 50, 50)
+			b := make([]byte, 50)
 			read, err = f.Read(b)
 			if err != nil && err != io.EOF {
-				t.Errorf("Error reading from file %s: %v", k, err)
+				t.Errorf("error reading from file %s: %v", k, err)
 			}
 			actual := string(b[:read])
 			if actual != v {
@@ -485,11 +483,12 @@ func TestFinalizeRockRidge(t *testing.T) {
 		// close the file
 		err = f.Close()
 		if err != nil {
-			t.Fatalf("Could not close iso file: %v", err)
+			t.Fatalf("could not close iso file: %v", err)
 		}
 	})
 }
 
+//nolint:thelper // this is not a helper function
 func validateIso(t *testing.T, f *os.File) {
 	// only do this test if os.Getenv("TEST_IMAGE") contains a real image for integration testing
 	if intImage == "" {
@@ -506,11 +505,12 @@ func validateIso(t *testing.T, f *os.File) {
 	err := testhelper.DockerRun(nil, output, false, true, mounts, intImage, "7z", "l", "-ba", mpath)
 	outString := output.String()
 	if err != nil {
-		t.Errorf("Unexpected err: %v", err)
+		t.Errorf("unexpected err: %v", err)
 		t.Log(outString)
 	}
 }
 
+//nolint:thelper // this is not a helper function
 func validateElTorito(t *testing.T, f *os.File) {
 	// only do this test if os.Getenv("TEST_IMAGE") contains a real image for integration testing
 	if intImage == "" {
@@ -524,14 +524,14 @@ func validateElTorito(t *testing.T, f *os.File) {
 	err := testhelper.DockerRun(nil, output, false, true, mounts, intImage, "isoinfo", "-d", "-i", mpath)
 	outString := output.String()
 	if err != nil {
-		t.Errorf("Unexpected err: %v", err)
+		t.Errorf("unexpected err: %v", err)
 		t.Log(outString)
 	}
 	// look for El Torito line
 	re := regexp.MustCompile(`El Torito VD version 1 found, boot catalog is in sector (\d+)\n`)
 	matches := re.FindStringSubmatch(outString)
 	if matches == nil || len(matches) < 1 {
-		t.Fatalf("Unable to match El Torito information")
+		t.Fatalf("unable to match El Torito information")
 	}
 	// what sector should it be in?
 }

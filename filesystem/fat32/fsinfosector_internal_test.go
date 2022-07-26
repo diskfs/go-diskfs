@@ -3,7 +3,7 @@ package fat32
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"strings"
 	"testing"
 )
@@ -23,32 +23,31 @@ func TestFsInformationSectorFromBytes(t *testing.T) {
 			t.Errorf("Did not return expected error")
 		}
 		if fsis != nil {
-			t.Fatalf("Returned FSInformationSector was non-nil")
+			t.Fatalf("returned FSInformationSector was non-nil")
 		}
-		expected := fmt.Sprintf("Cannot read FAT32 FS Information Sector from %d bytes", len(b))
+		expected := fmt.Sprintf("cannot read FAT32 FS Information Sector from %d bytes", len(b))
 		if !strings.HasPrefix(err.Error(), expected) {
-			t.Errorf("Error type %s instead of expected %s", err.Error(), expected)
+			t.Errorf("error type %s instead of expected %s", err.Error(), expected)
 		}
 	})
 	t.Run("mismatched length greater than 512", func(t *testing.T) {
-		b := make([]byte, 513, 513)
+		b := make([]byte, 513)
 		fsis, err := fsInformationSectorFromBytes(b)
 		if err == nil {
 			t.Errorf("Did not return expected error")
 		}
 		if fsis != nil {
-			t.Fatalf("Returned FSInformationSector was non-nil")
+			t.Fatalf("returned FSInformationSector was non-nil")
 		}
-		expected := fmt.Sprintf("Cannot read FAT32 FS Information Sector from %d bytes", len(b))
+		expected := fmt.Sprintf("cannot read FAT32 FS Information Sector from %d bytes", len(b))
 		if !strings.HasPrefix(err.Error(), expected) {
-			t.Errorf("Error type %s instead of expected %s", err.Error(), expected)
+			t.Errorf("error type %s instead of expected %s", err.Error(), expected)
 		}
-
 	})
 	t.Run("invalid start signature", func(t *testing.T) {
-		input, err := ioutil.ReadFile(Fat32File)
+		input, err := os.ReadFile(Fat32File)
 		if err != nil {
-			t.Fatalf("Error reading test fixture data from %s: %v", Fat32File, err)
+			t.Fatalf("error reading test fixture data from %s: %v", Fat32File, err)
 		}
 		b := input[512:1024]
 		// now to pervert one key byte
@@ -58,17 +57,17 @@ func TestFsInformationSectorFromBytes(t *testing.T) {
 			t.Errorf("Did not return expected error")
 		}
 		if fsis != nil {
-			t.Fatalf("Returned FSInformationSector was non-nil")
+			t.Fatalf("returned FSInformationSector was non-nil")
 		}
-		expected := fmt.Sprintf("Invalid signature at beginning of FAT 32 Filesystem Information Sector")
+		expected := "invalid signature at beginning of FAT 32 Filesystem Information Sector"
 		if !strings.HasPrefix(err.Error(), expected) {
-			t.Errorf("Error type %s instead of expected %s", err.Error(), expected)
+			t.Errorf("error type %s instead of expected %s", err.Error(), expected)
 		}
 	})
 	t.Run("invalid middle signature", func(t *testing.T) {
-		input, err := ioutil.ReadFile(Fat32File)
+		input, err := os.ReadFile(Fat32File)
 		if err != nil {
-			t.Fatalf("Error reading test fixture data from %s: %v", Fat32File, err)
+			t.Fatalf("error reading test fixture data from %s: %v", Fat32File, err)
 		}
 		b := input[512:1024]
 		// now to pervert one key byte
@@ -78,17 +77,17 @@ func TestFsInformationSectorFromBytes(t *testing.T) {
 			t.Errorf("Did not return expected error")
 		}
 		if fsis != nil {
-			t.Fatalf("Returned FSInformationSector was non-nil")
+			t.Fatalf("returned FSInformationSector was non-nil")
 		}
-		expected := fmt.Sprintf("Invalid signature at middle of FAT 32 Filesystem Information Sector")
+		expected := "invalid signature at middle of FAT 32 Filesystem Information Sector"
 		if !strings.HasPrefix(err.Error(), expected) {
-			t.Errorf("Error type %s instead of expected %s", err.Error(), expected)
+			t.Errorf("error type %s instead of expected %s", err.Error(), expected)
 		}
 	})
 	t.Run("invalid end signature", func(t *testing.T) {
-		input, err := ioutil.ReadFile(Fat32File)
+		input, err := os.ReadFile(Fat32File)
 		if err != nil {
-			t.Fatalf("Error reading test fixture data from %s: %v", Fat32File, err)
+			t.Fatalf("error reading test fixture data from %s: %v", Fat32File, err)
 		}
 		b := input[512:1024]
 		// now to pervert one key byte
@@ -98,25 +97,25 @@ func TestFsInformationSectorFromBytes(t *testing.T) {
 			t.Errorf("Did not return expected error")
 		}
 		if fsis != nil {
-			t.Fatalf("Returned FSInformationSector was non-nil")
+			t.Fatalf("returned FSInformationSector was non-nil")
 		}
-		expected := fmt.Sprintf("Invalid signature at end of FAT 32 Filesystem Information Sector")
+		expected := "invalid signature at end of FAT 32 Filesystem Information Sector"
 		if !strings.HasPrefix(err.Error(), expected) {
-			t.Errorf("Error type %s instead of expected %s", err.Error(), expected)
+			t.Errorf("error type %s instead of expected %s", err.Error(), expected)
 		}
 	})
 	t.Run("valid FS Information Sector", func(t *testing.T) {
-		input, err := ioutil.ReadFile(Fat32File)
+		input, err := os.ReadFile(Fat32File)
 		if err != nil {
-			t.Fatalf("Error reading test fixture data from %s: %v", Fat32File, err)
+			t.Fatalf("error reading test fixture data from %s: %v", Fat32File, err)
 		}
 		b := input[512:1024]
 		fsis, err := fsInformationSectorFromBytes(b)
 		if err != nil {
-			t.Errorf("Return unexpected error: %v", err)
+			t.Errorf("return unexpected error: %v", err)
 		}
 		if fsis == nil {
-			t.Fatalf("Returned FSInformationSector was nil unexpectedly")
+			t.Fatalf("returned FSInformationSector was nil unexpectedly")
 		}
 		valid := getValidFSInfoSector()
 		if *valid != *fsis {
@@ -130,19 +129,16 @@ func TestFsInformationSectorFromBytes(t *testing.T) {
 func TestInformationSectorToBytes(t *testing.T) {
 	t.Run("valid FSInformationSector", func(t *testing.T) {
 		fsis := getValidFSInfoSector()
-		b, err := fsis.toBytes()
-		if err != nil {
-			t.Errorf("Error was not nil, instead %v", err)
-		}
+		b := fsis.toBytes()
 		if b == nil {
 			t.Fatal("b was nil unexpectedly")
 		}
-		valid, err := ioutil.ReadFile(Fat32File)
+		valid, err := os.ReadFile(Fat32File)
 		if err != nil {
-			t.Fatalf("Error reading test fixture data from %s: %v", Fat32File, err)
+			t.Fatalf("error reading test fixture data from %s: %v", Fat32File, err)
 		}
 		validBytes := valid[512:1024]
-		if bytes.Compare(validBytes, b) != 0 {
+		if !bytes.Equal(validBytes, b) {
 			t.Error("Mismatched bytes")
 		}
 	})

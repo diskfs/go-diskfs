@@ -13,12 +13,13 @@ var testFragmentEntries = []struct {
 	entry *fragmentEntry
 	err   error
 }{
-	{[]byte{0x1, 0x2}, nil, fmt.Errorf("Mismatched fragment entry size, received %d bytes, less than minimum %d", 2, 16)},
+	{[]byte{0x1, 0x2}, nil, fmt.Errorf("mismatched fragment entry size, received %d bytes, less than minimum %d", 2, 16)},
 	{[]byte{0x60, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00}, &fragmentEntry{size: 7, start: 0x60, compressed: false}, nil},
 	{[]byte{0x60, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, &fragmentEntry{size: 7, start: 0x60, compressed: true}, nil},
 }
 
 func TestParseFragmentEntry(t *testing.T) {
+	//nolint:dupl // these tests are not exactly identical, easier to leave as is
 	for i, tt := range testFragmentEntries {
 		entry, err := parseFragmentEntry(tt.b)
 		switch {
@@ -40,7 +41,7 @@ func TestFragmentEntryToBytes(t *testing.T) {
 			continue
 		}
 		b := tt.entry.toBytes()
-		if bytes.Compare(b, tt.b) != 0 {
+		if !bytes.Equal(b, tt.b) {
 			t.Errorf("%d: mismatched bytes, actual then expected", i)
 			t.Logf("%v", b)
 			t.Logf("%v", tt.b)

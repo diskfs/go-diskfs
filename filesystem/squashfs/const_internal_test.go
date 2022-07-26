@@ -7,7 +7,6 @@ package squashfs
 // 3. Take the relevant sizes, locations and inodes and use them here.
 
 import (
-	"io/ioutil"
 	"os"
 	"time"
 
@@ -51,7 +50,6 @@ func testGetFirstInodeBody() inodeBody {
 */
 
 var (
-	testLargeDirEntryCount                 = 252
 	testValidModTime                       = time.Unix(0x5c20d8d7, 0)
 	testValidBlocksize              uint32 = 0x20000
 	testFragmentStart               uint64 = 0x5082ac // this is not the start of the fragment ID table, but of the fragment table
@@ -83,20 +81,12 @@ var (
 			uncompressedFragments: true,
 		},
 	}
-	testMetaOffset        = testValidSuperblockUncompressed.inodeTableStart
-	testDirectoryOffset   = testValidSuperblockUncompressed.directoryTableStart - testMetaOffset
-	testFragmentOffset    = testFragmentStart - testMetaOffset
-	testDirectoryDataSize = testFragmentOffset - testDirectoryOffset
-	testIDTableStart      = 0x5092c8 + 2 - testMetaOffset
-	testIDTableEnd        = 0x5092d6 - testMetaOffset
-	testXattrIDStart      = 0x509301 + 2 - testMetaOffset
-	testXattrIDEnd        = testValidSuperblockUncompressed.xattrTableStart - testMetaOffset
-	testXattrMetaStart    = 0x5092de + 2 - testMetaOffset
-	testXattrMetaEnd      = testXattrIDStart
-	testFragEntries       = []*fragmentEntry{
+	testMetaOffset      = testValidSuperblockUncompressed.inodeTableStart
+	testDirectoryOffset = testValidSuperblockUncompressed.directoryTableStart - testMetaOffset
+	testFragmentOffset  = testFragmentStart - testMetaOffset
+	testFragEntries     = []*fragmentEntry{
 		{size: 6415, compressed: false, start: 5242976},
 	}
-	testInodeDataLength = 16766
 
 	// this is for /foo/filename_0
 	testBasicFile = &basicFile{
@@ -136,6 +126,19 @@ var (
 	testFirstInodeEnd     = testFirstInodeStart + 0x38
 )
 
+//nolint:deadcode,varcheck,unused // we need these references in the future
+var (
+	testIDTableStart       = 0x5092c8 + 2 - testMetaOffset
+	testIDTableEnd         = 0x5092d6 - testMetaOffset
+	testXattrIDStart       = 0x509301 + 2 - testMetaOffset
+	testXattrIDEnd         = testValidSuperblockUncompressed.xattrTableStart - testMetaOffset
+	testXattrMetaStart     = 0x5092de + 2 - testMetaOffset
+	testXattrMetaEnd       = testXattrIDStart
+	testInodeDataLength    = 16766
+	testDirectoryDataSize  = testFragmentOffset - testDirectoryOffset
+	testLargeDirEntryCount = 252
+)
+
 func testGetFilesystem(f util.File) (*FileSystem, []byte, error) {
 	file := f
 	var (
@@ -147,7 +150,7 @@ func testGetFilesystem(f util.File) (*FileSystem, []byte, error) {
 		if err != nil {
 			return nil, nil, err
 		}
-		b, err = ioutil.ReadFile(SquashfsUncompressedfile)
+		b, err = os.ReadFile(SquashfsUncompressedfile)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -160,10 +163,10 @@ func testGetFilesystem(f util.File) (*FileSystem, []byte, error) {
 			uidsGids       []byte
 		*/
 		fragments: []*fragmentEntry{
-			&fragmentEntry{start: 200000, size: 12},
+			{start: 200000, size: 12},
 		},
 		workspace:  "",
-		compressor: CompressorGzip{},
+		compressor: &CompressorGzip{},
 		size:       5251072,
 		start:      0,
 		file:       file,
@@ -176,7 +179,7 @@ func testGetFilesystem(f util.File) (*FileSystem, []byte, error) {
 				gidIdx:    1,
 				modTime:   sb.modTime,
 				index:     0x0203,
-				mode:      0755,
+				mode:      0o755,
 			},
 			body: &basicDirectory{
 				startBlock:       0x2002,
@@ -192,7 +195,7 @@ func testGetFilesystem(f util.File) (*FileSystem, []byte, error) {
 	return fs, b, nil
 }
 
-func testGetInodeMetabytes() ([]byte, uint64, error) {
+func testGetInodeMetabytes() (inodeBytes []byte, inodesStart uint64, err error) {
 	fs, b, err := testGetFilesystem(nil)
 	if err != nil {
 		return nil, 0, err
@@ -200,6 +203,7 @@ func testGetInodeMetabytes() ([]byte, uint64, error) {
 	return b[fs.superblock.inodeTableStart+2:], fs.superblock.inodeTableStart, nil
 }
 
+//nolint:deadcode // we need these references in the future
 func testGetFilesystemRoot() []*directoryEntry {
 	/*
 		isSubdirectory bool
@@ -213,14 +217,14 @@ func testGetFilesystemRoot() []*directoryEntry {
 	// data taken from reading the bytes of the file SquashfsUncompressedfile
 	modTime := time.Unix(0x5c20d8d7, 0)
 	return []*directoryEntry{
-		{true, "foo", 9949, modTime, 0755, nil, FileStat{0, 0, map[string]string{}}},
-		{true, "zero", 32, modTime, 0755, nil, FileStat{0, 0, map[string]string{}}},
-		{true, "random", 32, modTime, 0755, nil, FileStat{0, 0, map[string]string{}}},
-		{false, "emptylink", 0, modTime, 0777, nil, FileStat{0, 0, map[string]string{}}},
-		{false, "goodlink", 0, modTime, 0777, nil, FileStat{0, 0, map[string]string{}}},
-		{false, "hardlink", 7, modTime, 0644, nil, FileStat{1, 2, map[string]string{}}},
-		{false, "README.md", 7, modTime, 0644, nil, FileStat{1, 2, map[string]string{}}},
-		{false, "attrfile", 5, modTime, 0644, nil, FileStat{0, 0, map[string]string{"abc": "def", "myattr": "hello"}}},
+		{true, "foo", 9949, modTime, 0o755, nil, FileStat{0, 0, map[string]string{}}},
+		{true, "zero", 32, modTime, 0o755, nil, FileStat{0, 0, map[string]string{}}},
+		{true, "random", 32, modTime, 0o755, nil, FileStat{0, 0, map[string]string{}}},
+		{false, "emptylink", 0, modTime, 0o777, nil, FileStat{0, 0, map[string]string{}}},
+		{false, "goodlink", 0, modTime, 0o777, nil, FileStat{0, 0, map[string]string{}}},
+		{false, "hardlink", 7, modTime, 0o644, nil, FileStat{1, 2, map[string]string{}}},
+		{false, "README.md", 7, modTime, 0o644, nil, FileStat{1, 2, map[string]string{}}},
+		{false, "attrfile", 5, modTime, 0o644, nil, FileStat{0, 0, map[string]string{"abc": "def", "myattr": "hello"}}},
 	}
 }
 

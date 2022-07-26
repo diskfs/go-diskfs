@@ -117,7 +117,8 @@ import (
 // when we use a disk image with a GPT, we cannot get the logical sector size from the disk via the kernel
 //    so we use the default sector size of 512, per Rod Smith
 const (
-	defaultBlocksize, firstblock int = 512, 2048
+	defaultBlocksize int = 512
+	// firstblock                       = 2048
 	// blksszGet                        = 0x1268
 	// blkpbszGet                       = 0x127b
 )
@@ -224,15 +225,15 @@ func initDisk(f *os.File, openMode OpenModeOption, sectorSize SectorSize) (*disk
 		log.Debugf("initDisk(): logical block size %d, physical block size %d", lblksize, pblksize)
 		defaultBlocks = false
 		if err != nil {
-			return nil, fmt.Errorf("Unable to get block sizes for device %s: %v", f.Name(), err)
+			return nil, fmt.Errorf("unable to get block sizes for device %s: %v", f.Name(), err)
 		}
 	default:
 		return nil, fmt.Errorf("device %s is neither a block device nor a regular file", f.Name())
 	}
 
 	// how many good blocks do we have?
-	//var goodBlocks, orphanedBlocks int
-	//goodBlocks = size / lblksize
+	//    var goodBlocks, orphanedBlocks int
+	//    goodBlocks = size / lblksize
 
 	writable := writableMode(openMode)
 
@@ -323,9 +324,9 @@ func Open(device string, opts ...OpenOpt) (*disk.Disk, error) {
 		return nil, errors.New("unsupported file open mode")
 	}
 
-	f, err := os.OpenFile(device, m, 0600)
+	f, err := os.OpenFile(device, m, 0o600)
 	if err != nil {
-		return nil, fmt.Errorf("Could not open device %s exclusively for writing", device)
+		return nil, fmt.Errorf("could not open device %s exclusively for writing", device)
 	}
 	// return our disk
 	return initDisk(f, ReadWriteExclusive, opt.sectorSize)
@@ -341,13 +342,13 @@ func Create(device string, size int64, format Format, sectorSize SectorSize) (*d
 	if size <= 0 {
 		return nil, errors.New("must pass valid device size to create")
 	}
-	f, err := os.OpenFile(device, os.O_RDWR|os.O_EXCL|os.O_CREATE, 0666)
+	f, err := os.OpenFile(device, os.O_RDWR|os.O_EXCL|os.O_CREATE, 0o666)
 	if err != nil {
-		return nil, fmt.Errorf("Could not create device %s", device)
+		return nil, fmt.Errorf("could not create device %s", device)
 	}
 	err = os.Truncate(device, size)
 	if err != nil {
-		return nil, fmt.Errorf("Could not expand device %s to size %d", device, size)
+		return nil, fmt.Errorf("could not expand device %s to size %d", device, size)
 	}
 	// return our disk
 	return initDisk(f, ReadWriteExclusive, sectorSize)

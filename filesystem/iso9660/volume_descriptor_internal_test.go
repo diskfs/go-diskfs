@@ -3,10 +3,11 @@ package iso9660
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
-	"reflect"
+	"os"
 	"testing"
 	"time"
+
+	"github.com/go-test/deep"
 )
 
 const (
@@ -25,7 +26,7 @@ var (
 	}
 )
 
-func comparePrimaryVolumeDescriptorsIgnoreDates(a, b *primaryVolumeDescriptor) bool {
+func comparePrimaryVolumeDescriptorsIgnoreDates(a, b *primaryVolumeDescriptor) []string {
 	now := time.Now()
 	// copy values so we do not mess up the originals
 	c := &primaryVolumeDescriptor{}
@@ -42,22 +43,30 @@ func comparePrimaryVolumeDescriptorsIgnoreDates(a, b *primaryVolumeDescriptor) b
 	d.modification = now
 	c.expiration = now
 	d.expiration = now
+	cRootDirectoryEntry := &directoryEntry{}
+	dRootDirectoryEntry := &directoryEntry{}
+	*cRootDirectoryEntry = *c.rootDirectoryEntry
+	*dRootDirectoryEntry = *d.rootDirectoryEntry
+	cRootDirectoryEntry.creation = now
+	dRootDirectoryEntry.creation = now
+	c.rootDirectoryEntry = cRootDirectoryEntry
+	d.rootDirectoryEntry = dRootDirectoryEntry
 
 	// cannot actually compare root directory entry since can be pointers to different things
 	// so we compare them separately, and then compare the rest
-	if !reflect.DeepEqual(*c.rootDirectoryEntry, *c.rootDirectoryEntry) {
-		return false
+	if diff := deep.Equal(*c.rootDirectoryEntry, *d.rootDirectoryEntry); diff != nil {
+		return diff
 	}
 	c.rootDirectoryEntry = nil
 	d.rootDirectoryEntry = nil
-	return *c == *d
+	return deep.Equal(c, d)
 }
-func comparePrimaryVolumeDescriptorsBytesIgnoreDates(a []byte, b []byte) bool {
+func comparePrimaryVolumeDescriptorsBytesIgnoreDates(a, b []byte) bool {
 	aNull := primaryVolumeDescriptorsBytesNullDate(a)
 	bNull := primaryVolumeDescriptorsBytesNullDate(b)
 
 	// we ignore the reserved areas that are unused
-	return bytes.Compare(aNull[:883], bNull[:883]) == 0
+	return bytes.Equal(aNull[:883], bNull[:883])
 }
 func primaryVolumeDescriptorsBytesNullDate(a []byte) []byte {
 	// null the volume dates
@@ -77,12 +86,13 @@ func primaryVolumeDescriptorsBytesNullDate(a []byte) []byte {
 	return a1
 }
 
+//nolint:deadcode,unused // this is unused, but is useful for understanding structures
 func getValidVolumeDescriptors() ([]volumeDescriptor, []byte, error) {
 	blocksize := uint16(2048)
 	// read correct bytes off of disk
-	b, err := ioutil.ReadFile(volRecordsFile)
+	b, err := os.ReadFile(volRecordsFile)
 	if err != nil {
-		return nil, nil, fmt.Errorf("Error reading data from volrecords test fixture %s: %v", volRecordsFile, err)
+		return nil, nil, fmt.Errorf("error reading data from volrecords test fixture %s: %v", volRecordsFile, err)
 	}
 
 	// sector 0 - Primary Volume Descriptor
@@ -159,9 +169,9 @@ func get9660PrimaryVolumeDescriptor() (*primaryVolumeDescriptor, []byte, error) 
 	t1, _ := time.Parse(time.RFC3339, "2017-11-26T07:53:16Z")
 
 	// read correct bytes off of disk
-	input, err := ioutil.ReadFile(ISO9660File)
+	input, err := os.ReadFile(ISO9660File)
 	if err != nil {
-		return nil, nil, fmt.Errorf("Error reading data from iso9660 test fixture %s: %v", ISO9660File, err)
+		return nil, nil, fmt.Errorf("error reading data from iso9660 test fixture %s: %v", ISO9660File, err)
 	}
 
 	start := pvdSector * blocksize // PVD sector
@@ -219,11 +229,11 @@ func TestDecBytesToTime(t *testing.T) {
 	for _, tt := range timeDecBytesTests {
 		output, err := decBytesToTime(tt.b)
 		if err != nil {
-			t.Fatalf("Error parsing actual date: %v", err)
+			t.Fatalf("error parsing actual date: %v", err)
 		}
 		expected, err := time.Parse(time.RFC3339, tt.rfc)
 		if err != nil {
-			t.Fatalf("Error parsing expected date: %v", err)
+			t.Fatalf("error parsing expected date: %v", err)
 		}
 		if !expected.Equal(output) {
 			t.Errorf("decBytesToTime(%d) expected output %v, actual %v", tt.b, expected, output)
@@ -235,10 +245,10 @@ func TestTimeToDecBytes(t *testing.T) {
 	for _, tt := range timeDecBytesTests {
 		input, err := time.Parse(time.RFC3339, tt.rfc)
 		if err != nil {
-			t.Fatalf("Error parsing input date: %v", err)
+			t.Fatalf("error parsing input date: %v", err)
 		}
 		b := timeToDecBytes(input)
-		if bytes.Compare(b, tt.b) != 0 {
+		if !bytes.Equal(b, tt.b) {
 			t.Errorf("timeToBytes(%v) expected then actual \n% x\n% x", tt.rfc, tt.b, b)
 		}
 	}
@@ -263,12 +273,11 @@ func TestParsePrimaryVolumeDescriptor(t *testing.T) {
 	}
 	pvd, err := parsePrimaryVolumeDescriptor(validBytes)
 	if err != nil {
-		t.Fatalf("Error parsing primary volume descriptor: %v", err)
+		t.Fatalf("error parsing primary volume descriptor: %v", err)
 	}
-	if !comparePrimaryVolumeDescriptorsIgnoreDates(pvd, validPvd) {
+	if diff := comparePrimaryVolumeDescriptorsIgnoreDates(pvd, validPvd); diff != nil {
 		t.Errorf("Mismatched primary volume descriptor, actual vs expected")
-		t.Logf("%#v\n", pvd)
-		t.Logf("%#v\n", validPvd)
+		t.Log(diff)
 	}
 }
 func TestPrimaryVolumeDescriptorType(t *testing.T) {

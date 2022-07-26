@@ -3,14 +3,13 @@ package iso9660
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
 	"os"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/diskfs/go-diskfs/testhelper"
+	"github.com/go-test/deep"
 )
 
 var (
@@ -25,45 +24,42 @@ var (
 	}
 )
 
-func compareDirectoryEntries(a, b *directoryEntry, compareDates, compareExtensions bool) bool {
-	now := time.Now()
+func compareDirectoryEntries(a, b *directoryEntry, compareExtensions bool) []string {
 	// copy values so we do not mess up the originals
 	c := &directoryEntry{}
 	d := &directoryEntry{}
 	*c = *a
 	*d = *b
 
-	if !compareDates {
-		// unify fields we let be equal
-		c.creation = now
-		d.creation = now
-	}
-
 	cExt := c.extensions
 	dExt := d.extensions
 	c.extensions = nil
 	d.extensions = nil
 
-	shallowMatch := reflect.DeepEqual(*c, *d)
-	extMatch := true
+	// unify fields we let be equal
+	now := time.Now()
+	c.creation = now
+	d.creation = now
+
+	diff := deep.Equal(*c, *d)
 	switch {
 	case !compareExtensions:
-		extMatch = true
+		break
 	case len(cExt) != len(dExt):
-		extMatch = false
+		diff = append(diff, fmt.Sprintf("extensions do not match, length %d vs %d", len(cExt), len(dExt)))
 	default:
 		// compare them
 		for i, e := range cExt {
-			if e.Signature() != dExt[i].Signature() || e.Length() != dExt[i].Length() || e.Version() != dExt[i].Version() || bytes.Compare(e.Data(), dExt[i].Data()) != 0 {
-				extMatch = false
+			if e.Signature() != dExt[i].Signature() || e.Length() != dExt[i].Length() || e.Version() != dExt[i].Version() || !bytes.Equal(e.Data(), dExt[i].Data()) {
+				diff = append(diff, "mismatched extensions")
 				break
 			}
 		}
 	}
-	return shallowMatch && extMatch
+	return diff
 }
 func directoryEntryBytesNullDate(a []byte) []byte {
-	now := make([]byte, 7, 7)
+	now := make([]byte, 7)
 	a1 := make([]byte, len(a))
 	copy(a1[18:18+7], now)
 	return a1
@@ -72,14 +68,14 @@ func directoryEntryBytesNullDate(a []byte) []byte {
 // get9660DirectoryEntries get a list of valid directory entries for path /
 // returns:
 // slice of entries, slice of byte slices for each, entire bytes for all, map of location to byte slice
-func get9660DirectoryEntries(f *FileSystem) ([]*directoryEntry, [][][]byte, []byte, map[int][]byte, error) {
+func get9660DirectoryEntries(f *FileSystem) (entries []*directoryEntry, contents [][][]byte, completeDirectory []byte, locations map[int][]byte, err error) {
 	blocksize := 2048
 	rootSector := 18
 	ceSector := 19
 	// read correct bytes off of disk
-	input, err := ioutil.ReadFile(ISO9660File)
+	input, err := os.ReadFile(ISO9660File)
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("Error reading data from iso9660 test fixture %s: %v", ISO9660File, err)
+		return nil, nil, nil, nil, fmt.Errorf("error reading data from iso9660 test fixture %s: %v", ISO9660File, err)
 	}
 
 	// start of root directory in file.iso - sector 18
@@ -114,8 +110,8 @@ func get9660DirectoryEntries(f *FileSystem) ([]*directoryEntry, [][][]byte, []by
 	ceBytes = ceBytes[:237]
 
 	t1 := time.Now()
-	entries := []*directoryEntry{
-		&directoryEntry{
+	entries = []*directoryEntry{
+		{
 			extAttrSize:              0,
 			location:                 0x12,
 			size:                     0x800,
@@ -131,7 +127,7 @@ func get9660DirectoryEntries(f *FileSystem) ([]*directoryEntry, [][][]byte, []by
 			isSelf:                   true,
 			filesystem:               f,
 		},
-		&directoryEntry{
+		{
 			extAttrSize:              0,
 			location:                 0x12,
 			size:                     0x800,
@@ -147,7 +143,7 @@ func get9660DirectoryEntries(f *FileSystem) ([]*directoryEntry, [][][]byte, []by
 			isParent:                 true,
 			filesystem:               f,
 		},
-		&directoryEntry{
+		{
 			extAttrSize:              0,
 			location:                 0x13,
 			size:                     0x800,
@@ -162,7 +158,7 @@ func get9660DirectoryEntries(f *FileSystem) ([]*directoryEntry, [][][]byte, []by
 			filename:                 "ABC",
 			filesystem:               f,
 		},
-		&directoryEntry{
+		{
 			extAttrSize:              0,
 			location:                 0x14,
 			size:                     0x800,
@@ -177,7 +173,7 @@ func get9660DirectoryEntries(f *FileSystem) ([]*directoryEntry, [][][]byte, []by
 			filename:                 "BAR",
 			filesystem:               f,
 		},
-		&directoryEntry{
+		{
 			extAttrSize:              0,
 			location:                 0x15,
 			size:                     0x800,
@@ -192,7 +188,7 @@ func get9660DirectoryEntries(f *FileSystem) ([]*directoryEntry, [][][]byte, []by
 			filename:                 "DEEP",
 			filesystem:               f,
 		},
-		&directoryEntry{
+		{
 			extAttrSize:              0,
 			location:                 0x21,
 			size:                     0x1000,
@@ -207,7 +203,7 @@ func get9660DirectoryEntries(f *FileSystem) ([]*directoryEntry, [][][]byte, []by
 			filename:                 "FOO",
 			filesystem:               f,
 		},
-		&directoryEntry{
+		{
 			extAttrSize:              0,
 			location:                 0x1473,
 			size:                     0x7,
@@ -253,14 +249,14 @@ func get9660DirectoryEntries(f *FileSystem) ([]*directoryEntry, [][][]byte, []by
 // getRockRidgeDirectoryEntries get a list of valid directory entries for path /
 // returns:
 // slice of entries, slice of byte slices for each, entire bytes for all, map of location to byte slice
-func getRockRidgeDirectoryEntries(f *FileSystem, includeRelocated bool) ([]*directoryEntry, [][][]byte, []byte, map[int][]byte, error) {
+func getRockRidgeDirectoryEntries(f *FileSystem, includeRelocated bool) (entries []*directoryEntry, content [][][]byte, entireContent []byte, locations map[int][]byte, err error) {
 	blocksize := 2048
 	rootSector := 18
 	ceSector := 19
 	// read correct bytes off of disk
-	input, err := ioutil.ReadFile(RockRidgeFile)
+	input, err := os.ReadFile(RockRidgeFile)
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("Error reading data from iso9660 test fixture %s: %v", ISO9660File, err)
+		return nil, nil, nil, nil, fmt.Errorf("error reading data from iso9660 test fixture %s: %v", ISO9660File, err)
 	}
 
 	// start of root directory in file.iso - sector 18
@@ -295,8 +291,8 @@ func getRockRidgeDirectoryEntries(f *FileSystem, includeRelocated bool) ([]*dire
 	ceBytes = ceBytes[:237]
 
 	t1 := time.Now()
-	entries := []*directoryEntry{
-		&directoryEntry{
+	entries = []*directoryEntry{
+		{
 			extAttrSize:              0,
 			location:                 0x12,
 			size:                     0x800,
@@ -313,7 +309,7 @@ func getRockRidgeDirectoryEntries(f *FileSystem, includeRelocated bool) ([]*dire
 			filesystem:               f,
 			extensions: []directoryEntrySystemUseExtension{
 				directoryEntrySystemUseExtensionSharingProtocolIndicator{0},
-				rockRidgePosixAttributes{mode: 0755 | os.ModeDir, linkCount: 1, uid: 0, gid: 0, length: 36},
+				rockRidgePosixAttributes{mode: 0o755 | os.ModeDir, linkCount: 1, uid: 0, gid: 0, length: 36},
 				rockRidgeTimestamps{longForm: false, stamps: []rockRidgeTimestamp{
 					{timestampType: rockRidgeTimestampModify, time: bytesToTime([]byte{0x76, 0x9, 0x1b, 0xb, 0x2f, 0x15, 0x0})},
 					{timestampType: rockRidgeTimestampAccess, time: bytesToTime([]byte{0x76, 0x9, 0x1b, 0xb, 0x2f, 0x29, 0x0})},
@@ -323,7 +319,7 @@ func getRockRidgeDirectoryEntries(f *FileSystem, includeRelocated bool) ([]*dire
 				directoryEntrySystemUseExtensionReference{extensionVersion: 1, id: "RRIP_1991A", descriptor: "THE ROCK RIDGE INTERCHANGE PROTOCOL PROVIDES SUPPORT FOR POSIX FILE SYSTEM SEMANTICS", source: "PLEASE CONTACT DISC PUBLISHER FOR SPECIFICATION SOURCE.  SEE PUBLISHER IDENTIFIER IN PRIMARY VOLUME DESCRIPTOR FOR CONTACT INFORMATION."},
 			},
 		},
-		&directoryEntry{
+		{
 			extAttrSize:              0,
 			location:                 0x12,
 			size:                     0x800,
@@ -339,7 +335,7 @@ func getRockRidgeDirectoryEntries(f *FileSystem, includeRelocated bool) ([]*dire
 			isParent:                 true,
 			filesystem:               f,
 			extensions: []directoryEntrySystemUseExtension{
-				rockRidgePosixAttributes{mode: 0755 | os.ModeDir, linkCount: 1, uid: 0, gid: 0, length: 36},
+				rockRidgePosixAttributes{mode: 0o755 | os.ModeDir, linkCount: 1, uid: 0, gid: 0, length: 36},
 				rockRidgeTimestamps{longForm: false, stamps: []rockRidgeTimestamp{
 					{timestampType: rockRidgeTimestampModify, time: bytesToTime([]byte{0x76, 0x9, 0x1b, 0xb, 0x2f, 0x15, 0x0})},
 					{timestampType: rockRidgeTimestampAccess, time: bytesToTime([]byte{0x76, 0x9, 0x1b, 0xb, 0x2f, 0x29, 0x0})},
@@ -348,7 +344,7 @@ func getRockRidgeDirectoryEntries(f *FileSystem, includeRelocated bool) ([]*dire
 				},
 			},
 		},
-		&directoryEntry{
+		{
 			extAttrSize:              0,
 			location:                 0x14,
 			size:                     0x800,
@@ -363,7 +359,7 @@ func getRockRidgeDirectoryEntries(f *FileSystem, includeRelocated bool) ([]*dire
 			filename:                 "ABC",
 			filesystem:               f,
 			extensions: []directoryEntrySystemUseExtension{
-				rockRidgePosixAttributes{mode: 0755 | os.ModeDir, linkCount: 1, uid: 0, gid: 0, length: 36},
+				rockRidgePosixAttributes{mode: 0o755 | os.ModeDir, linkCount: 1, uid: 0, gid: 0, length: 36},
 				rockRidgeTimestamps{longForm: false, stamps: []rockRidgeTimestamp{
 					{timestampType: rockRidgeTimestampModify, time: bytesToTime([]byte{0x76, 0x9, 0x1b, 0xb, 0x2f, 0x1e, 0x0})},
 					{timestampType: rockRidgeTimestampAccess, time: bytesToTime([]byte{0x76, 0x9, 0x1b, 0xb, 0x2f, 0x29, 0x0})},
@@ -373,7 +369,7 @@ func getRockRidgeDirectoryEntries(f *FileSystem, includeRelocated bool) ([]*dire
 				rockRidgeName{name: "abc"},
 			},
 		},
-		&directoryEntry{
+		{
 			extAttrSize:              0,
 			location:                 0x15,
 			size:                     0x800,
@@ -388,7 +384,7 @@ func getRockRidgeDirectoryEntries(f *FileSystem, includeRelocated bool) ([]*dire
 			filename:                 "BAR",
 			filesystem:               f,
 			extensions: []directoryEntrySystemUseExtension{
-				rockRidgePosixAttributes{mode: 0755 | os.ModeDir, linkCount: 1, uid: 0, gid: 0, length: 36},
+				rockRidgePosixAttributes{mode: 0o755 | os.ModeDir, linkCount: 1, uid: 0, gid: 0, length: 36},
 				rockRidgeTimestamps{longForm: false, stamps: []rockRidgeTimestamp{
 					{timestampType: rockRidgeTimestampModify, time: bytesToTime([]byte{0x76, 0x9, 0x1b, 0xb, 0x2f, 0x1a, 0x0})},
 					{timestampType: rockRidgeTimestampAccess, time: bytesToTime([]byte{0x76, 0x9, 0x1b, 0xb, 0x2f, 0x29, 0x0})},
@@ -398,7 +394,7 @@ func getRockRidgeDirectoryEntries(f *FileSystem, includeRelocated bool) ([]*dire
 				rockRidgeName{name: "bar"},
 			},
 		},
-		&directoryEntry{
+		{
 			extAttrSize:              0x0,
 			location:                 0x16,
 			size:                     0x800,
@@ -413,7 +409,7 @@ func getRockRidgeDirectoryEntries(f *FileSystem, includeRelocated bool) ([]*dire
 			filesystem:               f,
 			filename:                 "DEEP",
 			extensions: []directoryEntrySystemUseExtension{
-				rockRidgePosixAttributes{mode: 0755 | os.ModeDir, linkCount: 1, uid: 0, gid: 0, length: 36},
+				rockRidgePosixAttributes{mode: 0o755 | os.ModeDir, linkCount: 1, uid: 0, gid: 0, length: 36},
 				rockRidgeTimestamps{longForm: false, stamps: []rockRidgeTimestamp{
 					{timestampType: rockRidgeTimestampModify, time: bytesToTime([]byte{0x76, 0x0A, 0x13, 0x08, 0x0D, 0x32, 0x00})},
 					{timestampType: rockRidgeTimestampAccess, time: bytesToTime([]byte{0x76, 0x0A, 0x13, 0x08, 0x0D, 0x32, 0x00})},
@@ -422,7 +418,7 @@ func getRockRidgeDirectoryEntries(f *FileSystem, includeRelocated bool) ([]*dire
 				rockRidgeName{name: "deep"},
 			},
 		},
-		&directoryEntry{
+		{
 			extAttrSize:              0,
 			location:                 0x1d,
 			size:                     0x2800,
@@ -437,7 +433,7 @@ func getRockRidgeDirectoryEntries(f *FileSystem, includeRelocated bool) ([]*dire
 			filename:                 "FOO",
 			filesystem:               f,
 			extensions: []directoryEntrySystemUseExtension{
-				rockRidgePosixAttributes{mode: 0755 | os.ModeDir, linkCount: 1, uid: 0, gid: 0, length: 36},
+				rockRidgePosixAttributes{mode: 0o755 | os.ModeDir, linkCount: 1, uid: 0, gid: 0, length: 36},
 				rockRidgeTimestamps{longForm: false, stamps: []rockRidgeTimestamp{
 					{timestampType: rockRidgeTimestampModify, time: bytesToTime([]byte{0x76, 0x9, 0x1b, 0xb, 0x2f, 0x28, 0x0})},
 					{timestampType: rockRidgeTimestampAccess, time: bytesToTime([]byte{0x76, 0x9, 0x1b, 0xb, 0x2f, 0x29, 0x0})},
@@ -447,7 +443,7 @@ func getRockRidgeDirectoryEntries(f *FileSystem, includeRelocated bool) ([]*dire
 				rockRidgeName{name: "foo"},
 			},
 		},
-		&directoryEntry{
+		{
 			extAttrSize:              0,
 			location:                 0x29,
 			size:                     0x0,
@@ -462,7 +458,7 @@ func getRockRidgeDirectoryEntries(f *FileSystem, includeRelocated bool) ([]*dire
 			filename:                 "LINK.;1",
 			filesystem:               f,
 			extensions: []directoryEntrySystemUseExtension{
-				rockRidgePosixAttributes{mode: 0777 | os.ModeSymlink, linkCount: 1, uid: 0, gid: 0, length: 36},
+				rockRidgePosixAttributes{mode: 0o777 | os.ModeSymlink, linkCount: 1, uid: 0, gid: 0, length: 36},
 				rockRidgeTimestamps{longForm: false, stamps: []rockRidgeTimestamp{
 					{timestampType: rockRidgeTimestampModify, time: bytesToTime([]byte{0x76, 0xa, 0x13, 0x8, 0xd, 0x32, 0x0})},
 					{timestampType: rockRidgeTimestampAccess, time: bytesToTime([]byte{0x76, 0xa, 0x13, 0x8, 0xd, 0x32, 0x0})},
@@ -473,7 +469,7 @@ func getRockRidgeDirectoryEntries(f *FileSystem, includeRelocated bool) ([]*dire
 				rockRidgeSymlink{name: "/a/b/c/d/ef/g/h"},
 			},
 		},
-		&directoryEntry{
+		{
 			extAttrSize:              0,
 			location:                 0x1476,
 			size:                     0x7,
@@ -488,7 +484,7 @@ func getRockRidgeDirectoryEntries(f *FileSystem, includeRelocated bool) ([]*dire
 			filename:                 "README.MD;1",
 			filesystem:               f,
 			extensions: []directoryEntrySystemUseExtension{
-				rockRidgePosixAttributes{mode: 0644, linkCount: 1, uid: 0, gid: 0, length: 36},
+				rockRidgePosixAttributes{mode: 0o644, linkCount: 1, uid: 0, gid: 0, length: 36},
 				rockRidgeTimestamps{longForm: false, stamps: []rockRidgeTimestamp{
 					{timestampType: rockRidgeTimestampModify, time: bytesToTime([]byte{0x76, 0xa, 0x13, 0x8, 0xd, 0x32, 0x0})},
 					{timestampType: rockRidgeTimestampAccess, time: bytesToTime([]byte{0x76, 0xa, 0x13, 0x8, 0xd, 0x33, 0x0})},
@@ -516,7 +512,7 @@ func getRockRidgeDirectoryEntries(f *FileSystem, includeRelocated bool) ([]*dire
 				filename:                 "G",
 				filesystem:               f,
 				extensions: []directoryEntrySystemUseExtension{
-					rockRidgePosixAttributes{mode: 0755 | os.ModeDir, linkCount: 1, uid: 0, gid: 0, length: 36},
+					rockRidgePosixAttributes{mode: 0o755 | os.ModeDir, linkCount: 1, uid: 0, gid: 0, length: 36},
 					rockRidgeTimestamps{longForm: false, stamps: []rockRidgeTimestamp{
 						{timestampType: rockRidgeTimestampModify, time: bytesToTime([]byte{0x76, 0xa, 0x13, 0x8, 0xd, 0x32, 0x0})},
 						{timestampType: rockRidgeTimestampAccess, time: bytesToTime([]byte{0x76, 0xa, 0x13, 0x8, 0xd, 0x32, 0x0})},
@@ -555,13 +551,13 @@ func getRockRidgeDirectoryEntries(f *FileSystem, includeRelocated bool) ([]*dire
 	return entries, b, allBytes, byteMap, nil
 }
 
-func getValidDirectoryEntriesExtended(fs *FileSystem) ([]*directoryEntry, [][]byte, []byte, error) {
+func getValidDirectoryEntriesExtended(fs *FileSystem) (entries []*directoryEntry, content [][]byte, entireContent []byte, err error) {
 	// these are taken from the file ./testdata/9660.iso, see ./testdata/README.md
 	blocksize := 2048
 	fooSector := 0x21
 	t1, _ := time.Parse(time.RFC3339, "2017-11-26T07:53:16Z")
 	sizes := []int{0x34, 0x34, 0x2c}
-	entries := []*directoryEntry{
+	entries = []*directoryEntry{
 		{extAttrSize: 0x0, location: 0x21, size: 0x1000, creation: t1, isHidden: false, isSubdirectory: true, isAssociated: false, hasExtendedAttrs: false, hasOwnerGroupPermissions: false, hasMoreEntries: false, volumeSequence: 0x1, filename: "", isSelf: true},
 		{extAttrSize: 0x0, location: 0x12, size: 0x800, creation: t1, isHidden: false, isSubdirectory: true, isAssociated: false, hasExtendedAttrs: false, hasOwnerGroupPermissions: false, hasMoreEntries: false, volumeSequence: 0x1, filename: "", isParent: true},
 		{extAttrSize: 0x0, location: 0x1427, size: 0xb, creation: t1, isHidden: false, isSubdirectory: false, isAssociated: false, hasExtendedAttrs: false, hasOwnerGroupPermissions: false, hasMoreEntries: false, volumeSequence: 0x1, filename: "FILENA00.;1"},
@@ -646,9 +642,9 @@ func getValidDirectoryEntriesExtended(fs *FileSystem) ([]*directoryEntry, [][]by
 		e.filesystem = fs
 	}
 	// read correct bytes off of disk
-	input, err := ioutil.ReadFile(ISO9660File)
+	input, err := os.ReadFile(ISO9660File)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("Error reading data from iso9660 test fixture %s: %v", ISO9660File, err)
+		return nil, nil, nil, fmt.Errorf("error reading data from iso9660 test fixture %s: %v", ISO9660File, err)
 	}
 
 	start := fooSector * blocksize // start of /foo directory in file.iso
@@ -679,7 +675,7 @@ func TestBytesToTime(t *testing.T) {
 		output := bytesToTime(tt.b)
 		expected, err := time.Parse(time.RFC3339, tt.rfc)
 		if err != nil {
-			t.Fatalf("Error parsing expected date: %v", err)
+			t.Fatalf("error parsing expected date: %v", err)
 		}
 		if !expected.Equal(output) {
 			t.Errorf("bytesToTime(%d) expected output %v, actual %v", tt.b, expected, output)
@@ -691,14 +687,13 @@ func TestTimeToBytes(t *testing.T) {
 	for _, tt := range timeBytesTests {
 		input, err := time.Parse(time.RFC3339, tt.rfc)
 		if err != nil {
-			t.Fatalf("Error parsing input date: %v", err)
+			t.Fatalf("error parsing input date: %v", err)
 		}
 		b := timeToBytes(input)
-		if bytes.Compare(b, tt.b) != 0 {
+		if !bytes.Equal(b, tt.b) {
 			t.Errorf("timeToBytes(%v) expected output %x, actual %x", tt.rfc, tt.b, b)
 		}
 	}
-
 }
 
 func TestDirectoryEntryStringToASCIIBytes(t *testing.T) {
@@ -709,18 +704,17 @@ func TestDirectoryEntryStringToASCIIBytes(t *testing.T) {
 	}{
 		{"abc", []byte{0x61, 0x62, 0x63}, nil},
 		{"abcdefg", []byte{0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67}, nil},
-		{"abcdef\u2318", nil, fmt.Errorf("Non-ASCII character in name: %s", "abcdef\u2318")},
+		{"abcdef\u2318", nil, fmt.Errorf("non-ASCII character in name: %s", "abcdef\u2318")},
 	}
 	for _, tt := range tests {
 		output, err := stringToASCIIBytes(tt.input)
-		if bytes.Compare(output, tt.output) != 0 {
+		if !bytes.Equal(output, tt.output) {
 			t.Errorf("stringToASCIIBytes(%s) expected output %v, actual %v", tt.input, tt.output, output)
 		}
 		if (err != nil && tt.err == nil) || (err == nil && tt.err != nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())) {
 			t.Errorf("mismatched err expected, actual: %v, %v", tt.err, err)
 		}
 	}
-
 }
 
 func TestDirectoryEntryUCaseValid(t *testing.T) {
@@ -760,7 +754,7 @@ func TestDirectoryEntryParseDirEntries(t *testing.T) {
 				}
 				return len(b), nil
 			}
-			return 0, fmt.Errorf("Unknown area to read %d", offset)
+			return 0, fmt.Errorf("unknown area to read %d", offset)
 		},
 	}
 	fs.file = f
@@ -783,15 +777,13 @@ func TestDirectoryEntryParseDirEntries(t *testing.T) {
 			t.Errorf("parseDirEntries() DirectoryEntry mismatched length actual, expected %d %d", len(output), len(tt.de))
 		default:
 			for i, de := range output {
-				if !compareDirectoryEntries(de, tt.de[i], false, true) {
-					t.Errorf("%d: parseDirEntries() DirectoryEntry mismatch, actual then expected:", i)
-					t.Logf("%#v\n", de)
-					t.Logf("%#v\n", tt.de[i])
+				if diff := compareDirectoryEntries(de, tt.de[i], true); diff != nil {
+					t.Errorf("%d: parseDirEntries() DirectoryEntry mismatch:", i)
+					t.Log(diff)
 				}
 			}
 		}
 	}
-
 }
 
 func TestDirectoryEntryToBytes(t *testing.T) {
@@ -806,13 +798,13 @@ func TestDirectoryEntryToBytes(t *testing.T) {
 		b, err := de.toBytes(false, []uint32{19})
 		switch {
 		case err != nil:
-			t.Errorf("Error converting directory entry to bytes: %v", err)
+			t.Errorf("error converting directory entry to bytes: %v", err)
 			t.Logf("%v", de)
 		case int(b[0][0]) != len(b[0]):
-			t.Errorf("Reported size as %d but had %d bytes", b[0], len(b))
+			t.Errorf("reported size as %d but had %d bytes", b[0], len(b))
 		default:
 			// compare the actual dir entry
-			if bytes.Compare(directoryEntryBytesNullDate(b[0]), directoryEntryBytesNullDate(validBytes[i][0])) != 0 {
+			if !bytes.Equal(directoryEntryBytesNullDate(b[0]), directoryEntryBytesNullDate(validBytes[i][0])) {
 				t.Errorf("%d: Mismatched entry bytes %s, actual vs expected", i, de.filename)
 				t.Log(b[0])
 				t.Log(validBytes[i])
@@ -822,7 +814,7 @@ func TestDirectoryEntryToBytes(t *testing.T) {
 				t.Errorf("%d: Mismatched number of continuation entries actual %d expected %d", i, len(b)-1, len(validBytes[i])-1)
 			}
 			for j, e := range validBytes[i][1:] {
-				if bytes.Compare(e, b[j+1]) != 0 {
+				if !bytes.Equal(e, b[j+1]) {
 					t.Errorf("%d: mismatched continuation entry bytes, actual then expected", i)
 					t.Log(b[j+1])
 					t.Log(e)
@@ -847,7 +839,7 @@ func TestDirectoryEntryGetLocation(t *testing.T) {
 
 	f, err := os.Open(ISO9660File)
 	if err != nil {
-		t.Fatalf("Could not open iso testing file %s: %v", ISO9660File, err)
+		t.Fatalf("could not open iso testing file %s: %v", ISO9660File, err)
 	}
 	// the root directory entry
 	root := &directoryEntry{

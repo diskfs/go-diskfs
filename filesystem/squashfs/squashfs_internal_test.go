@@ -60,7 +60,7 @@ func TestValidateBlocksize(t *testing.T) {
 		size := int64(math.Exp2(float64(i)))
 		err := validateBlocksize(size)
 		if err != nil {
-			t.Errorf("Unexpected erorr for size %d: %v", size, err)
+			t.Errorf("unexpected erorr for size %d: %v", size, err)
 		}
 	}
 }
@@ -69,7 +69,7 @@ func TestParseXAttrsTable(t *testing.T) {
 	// parseXattrsTable(bUIDXattr, bIndex []byte, offset uint64, c compressor) (*xAttrTable, error) {
 	b, offset, err := testGetInodeMetabytes()
 	if err != nil {
-		t.Fatalf("Error getting metadata bytes: %v", err)
+		t.Fatalf("error getting metadata bytes: %v", err)
 	}
 	startUID := testValidSuperblockUncompressed.idTableStart - testMetaOffset
 	startXattrsID := testValidSuperblockUncompressed.xattrTableStart - testMetaOffset
@@ -82,7 +82,7 @@ func TestParseXAttrsTable(t *testing.T) {
 	//   so need offset of bUIDXattr from beginning of disk to make use of it
 	table, err := parseXattrsTable(bUIDXattr, bIndex, offset+startUID, nil)
 	if err != nil {
-		t.Fatalf("Error reading xattrs table: %v", err)
+		t.Fatalf("error reading xattrs table: %v", err)
 	}
 	expectedEntries := 1
 	if len(table.list) != expectedEntries {
@@ -144,7 +144,7 @@ func TestReadXAttrsTable(t *testing.T) {
 				b2 = idTable[2:]
 			case int64(s.xattrTableStart): // xattr ID block
 				b2 = indexHeader
-			case int64(s.xattrTableStart + xAttrHeaderSize): // xattr ID block minus the header
+			case int64(s.xattrTableStart) + int64(xAttrHeaderSize): // xattr ID block minus the header
 				b2 = indexBody
 			}
 			copy(b, b2)
@@ -161,12 +161,12 @@ func TestReadXAttrsTable(t *testing.T) {
 	}
 	xtable, err := readXattrsTable(s, file, nil)
 	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
 	switch {
 	case xtable == nil:
-		t.Errorf("Unexpected xtable nil")
-	case bytes.Compare(xtable.data, expectedTable.data) != 0:
+		t.Errorf("unexpected xtable nil")
+	case !bytes.Equal(xtable.data, expectedTable.data):
 		t.Errorf("Mismatched xtable.data, actual then expected")
 		t.Logf("% x", xtable.data)
 		t.Logf("% x", expectedTable.data)
@@ -180,11 +180,11 @@ func TestReadXAttrsTable(t *testing.T) {
 func TestReadFragmentTable(t *testing.T) {
 	fs, _, err := testGetFilesystem(nil)
 	if err != nil {
-		t.Fatalf("Unable to read test file: %v", err)
+		t.Fatalf("unable to read test file: %v", err)
 	}
 	entries, err := readFragmentTable(fs.superblock, fs.file, fs.compressor)
 	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(entries) != len(testFragEntries) {
 		t.Errorf("Mismatched entries, actual %d expected %d", len(entries), len(testFragEntries))
@@ -205,16 +205,16 @@ func TestReadDirectory(t *testing.T) {
 		t.Fatalf("error getting valid test filesystem: %v", err)
 	}
 
-	tests := []struct{
-		p string
-		err error
+	tests := []struct {
+		p       string
+		err     error
 		entries []*directoryEntry
 	}{
 		{"/a/b/c", nil, []*directoryEntry{
 			{
 				isSubdirectory: true,
-				name: "d",
-				size: 5,
+				name:           "d",
+				size:           5,
 			},
 		}},
 	}
@@ -282,7 +282,7 @@ func TestReadBlock(t *testing.T) {
 			t.Errorf("%d: mismatched error, actual then expected", i)
 			t.Logf("%v", err)
 			t.Logf("%v", tt.err)
-		case bytes.Compare(b, tt.data) != 0:
+		case !bytes.Equal(b, tt.data):
 			t.Errorf("%d: Mismatched data, actual then expected", i)
 			t.Logf("% x", b)
 			t.Logf("% x", tt.data)
@@ -291,7 +291,7 @@ func TestReadBlock(t *testing.T) {
 }
 
 func TestReadFragment(t *testing.T) {
-	//func (fs *FileSystem) readFragment(index, offset uint32, fragmentSize int64) ([]byte, error) {
+	// func (fs *FileSystem) readFragment(index, offset uint32, fragmentSize int64) ([]byte, error) {
 	fragments := []*fragmentEntry{
 		{start: 0, size: 20, compressed: false},
 		{start: 20, size: 10, compressed: false},
@@ -321,7 +321,7 @@ func TestReadFragment(t *testing.T) {
 	}{
 		{0, 10, 5, nil, data[10:15], nil},
 		{1, 2, 5, nil, data[22:27], nil},
-		{2, 2, 5, nil, nil, fmt.Errorf("Fragment compressed but do not have valid compressor")},
+		{2, 2, 5, nil, nil, fmt.Errorf("fragment compressed but do not have valid compressor")},
 		{2, 2, 9, &testCompressorAddBytes{b: []byte{0x40}}, append(data[32:40], 0x40), nil},
 		{2, 2, 5, &testCompressorAddBytes{err: fmt.Errorf("foo")}, nil, fmt.Errorf("decompress error: foo")},
 		{3, 2, 5, nil, nil, fmt.Errorf("cannot find fragment block with index %d", 3)},
@@ -339,7 +339,7 @@ func TestReadFragment(t *testing.T) {
 			t.Errorf("%d: mismatched error, actual then expected", i)
 			t.Logf("%v", err)
 			t.Logf("%v", tt.err)
-		case bytes.Compare(b, tt.data) != 0:
+		case !bytes.Equal(b, tt.data):
 			t.Errorf("%d: Mismatched data, actual then expected", i)
 			t.Logf("% x", b)
 			t.Logf("% x", tt.data)
@@ -348,7 +348,7 @@ func TestReadFragment(t *testing.T) {
 }
 
 func TestReadUidsGids(t *testing.T) {
-	//func readUidsGids(s *superblock, file util.File, c compressor) ([]uint32, error) {
+	// func readUidsGids(s *superblock, file util.File, c compressor) ([]uint32, error) {
 	expected := []uint32{
 		0, 10, 100, 1000,
 	}
@@ -387,7 +387,7 @@ func TestReadUidsGids(t *testing.T) {
 	uidsgids, err := readUidsGids(s, file, nil)
 	switch {
 	case err != nil:
-		t.Errorf("Unexpected error: %v", err)
+		t.Errorf("unexpected error: %v", err)
 	case !testEqualUint32Slice(uidsgids, expected):
 		t.Errorf("Mismatched results, actual then expected")
 		t.Logf("%#v", uidsgids)

@@ -84,14 +84,14 @@ func main() {
 	case "pathtable":
 		readpathCmd(opts)
 	default:
-		log.Fatalf("Unknown command: %s", cmd)
+		log.Fatalf("unknown command: %s", cmd)
 	}
 
 }
 
 func readpathCmd(opts []string) {
 	if len(opts) != 1 {
-		log.Fatalf("Command 'pathtable' must have exactly one arguments. Options: <filename>")
+		log.Fatalf("command 'pathtable' must have exactly one arguments. Options: <filename>")
 	}
 	filename := opts[0]
 	f, err := os.Open(filename)
@@ -104,10 +104,10 @@ func readpathCmd(opts []string) {
 	// get the primary volume descriptor
 	read, err := f.ReadAt(b, pvdBlock*int64(blocksize))
 	if err != nil {
-		log.Fatalf("Error reading path table location: %v", err)
+		log.Fatalf("error reading path table location: %v", err)
 	}
 	if read != len(b) {
-		log.Fatalf("Read %d bytes instead of expected %d", read, len(b))
+		log.Fatalf("read %d bytes instead of expected %d", read, len(b))
 	}
 	// get the location and size
 	size := binary.LittleEndian.Uint32(b[132 : 132+4])
@@ -117,10 +117,10 @@ func readpathCmd(opts []string) {
 	ptBytes := make([]byte, size, size)
 	read, err = f.ReadAt(ptBytes, int64(location*blocksize))
 	if err != nil {
-		log.Fatalf("Error reading path table of size from location %d: %v", size, location, err)
+		log.Fatalf("error reading path table of size from location %d: %v", size, location, err)
 	}
 	if read != len(ptBytes) {
-		log.Fatalf("Read %d bytes instead of expected %d", read, len(b))
+		log.Fatalf("read %d bytes instead of expected %d", read, len(b))
 	}
 
 	// now parse the path table
@@ -151,7 +151,7 @@ func readpathCmd(opts []string) {
 }
 func readdirCmd(opts []string) {
 	if len(opts) != 2 {
-		log.Fatalf("Command 'directory' must have exactly two arguments. Options: <filename> <path>")
+		log.Fatalf("command 'directory' must have exactly two arguments. Options: <filename> <path>")
 	}
 	filename := opts[0]
 	p := opts[1]
@@ -165,10 +165,10 @@ func readdirCmd(opts []string) {
 	// get the primary volume descriptor
 	read, err := f.ReadAt(b, pvdBlock*int64(blocksize))
 	if err != nil {
-		log.Fatalf("Error reading primary volume descriptor: %v", err)
+		log.Fatalf("error reading primary volume descriptor: %v", err)
 	}
 	if read != len(b) {
-		log.Fatalf("Read %d bytes instead of expected %d", read, len(b))
+		log.Fatalf("read %d bytes instead of expected %d", read, len(b))
 	}
 	// get the root directory block and size
 	rootDirEntryBytes := b[156 : 156+34]
@@ -179,7 +179,7 @@ func readdirCmd(opts []string) {
 	// now parse the requested path and find out which one we want
 	parts, err := splitPath(p)
 	if err != nil {
-		log.Fatalf("Could not parse path %s: %v", p, err)
+		log.Fatalf("could not parse path %s: %v", p, err)
 	}
 	err = readAndProcessDirs(parts, location, size, f)
 	if err != nil {
@@ -195,7 +195,7 @@ func readAndProcessDirs(parts []string, location, size uint32, f *os.File) error
 		current, parts := parts[0], parts[1:]
 		child := findChild(current, dirs)
 		if child == nil {
-			return fmt.Errorf("Could not find directory %s", current)
+			return fmt.Errorf("could not find directory %s", current)
 		}
 		readAndProcessDirs(parts, child.location, child.size, f)
 	}
@@ -232,7 +232,7 @@ func readDirectory(location, size uint32, f *os.File) []*dirEntry {
 		log.Fatalf("Failed to read directory at location %d", location)
 	}
 	if read != len(b) {
-		log.Fatalf("Read %d bytes instead of expected %d at location %d", read, len(b), location)
+		log.Fatalf("read %d bytes instead of expected %d at location %d", read, len(b), location)
 	}
 	// cycle through
 	entries := make([]*dirEntry, 0, 10)

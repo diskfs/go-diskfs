@@ -19,9 +19,9 @@ var (
 	testDirectoryEntriesBytes = [][]byte{testDirectoryTable[12:22], testDirectoryTable[22:32], testDirectoryTable[32:42]}
 	testDirectoryHeader       = directoryHeader{count: 3, startBlock: 0, inode: 1}
 	testDirectoryEntries      = []*directoryEntryRaw{
-		&directoryEntryRaw{offset: 0x0, inodeNumber: 0x1, inodeType: inodeType(0x1), name: "d1", isSubdirectory: true},
-		&directoryEntryRaw{offset: 0x20, inodeNumber: 0x2, inodeType: inodeType(0x1), name: "d2", isSubdirectory: true},
-		&directoryEntryRaw{offset: 0x40, inodeNumber: 0x3, inodeType: inodeType(0x1), name: "d3", isSubdirectory: true},
+		{offset: 0x0, inodeNumber: 0x1, inodeType: inodeType(0x1), name: "d1", isSubdirectory: true},
+		{offset: 0x20, inodeNumber: 0x2, inodeType: inodeType(0x1), name: "d2", isSubdirectory: true},
+		{offset: 0x40, inodeNumber: 0x3, inodeType: inodeType(0x1), name: "d3", isSubdirectory: true},
 	}
 	testDirectory = &directory{
 		entries: testDirectoryEntries,
@@ -35,8 +35,9 @@ func TestParseDirectoryHeader(t *testing.T) {
 		err    error
 	}{
 		{testDirectoryHeaderBytes, &testDirectoryHeader, nil},
-		{testDirectoryHeaderBytes[:2], nil, fmt.Errorf("Header was 2 bytes, less than minimum 12")},
+		{testDirectoryHeaderBytes[:2], nil, fmt.Errorf("header was 2 bytes, less than minimum 12")},
 	}
+	//nolint:dupl // these tests are not exactly identical, easier to leave as is
 	for i, tt := range tests {
 		header, err := parseDirectoryHeader(tt.b)
 		switch {
@@ -55,7 +56,7 @@ func TestParseDirectoryHeader(t *testing.T) {
 func TestDirectoryHeaderToBytes(t *testing.T) {
 	// func (d *directoryEntryRaw) toBytes() []byte {
 	b := testDirectoryHeader.toBytes()
-	if bytes.Compare(testDirectoryHeaderBytes, b) != 0 {
+	if !bytes.Equal(testDirectoryHeaderBytes, b) {
 		t.Errorf("mismatched header bytes, actual then expected")
 		t.Logf("%x", b)
 		t.Logf("%x", testDirectoryHeaderBytes)
@@ -71,7 +72,7 @@ func TestParseDirectoryEntry(t *testing.T) {
 		{testDirectoryEntriesBytes[0], testDirectoryEntries[0], nil},
 		{testDirectoryEntriesBytes[1], testDirectoryEntries[1], nil},
 		{testDirectoryEntriesBytes[2], testDirectoryEntries[2], nil},
-		{testDirectoryEntriesBytes[0][:2], nil, fmt.Errorf("Directory entry was 2 bytes, less than minimum 8")},
+		{testDirectoryEntriesBytes[0][:2], nil, fmt.Errorf("directory entry was 2 bytes, less than minimum 8")},
 	}
 	for i, tt := range tests {
 		entry, _, err := parseDirectoryEntry(tt.b, 1)
@@ -99,7 +100,7 @@ func TestDirectoryEntryToBytes(t *testing.T) {
 	}
 	for i, tt := range tests {
 		b := tt.entry.toBytes(1)
-		if bytes.Compare(b, tt.b) != 0 {
+		if !bytes.Equal(b, tt.b) {
 			t.Errorf("%d: mismatched bytes, actual then expected", i)
 			t.Logf("% x", b)
 			t.Logf("% x", tt.b)
@@ -114,7 +115,7 @@ func TestParseDirectory(t *testing.T) {
 		err error
 	}{
 		{testDirectoryTable, testDirectory, nil},
-		{testDirectoryTable[:10], nil, fmt.Errorf("Could not parse directory header: Header was 10 bytes, less than minimum 12")},
+		{testDirectoryTable[:10], nil, fmt.Errorf("could not parse directory header: header was 10 bytes, less than minimum 12")},
 	}
 	for i, tt := range tests {
 		dir, err := parseDirectory(tt.b)
@@ -133,7 +134,7 @@ func TestParseDirectory(t *testing.T) {
 
 func TestDirectoryToBytes(t *testing.T) {
 	b := testDirectory.toBytes(1)
-	if bytes.Compare(b, testDirectoryTable) != 0 {
+	if !bytes.Equal(b, testDirectoryTable) {
 		t.Errorf("mismatched bytes, actual then expected")
 		t.Logf("% x", b)
 		t.Logf("% x", testDirectoryTable)

@@ -2,6 +2,7 @@ package squashfs_test
 
 import (
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path"
@@ -13,7 +14,7 @@ import (
 )
 
 func getOpenMode(mode int) string {
-	modes := make([]string, 0, 0)
+	modes := make([]string, 0)
 	if mode&os.O_CREATE == os.O_CREATE {
 		modes = append(modes, "CREATE")
 	}
@@ -71,7 +72,7 @@ func TestSquashfsMkdir(t *testing.T) {
 		}
 		err = fs.Mkdir("/abcdef")
 		if err == nil {
-			t.Errorf("Received no error when trying to mkdir read-only filesystem")
+			t.Errorf("received no error when trying to mkdir read-only filesystem")
 		}
 	})
 	t.Run("workspace", func(t *testing.T) {
@@ -93,22 +94,22 @@ func TestSquashfsMkdir(t *testing.T) {
 
 		// for fsw, we want to work at least once with a path that exists
 		existPathFull := path.Join(fs.Workspace(), existPath)
-		err = os.MkdirAll(existPathFull, 0755)
+		err = os.MkdirAll(existPathFull, 0o755)
 		if err != nil {
-			t.Fatalf("Could not create path %s in workspace as %s: %v", existPath, existPathFull, err)
+			t.Fatalf("could not create path %s in workspace as %s: %v", existPath, existPathFull, err)
 		}
 		for _, tt := range tests {
 			fs := tt.fs
 			ws := fs.Workspace()
 			err := fs.Mkdir(tt.path)
 			if (err == nil && tt.err != nil) || (err != nil && err == nil) {
-				t.Errorf("Unexpected error mismatch. Actual: %v, expected: %v", err, tt.err)
+				t.Errorf("unexpected error mismatch. Actual: %v, expected: %v", err, tt.err)
 			}
 			// did the path exist?
 			if ws != "" {
 				fullPath := path.Join(ws, tt.path)
 				if _, err := os.Stat(fullPath); os.IsNotExist(err) {
-					t.Errorf("Path did not exist after creation base %s, in workspace %s", tt.path, fullPath)
+					t.Errorf("path did not exist after creation base %s, in workspace %s", tt.path, fullPath)
 				}
 			}
 		}
@@ -124,6 +125,7 @@ func TestSquashfsReadDir(t *testing.T) {
 		last  string
 		err   error
 	}
+	//nolint:thelper // this is not a helper function
 	runTests := func(t *testing.T, tests []testList) {
 		for _, tt := range tests {
 			fi, err := tt.fs.ReadDir(tt.path)
@@ -165,22 +167,12 @@ func TestSquashfsReadDir(t *testing.T) {
 		ws := fs.Workspace()
 		existPath := "/abc"
 		existPathWs := path.Join(ws, existPath)
-		os.MkdirAll(existPathWs, 0755)
+		_ = os.MkdirAll(existPathWs, 0o755)
 		// create files
 		for i := 0; i < 10; i++ {
 			filename := path.Join(existPathWs, fmt.Sprintf("filename_%d", i))
 			contents := fmt.Sprintf("abcdefg %d", i)
-			ioutil.WriteFile(filename, []byte(contents), 0644)
-		}
-		// get the known []FileInfo
-		fi, err := ioutil.ReadDir(existPathWs)
-		if err != nil {
-			t.Errorf("Failed to read directory %s in workspace as %s: %v", existPath, existPathWs, err)
-		}
-		// convert to []*os.FileInfo to be useful
-		fis := make([]*os.FileInfo, 0, len(fi))
-		for _, e := range fi {
-			fis = append(fis, &e)
+			_ = os.WriteFile(filename, []byte(contents), 0o600)
 		}
 		runTests(t, []testList{
 			{fs, "/abcdef", 0, "", "", fmt.Errorf("directory does not exist")}, // does not exist
@@ -199,7 +191,8 @@ func TestSquashfsOpenFile(t *testing.T) {
 		err      error
 	}
 
-	t.Run("Read", func(t *testing.T) {
+	t.Run("read", func(t *testing.T) {
+		//nolint:thelper // this is not a helper function
 		runTests := func(t *testing.T, fs *squashfs.FileSystem, tests []testStruct) {
 			for _, tt := range tests {
 				header := fmt.Sprintf("OpenFile(%s, %s)", tt.path, getOpenMode(tt.mode))
@@ -210,9 +203,9 @@ func TestSquashfsOpenFile(t *testing.T) {
 				case reader == nil && (tt.err == nil || tt.expected != ""):
 					t.Errorf("%s: Unexpected nil output", header)
 				case reader != nil:
-					b, err := ioutil.ReadAll(reader)
+					b, err := io.ReadAll(reader)
 					if err != nil {
-						t.Errorf("%s: ioutil.ReadAll(reader) unexpected error: %v", header, err)
+						t.Errorf("%s: io.ReadAll(reader) unexpected error: %v", header, err)
 					}
 					if string(b) != tt.expected {
 						t.Errorf("%s: mismatched contents, actual then expected", header)
@@ -229,11 +222,11 @@ func TestSquashfsOpenFile(t *testing.T) {
 			}
 			tests := []testStruct{
 				// error opening a directory
-				{"/", os.O_RDONLY, "", fmt.Errorf("Cannot open directory %s as file", "/")},
-				{"/abcdefg", os.O_RDONLY, "", fmt.Errorf("Target file %s does not exist", "/abcdefg")},
+				{"/", os.O_RDONLY, "", fmt.Errorf("cannot open directory %s as file", "/")},
+				{"/abcdefg", os.O_RDONLY, "", fmt.Errorf("target file %s does not exist", "/abcdefg")},
 				{"/foo/filename_10", os.O_RDONLY, "filename_10\n", nil},
 				{"/foo/filename_75", os.O_RDONLY, "filename_75\n", nil},
-				{"/README.MD", os.O_RDONLY, "", fmt.Errorf("Target file %s does not exist", "/README.MD")},
+				{"/README.MD", os.O_RDONLY, "", fmt.Errorf("target file %s does not exist", "/README.MD")},
 				{"/README.md", os.O_RDONLY, "README\n", nil},
 			}
 			runTests(t, fs, tests)
@@ -246,17 +239,17 @@ func TestSquashfsOpenFile(t *testing.T) {
 			// make sure our test files exist and have necessary content
 			ws := fs.Workspace()
 			subdir := "/FOO"
-			os.MkdirAll(path.Join(ws, subdir), 0755)
+			_ = os.MkdirAll(path.Join(ws, subdir), 0o755)
 			for i := 0; i <= 75; i++ {
 				filename := fmt.Sprintf("FILENA%02d", i)
 				content := fmt.Sprintf("filename_%d\n", i)
-				ioutil.WriteFile(path.Join(ws, subdir, filename), []byte(content), 0644)
+				_ = os.WriteFile(path.Join(ws, subdir, filename), []byte(content), 0o600)
 			}
 			tests := []testStruct{
 				// error opening a directory
-				{"/", os.O_RDONLY, "", fmt.Errorf("Cannot open directory %s as file", "/")},
+				{"/", os.O_RDONLY, "", fmt.Errorf("cannot open directory %s as file", "/")},
 				// open non-existent file for read or read write
-				{"/abcdefg", os.O_RDONLY, "", fmt.Errorf("Target file %s does not exist", "/abcdefg")},
+				{"/abcdefg", os.O_RDONLY, "", fmt.Errorf("target file %s does not exist", "/abcdefg")},
 				// open file for read or read write and check contents
 				{"/FOO/FILENA01", os.O_RDONLY, "filename_1\n", nil},
 				{"/FOO/FILENA75", os.O_RDONLY, "filename_75\n", nil},
@@ -279,23 +272,26 @@ func TestSquashfsRead(t *testing.T) {
 		{4096, 10000000, -1, &squashfs.FileSystem{}, nil},
 	}
 	for i, tt := range tests {
-		// get a temporary working file
-		f, err := os.Open(squashfs.Squashfsfile)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer f.Close()
-		// create the filesystem
-		fs, err := squashfs.Read(f, tt.filesize, 0, tt.blocksize)
-		switch {
-		case (err == nil && tt.err != nil) || (err != nil && tt.err == nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
-			t.Errorf("%d: Read(%s, %d, %d, %d): mismatched errors, actual %v expected %v", i, f.Name(), tt.filesize, 0, tt.blocksize, err, tt.err)
-		case (fs == nil && tt.fs != nil) || (fs != nil && tt.fs == nil):
-			t.Errorf("%d: Read(%s, %d, %d, %d): mismatched fs, actual then expected", i, f.Name(), tt.filesize, 0, tt.blocksize)
-			t.Logf("%v", fs)
-			t.Logf("%v", tt.fs)
-		}
-		// we do not match the filesystems here, only check functional accuracy
+		tt := tt
+		t.Run(fmt.Sprintf("blocksize %d filesize %d bytechange %d", tt.blocksize, tt.filesize, tt.bytechange), func(t *testing.T) {
+			// get a temporary working file
+			f, err := os.Open(squashfs.Squashfsfile)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer f.Close()
+			// create the filesystem
+			fs, err := squashfs.Read(f, tt.filesize, 0, tt.blocksize)
+			switch {
+			case (err == nil && tt.err != nil) || (err != nil && tt.err == nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
+				t.Errorf("%d: Read(%s, %d, %d, %d): mismatched errors, actual %v expected %v", i, f.Name(), tt.filesize, 0, tt.blocksize, err, tt.err)
+			case (fs == nil && tt.fs != nil) || (fs != nil && tt.fs == nil):
+				t.Errorf("%d: Read(%s, %d, %d, %d): mismatched fs, actual then expected", i, f.Name(), tt.filesize, 0, tt.blocksize)
+				t.Logf("%v", fs)
+				t.Logf("%v", tt.fs)
+			}
+			// we do not match the filesystems here, only check functional accuracy
+		})
 	}
 }
 
@@ -311,22 +307,25 @@ func TestSquashfsCreate(t *testing.T) {
 		{4096, 10000000, &squashfs.FileSystem{}, nil},
 	}
 	for _, tt := range tests {
-		// create the filesystem
-		f, err := tmpSquashfsFile()
-		if err != nil {
-			t.Errorf("Failed to create squashfs tmpfile: %v", err)
-		}
-		fs, err := squashfs.Create(f, tt.filesize, 0, tt.blocksize)
-		defer os.Remove(f.Name())
-		switch {
-		case (err == nil && tt.err != nil) || (err != nil && tt.err == nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
-			t.Errorf("Create(%s, %d, %d, %d): mismatched errors, actual %v expected %v", f.Name(), tt.filesize, 0, tt.blocksize, err, tt.err)
-		case (fs == nil && tt.fs != nil) || (fs != nil && tt.fs == nil):
-			t.Errorf("Create(%s, %d, %d, %d): mismatched fs, actual then expected", f.Name(), tt.filesize, 0, tt.blocksize)
-			t.Logf("%v", fs)
-			t.Logf("%v", tt.fs)
-		}
-		// we do not match the filesystems here, only check functional accuracy
+		tt := tt
+		t.Run(fmt.Sprintf("blocksize %d filesize %d", tt.blocksize, tt.filesize), func(t *testing.T) {
+			// create the filesystem
+			f, err := tmpSquashfsFile()
+			if err != nil {
+				t.Errorf("Failed to create squashfs tmpfile: %v", err)
+			}
+			fs, err := squashfs.Create(f, tt.filesize, 0, tt.blocksize)
+			defer os.Remove(f.Name())
+			switch {
+			case (err == nil && tt.err != nil) || (err != nil && tt.err == nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
+				t.Errorf("Create(%s, %d, %d, %d): mismatched errors, actual %v expected %v", f.Name(), tt.filesize, 0, tt.blocksize, err, tt.err)
+			case (fs == nil && tt.fs != nil) || (fs != nil && tt.fs == nil):
+				t.Errorf("Create(%s, %d, %d, %d): mismatched fs, actual then expected", f.Name(), tt.filesize, 0, tt.blocksize)
+				t.Logf("%v", fs)
+				t.Logf("%v", tt.fs)
+			}
+			// we do not match the filesystems here, only check functional accuracy
+		})
 	}
 }
 
@@ -348,7 +347,7 @@ func TestSquashfsReadDirXattr(t *testing.T) {
 		// read the directory
 		list, err := fs.ReadDir(tt.path)
 		if err != nil {
-			t.Errorf("Unexpected error reading dir %s: %v", tt.path, err)
+			t.Errorf("unexpected error reading dir %s: %v", tt.path, err)
 			continue
 		}
 		// get the file we care about
@@ -369,7 +368,7 @@ func TestSquashfsReadDirXattr(t *testing.T) {
 		sysbase := fi.Sys()
 		sys, ok := sysbase.(squashfs.FileStat)
 		if !ok {
-			t.Errorf("Could not convert fi.Sys() to FileStat")
+			t.Errorf("could not convert fi.Sys() to FileStat")
 			continue
 		}
 		xa := sys.Xattrs()

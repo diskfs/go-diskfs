@@ -26,7 +26,7 @@ func TestDirectoryEntriesFromBytes(t *testing.T) {
 				}
 				return len(b), nil
 			}
-			return 0, fmt.Errorf("Unknown area to read %d", offset)
+			return 0, fmt.Errorf("unknown area to read %d", offset)
 		},
 	}
 	fs.file = f
@@ -36,7 +36,7 @@ func TestDirectoryEntriesFromBytes(t *testing.T) {
 	err = d.entriesFromBytes(b, fs)
 	switch {
 	case err != nil:
-		t.Errorf("Unexpected non-nil error: %v", err)
+		t.Errorf("unexpected non-nil error: %v", err)
 	case d.entries == nil:
 		t.Errorf("unexpected nil entries")
 	case len(d.entries) != len(validDe):
@@ -44,10 +44,9 @@ func TestDirectoryEntriesFromBytes(t *testing.T) {
 	default:
 		// run through them and see that they match
 		for i, de := range d.entries {
-			if !compareDirectoryEntries(de, validDe[i], false, true) {
-				t.Errorf("%d: directoryEntry mismatch, actual then valid:", i)
-				t.Logf("%#v\n", de)
-				t.Logf("%#v\n", validDe[i])
+			if diff := compareDirectoryEntries(de, validDe[i], true); diff != nil {
+				t.Errorf("%d: directoryEntry mismatch:", i)
+				t.Log(diff)
 			}
 		}
 	}
@@ -90,9 +89,9 @@ func TestDirectoryEntriesToBytes(t *testing.T) {
 
 func clearDatesDirectoryBytes(b []byte, blocksize int) []byte {
 	if b == nil {
-		return b
+		return nil
 	}
-	nullBytes := make([]byte, 7, 7)
+	nullBytes := make([]byte, 7)
 	for i := 0; i < len(b); {
 		// get the length of the current record
 		dirlen := int(b[i])

@@ -65,5 +65,4 @@ func TestFileInfoSys(t *testing.T) {
 	if s != nil {
 		t.Errorf("Sys() returned non-nil: %v", s)
 	}
-
 }

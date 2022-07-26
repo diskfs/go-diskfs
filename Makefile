@@ -59,7 +59,7 @@ test: image
 
 golangci-lint: $(LINTER)
 $(LINTER):
-	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(GOBIN) v1.41.0
+	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(GOBIN) v1.45.2
 
 
 ## Check the file format
@@ -71,7 +71,7 @@ fmt-check:
 
 ## Lint the files
 lint: golangci-lint
-	@$(BUILD_CMD) $(LINTER) run --disable-all --enable=revive ./...
+	@$(BUILD_CMD) $(LINTER) run ./...
 
 ## Vet the files
 vet:

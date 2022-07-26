@@ -1,9 +1,11 @@
 module github.com/diskfs/go-diskfs
 
-go 1.12
+go 1.16
 
 require (
 	github.com/frankban/quicktest v1.13.0 // indirect
+	github.com/go-test/deep v1.0.8 // indirect
+	github.com/google/go-cmp v0.5.8 // indirect
 	github.com/google/uuid v1.1.1
 	github.com/pierrec/lz4 v2.3.0+incompatible
 	github.com/pkg/xattr v0.4.1

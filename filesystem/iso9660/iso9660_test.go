@@ -7,6 +7,7 @@ package iso9660_test
 
 import (
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path"
@@ -18,7 +19,7 @@ import (
 )
 
 func getOpenMode(mode int) string {
-	modes := make([]string, 0, 0)
+	modes := make([]string, 0)
 	if mode&os.O_CREATE == os.O_CREATE {
 		modes = append(modes, "CREATE")
 	}
@@ -93,7 +94,7 @@ func TestIso9660Mkdir(t *testing.T) {
 		}
 		err = fs.Mkdir("/abcdef")
 		if err == nil {
-			t.Errorf("Received no error when trying to mkdir read-only filesystem")
+			t.Errorf("received no error when trying to mkdir read-only filesystem")
 		}
 	})
 	t.Run("workspace", func(t *testing.T) {
@@ -115,22 +116,22 @@ func TestIso9660Mkdir(t *testing.T) {
 
 		// for fsw, we want to work at least once with a path that exists
 		existPathFull := path.Join(fs.Workspace(), existPath)
-		err = os.MkdirAll(existPathFull, 0755)
+		err = os.MkdirAll(existPathFull, 0o755)
 		if err != nil {
-			t.Fatalf("Could not create path %s in workspace as %s: %v", existPath, existPathFull, err)
+			t.Fatalf("could not create path %s in workspace as %s: %v", existPath, existPathFull, err)
 		}
 		for _, tt := range tests {
 			fs := tt.fs
 			ws := fs.Workspace()
 			err := fs.Mkdir(tt.path)
 			if (err == nil && tt.err != nil) || (err != nil && err == nil) {
-				t.Errorf("Unexpected error mismatch. Actual: %v, expected: %v", err, tt.err)
+				t.Errorf("unexpected error mismatch. Actual: %v, expected: %v", err, tt.err)
 			}
 			// did the path exist?
 			if ws != "" {
 				fullPath := path.Join(ws, tt.path)
 				if _, err := os.Stat(fullPath); os.IsNotExist(err) {
-					t.Errorf("Path did not exist after creation base %s, in workspace %s", tt.path, fullPath)
+					t.Errorf("path did not exist after creation base %s, in workspace %s", tt.path, fullPath)
 				}
 			}
 		}
@@ -166,28 +167,31 @@ func TestIso9660Create(t *testing.T) {
 		{513, 6000, nil, fmt.Errorf("blocksize for ISO9660 must be"), ""},
 		{2048, 2048*iso9660.MaxBlocks + 1, nil, fmt.Errorf("requested size is larger than maximum allowed ISO9660 size"), ""},
 		{2048, 32*iso9660.KB + 3*2048 - 1, nil, fmt.Errorf("requested size is smaller than minimum allowed ISO9660 size"), ""},
-		{2048, 10000000, nil, fmt.Errorf("Provided workspace is not a directory"), testFile.Name()},
-		{2048, 10000000, nil, fmt.Errorf("Could not stat working directory"), missingDir},
+		{2048, 10000000, nil, fmt.Errorf("provided workspace is not a directory"), testFile.Name()},
+		{2048, 10000000, nil, fmt.Errorf("could not stat working directory"), missingDir},
 		{2048, 10000000, &iso9660.FileSystem{}, nil, testDir},
 		{2048, 10000000, &iso9660.FileSystem{}, nil, ""},
 	}
 	for _, tt := range tests {
-		// create the filesystem
-		f, err := tmpIso9660File()
-		if err != nil {
-			t.Errorf("Failed to create iso9660 tmpfile: %v", err)
-		}
-		fs, err := iso9660.Create(f, tt.filesize, 0, tt.blocksize, tt.workdir)
-		defer os.Remove(f.Name())
-		switch {
-		case (err == nil && tt.err != nil) || (err != nil && tt.err == nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
-			t.Errorf("Create(%s, %d, %d, %d): mismatched errors, actual %v expected %v", f.Name(), tt.filesize, 0, tt.blocksize, err, tt.err)
-		case (fs == nil && tt.fs != nil) || (fs != nil && tt.fs == nil):
-			t.Errorf("Create(%s, %d, %d, %d): mismatched fs, actual then expected", f.Name(), tt.filesize, 0, tt.blocksize)
-			t.Logf("%v", fs)
-			t.Logf("%v", tt.fs)
-		}
-		// we do not match the filesystems here, only check functional accuracy
+		tt := tt
+		t.Run(fmt.Sprintf("blocksize %d filesize %d", tt.blocksize, tt.filesize), func(t *testing.T) {
+			// create the filesystem
+			f, err := tmpIso9660File()
+			if err != nil {
+				t.Errorf("Failed to create iso9660 tmpfile: %v", err)
+			}
+			fs, err := iso9660.Create(f, tt.filesize, 0, tt.blocksize, tt.workdir)
+			defer os.Remove(f.Name())
+			switch {
+			case (err == nil && tt.err != nil) || (err != nil && tt.err == nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
+				t.Errorf("Create(%s, %d, %d, %d): mismatched errors, actual %v expected %v", f.Name(), tt.filesize, 0, tt.blocksize, err, tt.err)
+			case (fs == nil && tt.fs != nil) || (fs != nil && tt.fs == nil):
+				t.Errorf("Create(%s, %d, %d, %d): mismatched fs, actual then expected", f.Name(), tt.filesize, 0, tt.blocksize)
+				t.Logf("%v", fs)
+				t.Logf("%v", tt.fs)
+			}
+			// we do not match the filesystems here, only check functional accuracy
+		})
 	}
 }
 
@@ -209,23 +213,26 @@ func TestISO9660Read(t *testing.T) {
 		{2048, 10000000, -1, &iso9660.FileSystem{}, nil},
 	}
 	for _, tt := range tests {
-		// get a temporary working file
-		f, err := os.Open(iso9660.ISO9660File)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer f.Close()
-		// create the filesystem
-		fs, err := iso9660.Read(f, tt.filesize, 0, tt.blocksize)
-		switch {
-		case (err == nil && tt.err != nil) || (err != nil && tt.err == nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
-			t.Errorf("Read(%s, %d, %d, %d): mismatched errors, actual %v expected %v", f.Name(), tt.filesize, 0, tt.blocksize, err, tt.err)
-		case (fs == nil && tt.fs != nil) || (fs != nil && tt.fs == nil):
-			t.Errorf("Read(%s, %d, %d, %d): mismatched fs, actual then expected", f.Name(), tt.filesize, 0, tt.blocksize)
-			t.Logf("%v", fs)
-			t.Logf("%v", tt.fs)
-		}
-		// we do not match the filesystems here, only check functional accuracy
+		tt := tt
+		t.Run(fmt.Sprintf("blocksize %d filesize %d", tt.blocksize, tt.filesize), func(t *testing.T) {
+			// get a temporary working file
+			f, err := os.Open(iso9660.ISO9660File)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer f.Close()
+			// create the filesystem
+			fs, err := iso9660.Read(f, tt.filesize, 0, tt.blocksize)
+			switch {
+			case (err == nil && tt.err != nil) || (err != nil && tt.err == nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
+				t.Errorf("read(%s, %d, %d, %d): mismatched errors, actual %v expected %v", f.Name(), tt.filesize, 0, tt.blocksize, err, tt.err)
+			case (fs == nil && tt.fs != nil) || (fs != nil && tt.fs == nil):
+				t.Errorf("read(%s, %d, %d, %d): mismatched fs, actual then expected", f.Name(), tt.filesize, 0, tt.blocksize)
+				t.Logf("%v", fs)
+				t.Logf("%v", tt.fs)
+			}
+			// we do not match the filesystems here, only check functional accuracy
+		})
 	}
 }
 
@@ -238,6 +245,7 @@ func TestIso9660ReadDir(t *testing.T) {
 		last  string
 		err   error
 	}
+	//nolint:thelper // this is not a helper function
 	runTests := func(t *testing.T, tests []testList) {
 		for _, tt := range tests {
 			fi, err := tt.fs.ReadDir(tt.path)
@@ -303,32 +311,22 @@ func TestIso9660ReadDir(t *testing.T) {
 		ws := fs.Workspace()
 		existPath := "/abc"
 		existPathWs := path.Join(ws, existPath)
-		os.MkdirAll(existPathWs, 0755)
+		_ = os.MkdirAll(existPathWs, 0o755)
 		// create files
 		for i := 0; i < 10; i++ {
 			filename := path.Join(existPathWs, fmt.Sprintf("filename_%d", i))
 			contents := fmt.Sprintf("abcdefg %d", i)
-			ioutil.WriteFile(filename, []byte(contents), 0644)
-		}
-		// get the known []FileInfo
-		fi, err := ioutil.ReadDir(existPathWs)
-		if err != nil {
-			t.Errorf("Failed to read directory %s in workspace as %s: %v", existPath, existPathWs, err)
-		}
-		// convert to []*os.FileInfo to be useful
-		fis := make([]*os.FileInfo, 0, len(fi))
-		for _, e := range fi {
-			fis = append(fis, &e)
+			_ = os.WriteFile(filename, []byte(contents), 0o600)
 		}
 		runTests(t, []testList{
 			{fs, "/abcdef", 0, "", "", fmt.Errorf("directory does not exist")}, // does not exist
 			{fs, existPath, 10, "filename_0", "filename_9", nil},               // exists
 		},
 		)
-
 	})
 }
 
+//nolint:gocyclo // we really do not care about the cyclomatic complexity of a test function. Maybe someday we will improve it.
 func TestIso9660OpenFile(t *testing.T) {
 	// opening directories and files for reading
 	type testStruct struct {
@@ -338,7 +336,8 @@ func TestIso9660OpenFile(t *testing.T) {
 		err      error
 	}
 
-	t.Run("Read", func(t *testing.T) {
+	t.Run("read", func(t *testing.T) {
+		//nolint:thelper // this is not a helper function
 		runTests := func(t *testing.T, fs *iso9660.FileSystem, tests []testStruct) {
 			for _, tt := range tests {
 				header := fmt.Sprintf("OpenFile(%s, %s)", tt.path, getOpenMode(tt.mode))
@@ -349,9 +348,9 @@ func TestIso9660OpenFile(t *testing.T) {
 				case reader == nil && (tt.err == nil || tt.expected != ""):
 					t.Errorf("%s: Unexpected nil output", header)
 				case reader != nil:
-					b, err := ioutil.ReadAll(reader)
+					b, err := io.ReadAll(reader)
 					if err != nil {
-						t.Errorf("%s: ioutil.ReadAll(reader) unexpected error: %v", header, err)
+						t.Errorf("%s: io.ReadAll(reader) unexpected error: %v", header, err)
 					}
 					if string(b) != tt.expected {
 						t.Errorf("%s: mismatched contents, actual then expected", header)
@@ -368,14 +367,14 @@ func TestIso9660OpenFile(t *testing.T) {
 			}
 			tests := []testStruct{
 				// error opening a directory
-				{"/", os.O_RDONLY, "", fmt.Errorf("Cannot open directory %s as file", "/")},
+				{"/", os.O_RDONLY, "", fmt.Errorf("cannot open directory %s as file", "/")},
 				// open non-existent file for read or read write
-				{"/abcdefg", os.O_RDONLY, "", fmt.Errorf("Target file %s does not exist", "/abcdefg")},
+				{"/abcdefg", os.O_RDONLY, "", fmt.Errorf("target file %s does not exist", "/abcdefg")},
 				// open file for read or read write and check contents
 				{"/FOO/FILENA01", os.O_RDONLY, "filename_1\n", nil},
 				{"/FOO/FILENA75", os.O_RDONLY, "filename_9\n", nil},
 				// rock ridge versions should not exist
-				{"/README.md", os.O_RDONLY, "", fmt.Errorf("Target file %s does not exist", "/README.md")},
+				{"/README.md", os.O_RDONLY, "", fmt.Errorf("target file %s does not exist", "/README.md")},
 			}
 			runTests(t, fs, tests)
 		})
@@ -386,14 +385,14 @@ func TestIso9660OpenFile(t *testing.T) {
 			}
 			tests := []testStruct{
 				// error opening a directory
-				{"/", os.O_RDONLY, "", fmt.Errorf("Cannot open directory %s as file", "/")},
+				{"/", os.O_RDONLY, "", fmt.Errorf("cannot open directory %s as file", "/")},
 				// open non-existent file for read or read write
-				{"/abcdefg", os.O_RDONLY, "", fmt.Errorf("Target file %s does not exist", "/abcdefg")},
+				{"/abcdefg", os.O_RDONLY, "", fmt.Errorf("target file %s does not exist", "/abcdefg")},
 				// open file for read or read write and check contents
 				{"/foo/filename_1", os.O_RDONLY, "filename_1\n", nil},
 				{"/foo/filename_75", os.O_RDONLY, "filename_75\n", nil},
 				// only rock ridge versions should exist
-				{"/README.MD", os.O_RDONLY, "", fmt.Errorf("Target file %s does not exist", "/README.MD")},
+				{"/README.MD", os.O_RDONLY, "", fmt.Errorf("target file %s does not exist", "/README.MD")},
 				{"/README.md", os.O_RDONLY, "README\n", nil},
 			}
 			runTests(t, fs, tests)
@@ -406,17 +405,17 @@ func TestIso9660OpenFile(t *testing.T) {
 			// make sure our test files exist and have necessary content
 			ws := fs.Workspace()
 			subdir := "/FOO"
-			os.MkdirAll(path.Join(ws, subdir), 0755)
+			_ = os.MkdirAll(path.Join(ws, subdir), 0o755)
 			for i := 0; i <= 75; i++ {
 				filename := fmt.Sprintf("FILENA%02d", i)
 				content := fmt.Sprintf("filename_%d\n", i)
-				ioutil.WriteFile(path.Join(ws, subdir, filename), []byte(content), 0644)
+				_ = os.WriteFile(path.Join(ws, subdir, filename), []byte(content), 0o600)
 			}
 			tests := []testStruct{
 				// error opening a directory
-				{"/", os.O_RDONLY, "", fmt.Errorf("Cannot open directory %s as file", "/")},
+				{"/", os.O_RDONLY, "", fmt.Errorf("cannot open directory %s as file", "/")},
 				// open non-existent file for read or read write
-				{"/abcdefg", os.O_RDONLY, "", fmt.Errorf("Target file %s does not exist", "/abcdefg")},
+				{"/abcdefg", os.O_RDONLY, "", fmt.Errorf("target file %s does not exist", "/abcdefg")},
 				// open file for read or read write and check contents
 				{"/FOO/FILENA01", os.O_RDONLY, "filename_1\n", nil},
 				{"/FOO/FILENA75", os.O_RDONLY, "filename_75\n", nil},
@@ -461,7 +460,7 @@ func TestIso9660OpenFile(t *testing.T) {
 			tests := []struct {
 				path      string
 				mode      int
-				beginning bool // true = "Seek() to beginning of file before writing"; false = "read entire file then write"
+				beginning bool
 				contents  string
 				expected  string
 				err       error
@@ -486,7 +485,7 @@ func TestIso9660OpenFile(t *testing.T) {
 					_ = os.Remove(filepath)
 					// if the file is supposed to exist, create it and add its contents
 					if tt.mode&os.O_CREATE != os.O_CREATE {
-						ioutil.WriteFile(filepath, []byte(baseContent), 0644)
+						_ = os.WriteFile(filepath, []byte(baseContent), 0o600)
 					}
 					header := fmt.Sprintf("%d: OpenFile(%s, %s, %t)", i, tt.path, getOpenMode(tt.mode), tt.beginning)
 					readWriter, err := fs.OpenFile(tt.path, tt.mode)
@@ -498,30 +497,30 @@ func TestIso9660OpenFile(t *testing.T) {
 					default:
 						// read to the end of the file
 						var offset int64
-						_, err := readWriter.Seek(0, os.SEEK_END)
+						_, err := readWriter.Seek(0, io.SeekEnd)
 						if err != nil {
 							t.Errorf("%s: Seek end of file gave unexpected error: %v", header, err)
 							continue
 						}
 						if tt.beginning {
-							offset, err = readWriter.Seek(0, os.SEEK_SET)
+							offset, err = readWriter.Seek(0, io.SeekStart)
 							if err != nil {
-								t.Errorf("%s: Seek(0,os.SEEK_SET) unexpected error: %v", header, err)
+								t.Errorf("%s: Seek(0,io.SeekStart) unexpected error: %v", header, err)
 								continue
 							}
 							if offset != 0 {
-								t.Errorf("%s: Seek(0,os.SEEK_SET) reset to %d instead of %d", header, offset, 0)
+								t.Errorf("%s: Seek(0,io.SeekStart) reset to %d instead of %d", header, offset, 0)
 								continue
 							}
 						}
 						bWrite := []byte(tt.contents)
 						written, writeErr := readWriter.Write(bWrite)
-						readWriter.Seek(0, os.SEEK_SET)
-						bRead, readErr := ioutil.ReadAll(readWriter)
+						_, _ = readWriter.Seek(0, io.SeekStart)
+						bRead, readErr := io.ReadAll(readWriter)
 
 						switch {
 						case readErr != nil:
-							t.Errorf("%s: ioutil.ReadAll() unexpected error: %v", header, readErr)
+							t.Errorf("%s: io.ReadAll() unexpected error: %v", header, readErr)
 						case (writeErr == nil && tt.err != nil) || (writeErr != nil && tt.err == nil) || (writeErr != nil && tt.err != nil && !strings.HasPrefix(writeErr.Error(), tt.err.Error())):
 							t.Errorf("%s: readWriter.Write(b) mismatched errors, actual: %v , expected: %v", header, writeErr, tt.err)
 						case written != len(bWrite) && tt.err == nil:

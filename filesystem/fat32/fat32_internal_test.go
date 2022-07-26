@@ -2,7 +2,6 @@ package fat32
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"reflect"
 	"strings"
@@ -93,9 +92,9 @@ func TestFat32GetClusterList(t *testing.T) {
 		{8, []uint32{8, 9, 11}, nil},
 		{15, []uint32{15}, nil},
 		// test non-existent ones, just to see that they come back empty
-		{14, nil, fmt.Errorf("Invalid start cluster")},
-		{100, nil, fmt.Errorf("Invalid start cluster")},
-		{16, nil, fmt.Errorf("Invalid cluster chain")},
+		{14, nil, fmt.Errorf("invalid start cluster")},
+		{100, nil, fmt.Errorf("invalid start cluster")},
+		{16, nil, fmt.Errorf("invalid cluster chain")},
 	}
 
 	for i, tt := range tests {
@@ -116,10 +115,10 @@ func TestFat32ReadDirectory(t *testing.T) {
 	// \ (root directory) should be in one cluster
 	// \foo should be in two clusters
 	file, err := os.Open(Fat32File)
-	defer file.Close()
 	if err != nil {
-		t.Fatalf("Could not open file %s to read: %v", Fat32File, err)
+		t.Fatalf("could not open file %s to read: %v", Fat32File, err)
 	}
+	defer file.Close()
 	fs := &FileSystem{
 		table:           *getValidFat32Table(),
 		file:            file,
@@ -128,11 +127,11 @@ func TestFat32ReadDirectory(t *testing.T) {
 	}
 	validDe, _, err := getValidDirectoryEntries()
 	if err != nil {
-		t.Fatalf("Unable to read valid directory entries: %v", err)
+		t.Fatalf("unable to read valid directory entries: %v", err)
 	}
 	validDeExtended, _, err := getValidDirectoryEntriesExtended()
 	if err != nil {
-		t.Fatalf("Unable to read valid directory entries extended: %v", err)
+		t.Fatalf("unable to read valid directory entries extended: %v", err)
 	}
 	tests := []struct {
 		path    string
@@ -166,7 +165,6 @@ func TestFat32ReadDirectory(t *testing.T) {
 			}
 		}
 	}
-
 }
 
 func TestFat32AllocateSpace(t *testing.T) {
@@ -191,8 +189,8 @@ func TestFat32AllocateSpace(t *testing.T) {
 		{600, 2, []uint32{2, 12}, nil},
 		{2000, 2, []uint32{2, 12, 13, 14}, nil},
 		{2000, 0, []uint32{12, 13, 14, 17}, nil},
-		{200000000000, 0, nil, fmt.Errorf("No space left on device")},
-		{200000000000, 2, nil, fmt.Errorf("No space left on device")},
+		{200000000000, 0, nil, fmt.Errorf("no space left on device")},
+		{200000000000, 2, nil, fmt.Errorf("no space left on device")},
 	}
 	for _, tt := range tests {
 		// reset for each test
@@ -226,7 +224,7 @@ func TestFat32MkSubdir(t *testing.T) {
 	de, err := fs.mkSubdir(d, "sub")
 	switch {
 	case err != nil:
-		t.Errorf("Unexpected non-nil error: %v", err)
+		t.Errorf("unexpected non-nil error: %v", err)
 	case de.filenameLong != expected.filenameLong ||
 		de.filenameShort != expected.filenameShort ||
 		de.fileExtension != expected.fileExtension ||
@@ -255,7 +253,7 @@ func TestFat32MkFile(t *testing.T) {
 	de, err := fs.mkFile(d, "file")
 	switch {
 	case err != nil:
-		t.Errorf("Unexpected non-nil error: %v", err)
+		t.Errorf("unexpected non-nil error: %v", err)
 	case !compareDirectoryEntriesIgnoreDates(de, expected):
 		/*
 				de.FilenameLong != expected.FilenameLong ||
@@ -268,22 +266,21 @@ func TestFat32MkFile(t *testing.T) {
 		t.Logf("%v", *de)
 		t.Logf("%v", *expected)
 	}
-
 }
 
 func TestFat32ReadDirWithMkdir(t *testing.T) {
 	fs := getValidFat32FSFull()
-	datab, err := ioutil.ReadFile(Fat32File)
+	datab, err := os.ReadFile(Fat32File)
 	if err != nil {
-		t.Fatalf("Unable to read data from file %s: %v", Fat32File, err)
+		t.Fatalf("unable to read data from file %s: %v", Fat32File, err)
 	}
 	validDe, _, err := getValidDirectoryEntries()
 	if err != nil {
-		t.Fatalf("Unable to read valid directory entries: %v", err)
+		t.Fatalf("unable to read valid directory entries: %v", err)
 	}
 	validDeLong, _, err := getValidDirectoryEntriesExtended()
 	if err != nil {
-		t.Fatalf("Unable to read valid directory entries extended: %v", err)
+		t.Fatalf("unable to read valid directory entries extended: %v", err)
 	}
 	tests := []struct {
 		path    string
@@ -310,7 +307,7 @@ func TestFat32ReadDirWithMkdir(t *testing.T) {
 				clusterLocation: 3,
 			},
 		}, validDeLong, nil},
-		{"/FOO2", false, nil, nil, fmt.Errorf("Path /FOO2 not found")},
+		{"/FOO2", false, nil, nil, fmt.Errorf("path /FOO2 not found")},
 		{"/FOO2", true, &Directory{
 			directoryEntry: directoryEntry{
 				filenameShort:   "FOO2",

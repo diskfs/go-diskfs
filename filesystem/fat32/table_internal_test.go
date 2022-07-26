@@ -2,7 +2,7 @@ package fat32
 
 import (
 	"bytes"
-	"io/ioutil"
+	"os"
 	"sort"
 	"testing"
 )
@@ -158,17 +158,14 @@ func getValidFat32Table() *table {
 
 func TestFat32TableFromBytes(t *testing.T) {
 	t.Run("valid FAT32 Table", func(t *testing.T) {
-		input, err := ioutil.ReadFile(Fat32File)
+		input, err := os.ReadFile(Fat32File)
 		if err != nil {
-			t.Fatalf("Error reading test fixture data from %s: %v", Fat32File, err)
+			t.Fatalf("error reading test fixture data from %s: %v", Fat32File, err)
 		}
 		b := input[16384 : 158*512+16384]
-		table, err := tableFromBytes(b)
-		if err != nil {
-			t.Errorf("Return unexpected error: %v", err)
-		}
+		table := tableFromBytes(b)
 		if table == nil {
-			t.Fatalf("Returned FAT32 Table was nil unexpectedly")
+			t.Fatalf("returned FAT32 Table was nil unexpectedly")
 		}
 		valid := getValidFat32Table()
 		if !table.equal(valid) {
@@ -192,19 +189,16 @@ func TestFat32TableFromBytes(t *testing.T) {
 func TestFat32TableToBytes(t *testing.T) {
 	t.Run("valid FAT32 table", func(t *testing.T) {
 		table := getValidFat32Table()
-		b, err := table.bytes()
-		if err != nil {
-			t.Errorf("Error was not nil, instead %v", err)
-		}
+		b := table.bytes()
 		if b == nil {
 			t.Fatal("b was nil unexpectedly")
 		}
-		valid, err := ioutil.ReadFile(Fat32File)
+		valid, err := os.ReadFile(Fat32File)
 		if err != nil {
-			t.Fatalf("Error reading test fixture data from %s: %v", Fat32File, err)
+			t.Fatalf("error reading test fixture data from %s: %v", Fat32File, err)
 		}
 		validBytes := valid[16384 : 158*512+16384]
-		if bytes.Compare(validBytes, b) != 0 {
+		if !bytes.Equal(validBytes, b) {
 			t.Error("Mismatched bytes")
 		}
 	})
@@ -220,13 +214,13 @@ func TestFat32TableIsEoc(t *testing.T) {
 		{0xFFFFFF7, false},
 		{0xFFFFFF8, true},
 		{0xFFFFFF9, true},
-		{0xFFFFFFa, true},
-		{0xFFFFFFb, true},
-		{0xFFFFFFc, true},
-		{0xFFFFFFd, true},
-		{0xFFFFFFe, true},
-		{0xFFFFFFf, true},
-		{0xaFFFFFFf, true},
+		{0xFFFFFFA, true},
+		{0xFFFFFFB, true},
+		{0xFFFFFFC, true},
+		{0xFFFFFFD, true},
+		{0xFFFFFFE, true},
+		{0xFFFFFFF, true},
+		{0xAFFFFFFF, true},
 		{0x2FFFFFF8, true},
 	}
 	tab := table{}

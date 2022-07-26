@@ -11,7 +11,7 @@ func TestDirectoryEntry(t *testing.T) {
 		name:           "abc",
 		size:           8675309,
 		modTime:        time.Now(),
-		mode:           0766,
+		mode:           0o766,
 	}
 	switch {
 	case de.Name() != de.name:
