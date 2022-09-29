@@ -87,6 +87,7 @@ func (p *Partition) toBytes() []byte {
 }
 
 // partitionFromBytes create a partition entry from 16 bytes
+//
 //nolint:unparam // this always receives logicalSectorSize=512, but since it can be different, we want to leave it as a param
 func partitionFromBytes(b []byte, logicalSectorSize, physicalSectorSize int) (*Partition, error) {
 	if len(b) != partitionEntrySize {

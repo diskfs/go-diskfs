@@ -144,13 +144,13 @@ type FilesystemSpec struct {
 // CreateFilesystem creates a filesystem on a disk image, the equivalent of mkfs.
 //
 // Required:
-// * desired partition number, or 0 to create the filesystem on the entire block device or
-//   disk image,
-// * the filesystem type from github.com/diskfs/go-diskfs/filesystem
+//   - desired partition number, or 0 to create the filesystem on the entire block device or
+//     disk image,
+//   - the filesystem type from github.com/diskfs/go-diskfs/filesystem
 //
 // Optional:
-// * volume label for those filesystems that support it; under Linux this shows
-//   in '/dev/disks/by-label/<label>'
+//   - volume label for those filesystems that support it; under Linux this shows
+//     in '/dev/disks/by-label/<label>'
 //
 // if successful, returns a filesystem-implementing structure for the given filesystem type
 //

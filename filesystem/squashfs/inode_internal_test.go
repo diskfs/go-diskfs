@@ -8,6 +8,7 @@ import (
 )
 
 // inode implementation for testing
+//
 //nolint:structcheck // ignore unused entries, which we keep for reference
 type inodeTestImpl struct {
 	iIndex   uint32

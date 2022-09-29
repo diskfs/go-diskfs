@@ -5,14 +5,13 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"testing"
 )
 
 func TestCopyFileData(t *testing.T) {
 	// create an empty file as source
-	from, err := ioutil.TempFile("", "iso9660_finalize_test_from")
+	from, err := os.CreateTemp("", "iso9660_finalize_test_from")
 	if err != nil {
 		t.Fatal("error creating 'from' tmpfile", err)
 	}
@@ -33,7 +32,7 @@ func TestCopyFileData(t *testing.T) {
 	}
 
 	// create a target file
-	to, err := ioutil.TempFile("", "iso9660_finalize_test_to")
+	to, err := os.CreateTemp("", "iso9660_finalize_test_to")
 	if err != nil {
 		t.Fatal("error creating 'to' tmpfile", err)
 	}

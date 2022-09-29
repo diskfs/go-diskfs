@@ -2,7 +2,6 @@ package iso9660
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -127,7 +126,7 @@ func TestGetExtensions(t *testing.T) {
 	// create an extension object and test files
 	rr := getRockRidgeExtension(rockRidge112)
 	pxLength := rr.pxLength
-	dir, err := ioutil.TempDir("", "rockridge")
+	dir, err := os.MkdirTemp("", "rockridge")
 	if err != nil {
 		t.Fatal(err)
 	}
