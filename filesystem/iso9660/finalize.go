@@ -296,7 +296,7 @@ func (fi *finalizeFileInfo) findEntry(p string) (*finalizeFileInfo, error) {
 		err    error
 	)
 	parts := splitPath(p)
-	if len(parts) == 0 {
+	if len(parts) == 0 || p == "." {
 		target = fi
 	} else {
 		current := parts[0]
