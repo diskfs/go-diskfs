@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"testing"
 
@@ -22,7 +21,7 @@ var (
 func TestFinalizeSquashfs(t *testing.T) {
 	blocksize := int64(4096)
 	t.Run("valid", func(t *testing.T) {
-		f, err := ioutil.TempFile("", "squashfs_finalize_test")
+		f, err := os.CreateTemp("", "squashfs_finalize_test")
 		fileName := f.Name()
 		defer os.Remove(fileName)
 		if err != nil {

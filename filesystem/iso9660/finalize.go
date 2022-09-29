@@ -33,12 +33,14 @@ type FinalizeOptions struct {
 
 // finalizeFileInfo is a file info useful for finalization
 // fulfills os.FileInfo
-//   Name() string       // base name of the file
-//   Size() int64        // length in bytes for regular files; system-dependent for others
-//   Mode() FileMode     // file mode bits
-//   ModTime() time.Time // modification time
-//   IsDir() bool        // abbreviation for Mode().IsDir()
-//   Sys() interface{}   // underlying data source (can return nil)
+//
+//	Name() string       // base name of the file
+//	Size() int64        // length in bytes for regular files; system-dependent for others
+//	Mode() FileMode     // file mode bits
+//	ModTime() time.Time // modification time
+//	IsDir() bool        // abbreviation for Mode().IsDir()
+//	Sys() interface{}   // underlying data source (can return nil)
+//
 //nolint:structcheck // keep unused members so that we can know their references
 type finalizeFileInfo struct {
 	path               string
@@ -337,6 +339,7 @@ func (fi *finalizeFileInfo) addChild(entry *finalizeFileInfo) {
 }
 
 // Finalize finalize a read-only filesystem by writing it out to a read-only format
+//
 //nolint:gocyclo // this finalize function is complex and needs to be. We might be better off refactoring it to multiple functions, but it does not buy all that much.
 func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 	if fs.workspace == "" {

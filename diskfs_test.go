@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,7 +17,7 @@ const oneMB = 10 * 1024 * 1024
 
 func tmpDisk(source string) (*os.File, error) {
 	filename := "disk_test"
-	f, err := ioutil.TempFile("", filename)
+	f, err := os.CreateTemp("", filename)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to create tempfile %s :%v", filename, err)
 	}

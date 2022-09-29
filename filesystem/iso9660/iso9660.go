@@ -3,7 +3,6 @@ package iso9660
 import (
 	"encoding/binary"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path"
 
@@ -92,7 +91,7 @@ func Create(f util.File, size, start, blocksize int64, workspace string) (*FileS
 		// create a temporary working area where we can create the filesystem.
 		//  It is only on `Finalize()` that we write it out to the actual disk file
 		var err error
-		workdir, err = ioutil.TempDir("", "diskfs_iso")
+		workdir, err = os.MkdirTemp("", "diskfs_iso")
 		if err != nil {
 			return nil, fmt.Errorf("could not create working directory: %v", err)
 		}

@@ -74,6 +74,7 @@ var validShortNameCharacters = map[byte]bool{
 }
 
 // directoryEntry is a single directory entry
+//
 //nolint:structcheck // we are willing to leave unused elements here so that we can know their reference
 type directoryEntry struct {
 	filenameShort      string
@@ -439,8 +440,9 @@ func calculateSlots(s string) int {
 
 // convert LFN to short name
 // returns shortName, extension, isLFN, isTruncated
-//   isLFN : was there an LFN that had to be converted
-//   isTruncated : was the shortname longer than 8 chars and had to be converted?
+//
+//	isLFN : was there an LFN that had to be converted
+//	isTruncated : was the shortname longer than 8 chars and had to be converted?
 func convertLfnSfn(name string) (shortName, extension string, isLFN, isTruncated bool) {
 	// get last period in name
 	lastDot := strings.LastIndex(name, ".")

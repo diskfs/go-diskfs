@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -24,7 +23,7 @@ var (
 // test creating an iso with el torito boot
 func TestFinalizeElTorito(t *testing.T) {
 	blocksize := int64(2048)
-	f, err := ioutil.TempFile("", "iso_finalize_test")
+	f, err := os.CreateTemp("", "iso_finalize_test")
 	defer os.Remove(f.Name())
 	if err != nil {
 		t.Fatalf("Failed to create tmpfile: %v", err)
@@ -98,11 +97,12 @@ func TestFinalizeElTorito(t *testing.T) {
 }
 
 // full test - create some files, finalize, check the output
+//
 //nolint:gocyclo // we really do not care about the cyclomatic complexity of a test function. Maybe someday we will improve it.
 func TestFinalize9660(t *testing.T) {
 	blocksize := int64(2048)
 	t.Run("deep dir", func(t *testing.T) {
-		f, err := ioutil.TempFile("", "iso_finalize_test")
+		f, err := os.CreateTemp("", "iso_finalize_test")
 		defer os.Remove(f.Name())
 		if err != nil {
 			t.Fatalf("Failed to create tmpfile: %v", err)
@@ -124,7 +124,7 @@ func TestFinalize9660(t *testing.T) {
 		}
 	})
 	t.Run("valid", func(t *testing.T) {
-		f, err := ioutil.TempFile("", "iso_finalize_test")
+		f, err := os.CreateTemp("", "iso_finalize_test")
 		defer os.Remove(f.Name())
 		if err != nil {
 			t.Fatalf("Failed to create tmpfile: %v", err)
@@ -261,7 +261,7 @@ func TestFinalize9660(t *testing.T) {
 
 	t.Run("existing workspace", func(t *testing.T) {
 		// create a directory to bundle into an iso
-		dir, err := ioutil.TempDir("", "iso_finalize_test")
+		dir, err := os.MkdirTemp("", "iso_finalize_test")
 		defer os.RemoveAll(dir)
 		if err != nil {
 			t.Fatalf("Failed to create tmpdir: %v", err)
@@ -280,7 +280,7 @@ func TestFinalize9660(t *testing.T) {
 		}
 
 		// create the iso directly from the existing directory
-		f, err := ioutil.TempFile("", "iso_finalize_test")
+		f, err := os.CreateTemp("", "iso_finalize_test")
 		defer os.Remove(f.Name())
 		if err != nil {
 			t.Fatalf("Failed to create tmpfile: %v", err)
@@ -339,7 +339,7 @@ func TestFinalize9660(t *testing.T) {
 func TestFinalizeRockRidge(t *testing.T) {
 	blocksize := int64(2048)
 	t.Run("valid", func(t *testing.T) {
-		f, err := ioutil.TempFile("", "iso_finalize_test")
+		f, err := os.CreateTemp("", "iso_finalize_test")
 		defer os.Remove(f.Name())
 		if err != nil {
 			t.Fatalf("Failed to create tmpfile: %v", err)

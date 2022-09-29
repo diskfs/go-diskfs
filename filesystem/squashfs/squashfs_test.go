@@ -3,7 +3,6 @@ package squashfs_test
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path"
 	"strings"
@@ -31,7 +30,7 @@ func getOpenMode(mode int) string {
 
 func tmpSquashfsFile() (*os.File, error) {
 	filename := "squashfs_test.sqs"
-	f, err := ioutil.TempFile("", filename)
+	f, err := os.CreateTemp("", filename)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to create tempfile %s :%v", filename, err)
 	}

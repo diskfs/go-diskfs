@@ -13,94 +13,93 @@
 //
 // 1. Create a disk image of size 10MB with a FAT32 filesystem spanning the entire disk.
 //
-//     import diskfs "github.com/diskfs/go-diskfs"
-//     size := 10*1024*1024 // 10 MB
+//		import diskfs "github.com/diskfs/go-diskfs"
+//		size := 10*1024*1024 // 10 MB
 //
-//     diskImg := "/tmp/disk.img"
-//     disk := diskfs.Create(diskImg, size, diskfs.Raw, diskfs.SectorSizeDefault)
+//		diskImg := "/tmp/disk.img"
+//		disk := diskfs.Create(diskImg, size, diskfs.Raw, diskfs.SectorSizeDefault)
 //
-//     fs, err := disk.CreateFilesystem(0, diskfs.TypeFat32)
+//		fs, err := disk.CreateFilesystem(0, diskfs.TypeFat32)
 //
-// 2. Create a disk of size 20MB with an MBR partition table, a single partition beginning at block 2048 (1MB),
-//    of size 10MB filled with a FAT32 filesystem.
+//	 2. Create a disk of size 20MB with an MBR partition table, a single partition beginning at block 2048 (1MB),
+//	    of size 10MB filled with a FAT32 filesystem.
 //
-//     import diskfs "github.com/diskfs/go-diskfs"
+//	    import diskfs "github.com/diskfs/go-diskfs"
 //
-//     diskSize := 10*1024*1024 // 10 MB
+//	    diskSize := 10*1024*1024 // 10 MB
 //
-//     diskImg := "/tmp/disk.img"
-//     disk := diskfs.Create(diskImg, size, diskfs.Raw, diskfs.SectorSizeDefault)
+//	    diskImg := "/tmp/disk.img"
+//	    disk := diskfs.Create(diskImg, size, diskfs.Raw, diskfs.SectorSizeDefault)
 //
-//     table := &mbr.Table{
-//       LogicalSectorSize:  512,
-//       PhysicalSectorSize: 512,
-//       Partitions: []*mbr.Partition{
-//         {
-//           Bootable:      false,
-//           Type:          Linux,
-//           Start:         2048,
-//           Size:          20480,
-//         },
-//       },
-//     }
+//	    table := &mbr.Table{
+//	    LogicalSectorSize:  512,
+//	    PhysicalSectorSize: 512,
+//	    Partitions: []*mbr.Partition{
+//	    {
+//	    Bootable:      false,
+//	    Type:          Linux,
+//	    Start:         2048,
+//	    Size:          20480,
+//	    },
+//	    },
+//	    }
 //
-//     fs, err := disk.CreateFilesystem(1, diskfs.TypeFat32)
+//	    fs, err := disk.CreateFilesystem(1, diskfs.TypeFat32)
 //
-// 3. Create a disk of size 20MB with a GPT partition table, a single partition beginning at block 2048 (1MB),
-//    of size 10MB, and fill with the contents from the 10MB file "/root/contents.dat"
+//	 3. Create a disk of size 20MB with a GPT partition table, a single partition beginning at block 2048 (1MB),
+//	    of size 10MB, and fill with the contents from the 10MB file "/root/contents.dat"
 //
-//     import diskfs "github.com/diskfs/go-diskfs"
+//	    import diskfs "github.com/diskfs/go-diskfs"
 //
-//     diskSize := 10*1024*1024 // 10 MB
+//	    diskSize := 10*1024*1024 // 10 MB
 //
-//     diskImg := "/tmp/disk.img"
-//     disk := diskfs.Create(diskImg, size, diskfs.Raw, diskfs.SectorSizeDefault)
+//	    diskImg := "/tmp/disk.img"
+//	    disk := diskfs.Create(diskImg, size, diskfs.Raw, diskfs.SectorSizeDefault)
 //
-//     table := &gpt.Table{
-//       LogicalSectorSize:  512,
-//       PhysicalSectorSize: 512,
-//       Partitions: []*gpt.Partition{
-//         {
-//           LogicalSectorSize:  512,
-//           PhysicalSectorSize: 512,
-//           ProtectiveMBR:      true,
-//         },
-//       },
-//     }
+//	    table := &gpt.Table{
+//	    LogicalSectorSize:  512,
+//	    PhysicalSectorSize: 512,
+//	    Partitions: []*gpt.Partition{
+//	    {
+//	    LogicalSectorSize:  512,
+//	    PhysicalSectorSize: 512,
+//	    ProtectiveMBR:      true,
+//	    },
+//	    },
+//	    }
 //
-//     f, err := os.Open("/root/contents.dat")
-//     written, err := disk.WritePartitionContents(1, f)
+//	    f, err := os.Open("/root/contents.dat")
+//	    written, err := disk.WritePartitionContents(1, f)
 //
-// 4. Create a disk of size 20MB with an MBR partition table, a single partition beginning at block 2048 (1MB),
-//    of size 10MB filled with a FAT32 filesystem, and create some directories and files in that filesystem.
+//	 4. Create a disk of size 20MB with an MBR partition table, a single partition beginning at block 2048 (1MB),
+//	    of size 10MB filled with a FAT32 filesystem, and create some directories and files in that filesystem.
 //
-//     import diskfs "github.com/diskfs/go-diskfs"
+//	    import diskfs "github.com/diskfs/go-diskfs"
 //
-//     diskSize := 10*1024*1024 // 10 MB
+//	    diskSize := 10*1024*1024 // 10 MB
 //
-//     diskImg := "/tmp/disk.img"
-//     disk := diskfs.Create(diskImg, size, diskfs.Raw, diskfs.SectorSizeDefault)
+//	    diskImg := "/tmp/disk.img"
+//	    disk := diskfs.Create(diskImg, size, diskfs.Raw, diskfs.SectorSizeDefault)
 //
-//     table := &mbr.Table{
-//       LogicalSectorSize:  512,
-//       PhysicalSectorSize: 512,
-//       Partitions: []*mbr.Partition{
-//         {
-//           Bootable:      false,
-//           Type:          Linux,
-//           Start:         2048,
-//           Size:          20480,
-//         },
-//       },
-//     }
+//	    table := &mbr.Table{
+//	    LogicalSectorSize:  512,
+//	    PhysicalSectorSize: 512,
+//	    Partitions: []*mbr.Partition{
+//	    {
+//	    Bootable:      false,
+//	    Type:          Linux,
+//	    Start:         2048,
+//	    Size:          20480,
+//	    },
+//	    },
+//	    }
 //
-//     fs, err := disk.CreateFilesystem(1, diskfs.TypeFat32)
-//     err := fs.Mkdir("/FOO/BAR")
-//     rw, err := fs.OpenFile("/FOO/BAR/AFILE.EXE", os.O_CREATE|os.O_RDRWR)
-//     b := make([]byte, 1024, 1024)
-//     rand.Read(b)
-//     err := rw.Write(b)
-//
+//	    fs, err := disk.CreateFilesystem(1, diskfs.TypeFat32)
+//	    err := fs.Mkdir("/FOO/BAR")
+//	    rw, err := fs.OpenFile("/FOO/BAR/AFILE.EXE", os.O_CREATE|os.O_RDRWR)
+//	    b := make([]byte, 1024, 1024)
+//	    rand.Read(b)
+//	    err := rw.Write(b)
 package diskfs
 
 import (
@@ -115,7 +114,8 @@ import (
 )
 
 // when we use a disk image with a GPT, we cannot get the logical sector size from the disk via the kernel
-//    so we use the default sector size of 512, per Rod Smith
+//
+//	so we use the default sector size of 512, per Rod Smith
 const (
 	defaultBlocksize int = 512
 	// firstblock                       = 2048

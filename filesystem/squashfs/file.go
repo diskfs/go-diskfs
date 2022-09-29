@@ -7,9 +7,10 @@ import (
 )
 
 // File represents a single file in a squashfs filesystem
-//  it is NOT used when working in a workspace, where we just use the underlying OS
-//  note that the inode for a file can be the basicFile or extendedFile. We just use extendedFile to
-//  include all of the data
+//
+//	it is NOT used when working in a workspace, where we just use the underlying OS
+//	note that the inode for a file can be the basicFile or extendedFile. We just use extendedFile to
+//	include all of the data
 type File struct {
 	*extendedFile
 	isReadWrite bool
@@ -108,7 +109,8 @@ func (fl *File) Read(b []byte) (int, error) {
 }
 
 // Write writes len(b) bytes to the File.
-//  you cannot write to a finished squashfs, so this returns an error
+//
+//	you cannot write to a finished squashfs, so this returns an error
 func (fl *File) Write(p []byte) (int, error) {
 	return 0, fmt.Errorf("cannot write to a read-only squashfs filesystem")
 }

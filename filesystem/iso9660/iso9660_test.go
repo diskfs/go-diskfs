@@ -8,7 +8,6 @@ package iso9660_test
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path"
 	"strings"
@@ -47,7 +46,7 @@ func getValidIso9660FSUserWorkspace() (*iso9660.FileSystem, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Failed to create iso9660 tmpfile: %v", err)
 	}
-	dir, err := ioutil.TempDir("", "myIso9660")
+	dir, err := os.MkdirTemp("", "myIso9660")
 	if err != nil {
 		return nil, fmt.Errorf("Failed to create iso9660 tmpfile: %v", err)
 	}
@@ -70,7 +69,7 @@ func getValidRockRidgeFSReadOnly() (*iso9660.FileSystem, error) {
 
 func tmpIso9660File() (*os.File, error) {
 	filename := "iso9660_test.iso"
-	f, err := ioutil.TempFile("", filename)
+	f, err := os.CreateTemp("", filename)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to create tempfile %s :%v", filename, err)
 	}
@@ -139,18 +138,18 @@ func TestIso9660Mkdir(t *testing.T) {
 }
 
 func TestIso9660Create(t *testing.T) {
-	testFile, testError := ioutil.TempFile("", "iso9660_test")
+	testFile, testError := os.CreateTemp("", "iso9660_test")
 	if testError != nil {
 		t.Errorf("Failed to create workspace tmpfile: %v", testError)
 	}
 	defer os.RemoveAll(testFile.Name())
-	testDir, testError := ioutil.TempDir("", "iso9660_test")
+	testDir, testError := os.MkdirTemp("", "iso9660_test")
 	if testError != nil {
 		t.Errorf("Failed to create workspace tmpdir: %v", testError)
 	}
 	defer os.RemoveAll(testDir)
 
-	missingDir, testError := ioutil.TempDir("", "iso9660_test")
+	missingDir, testError := os.MkdirTemp("", "iso9660_test")
 	if testError != nil {
 		t.Errorf("Failed to create workspace tmpdir: %v", testError)
 	}

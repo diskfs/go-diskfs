@@ -335,8 +335,8 @@ func TestDirectoryEntryLongFilenameBytes(t *testing.T) {
 		}
 		if !bytes.Equal(output, tt.b) {
 			t.Errorf("longFilenameBytes(%s, %s, %s) bytes mismatch", tt.lfn, tt.shortName, tt.extension)
-			t.Log(fmt.Sprintf("actual  : % x", output))
-			t.Log(fmt.Sprintf("expected: % x", tt.b))
+			t.Logf("actual  : % x", output)
+			t.Logf("expected: % x", tt.b)
 		}
 	}
 }

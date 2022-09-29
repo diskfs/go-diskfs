@@ -10,7 +10,6 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"strings"
 	"testing"
@@ -44,7 +43,7 @@ func getOpenMode(mode int) string {
 
 func tmpFat32(fill bool, embedPre, embedPost int64) (*os.File, error) {
 	filename := "fat32_test"
-	f, err := ioutil.TempFile("", filename)
+	f, err := os.CreateTemp("", filename)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to create tempfile %s :%v", filename, err)
 	}

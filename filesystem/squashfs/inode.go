@@ -862,6 +862,7 @@ type extendedSocket struct {
 }
 
 // idTable is an indexed table of IDs
+//
 //nolint:deadcode // we need these references in the future
 type idTable []uint32
 

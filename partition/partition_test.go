@@ -7,7 +7,6 @@ package partition_test
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strings"
 	"testing"
@@ -33,7 +32,7 @@ func TestRead(t *testing.T) {
 			var err error
 			if tt.path == "" {
 				filename := "partition_test"
-				f, err = ioutil.TempFile("", filename)
+				f, err = os.CreateTemp("", filename)
 				// make it a 10MB file
 				_ = f.Truncate(10 * 1024 * 1024)
 				defer f.Close()

@@ -7,7 +7,8 @@ import (
 )
 
 // File represents a single file in an iso9660 filesystem
-//  it is NOT used when working in a workspace, where we just use the underlying OS
+//
+//	it is NOT used when working in a workspace, where we just use the underlying OS
 type File struct {
 	*directoryEntry
 	isReadWrite bool
@@ -61,7 +62,8 @@ func (fl *File) Read(b []byte) (int, error) {
 }
 
 // Write writes len(b) bytes to the File.
-//  you cannot write to an iso, so this returns an error
+//
+//	you cannot write to an iso, so this returns an error
 func (fl *File) Write(p []byte) (int, error) {
 	return 0, fmt.Errorf("cannot write to a read-only iso filesystem")
 }

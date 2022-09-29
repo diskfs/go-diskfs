@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"regexp"
 	"strconv"
@@ -30,7 +29,7 @@ var (
 
 func tmpDisk(source string, size int64) (*os.File, error) {
 	filename := "disk_test"
-	f, err := ioutil.TempFile("", filename)
+	f, err := os.CreateTemp("", filename)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to create tempfile %s :%v", filename, err)
 	}
