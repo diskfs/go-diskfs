@@ -599,14 +599,31 @@ func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 	}, nil
 }
 
-// Label get the label of the filesystem
+// Label get the label of the filesystem from the secial file in the root directory.
+// The label stored in the boot sector is ignored to mimic Windows behavior which
+// only stores and reads the label from the special file in the root directory.
 func (fs *FileSystem) Label() string {
-	// be sane about everything existing
-	bpb := fs.bootSector.biosParameterBlock
-	if bpb == nil {
+	// locate the filesystem root directory
+	_, dirEntries, err := fs.readDirWithMkdir("/", false)
+	if err != nil {
 		return ""
 	}
-	return bpb.volumeLabel
+
+	// locate the label entry, it may not exist
+	var labelEntry *directoryEntry
+	for _, entry := range dirEntries {
+		if entry.isVolumeLabel {
+			labelEntry = entry
+		}
+	}
+
+	// if we have no label entry, return
+	if labelEntry == nil {
+		return ""
+	}
+
+	// reconstruct the label, does not attempt to sanitize anything
+	return labelEntry.filenameShort + labelEntry.fileExtension
 }
 
 // SetLabel changes the filesystem label
