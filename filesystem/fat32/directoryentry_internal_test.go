@@ -94,6 +94,8 @@ func getValidDirectoryEntries() ([]*directoryEntry, [][]byte, error) {
 	t30, _ := time.Parse(time.RFC3339, "2017-11-26T00:00:00Z")
 	t4, _ := time.Parse(time.RFC3339, "2017-11-26T08:01:44Z")
 	t40, _ := time.Parse(time.RFC3339, "2017-11-26T00:00:00Z")
+	t5, _ := time.Parse(time.RFC3339, "2022-10-14T17:38:42Z")
+	t50, _ := time.Parse(time.RFC3339, "2022-10-14T00:00:00Z")
 	entries := []*directoryEntry{
 		{
 			filenameShort:      "FOO",
@@ -178,6 +180,28 @@ func getValidDirectoryEntries() ([]*directoryEntry, [][]byte, error) {
 			fileSize:        7168,
 			//	start:             uint32,
 			longFilenameSlots: 3,
+			isNew:             false,
+		},
+		{
+			filenameShort:      "go-diskf",
+			fileExtension:      "s",
+			filenameLong:       "",
+			isReadOnly:         false,
+			isHidden:           false,
+			isSystem:           false,
+			isVolumeLabel:      true,
+			isSubdirectory:     false,
+			isArchiveDirty:     false,
+			isDevice:           false,
+			lowercaseShortname: false,
+			createTime:         t5,
+			modifyTime:         t5,
+			accessTime:         t50,
+			acccessRights:      accessRightsUnlimited,
+			clusterLocation:    0,
+			fileSize:           0,
+			//	start:             uint32,
+			longFilenameSlots: 0,
 			isNew:             false,
 		},
 	}
