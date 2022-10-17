@@ -89,11 +89,6 @@ func (fs *FileSystem) Equal(a *FileSystem) bool {
 // If the provided blocksize is 0, it will use the default of 512 bytes. If it is any number other than 0
 // or 512, it will return an error.
 func Create(f util.File, size, start, blocksize int64, volumeLabel string) (*FileSystem, error) {
-	if volumeLabel == "" {
-		volumeLabel = "NO NAME"
-	}
-	// ensure the volumeLabel is proper sized
-	volumeLabel = fmt.Sprintf("%-11.11s", volumeLabel)
 	// blocksize must be <=0 or exactly SectorSize512 or error
 	if blocksize != int64(SectorSize512) && blocksize > 0 {
 		return nil, fmt.Errorf("blocksize for FAT32 must be either 512 bytes or 0, not %d", blocksize)
@@ -199,7 +194,7 @@ func Create(f util.File, size, start, blocksize int64, volumeLabel string) (*Fil
 		bootFileName:          [12]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 		extendedBootSignature: longDos71EBPB,
 		volumeSerialNumber:    volid,
-		volumeLabel:           fmt.Sprintf("%-11.11s", volumeLabel), // "NO NAME    "
+		volumeLabel:           "NO NAME    ",
 		fileSystemType:        fileSystemTypeFAT32,
 		mirrorFlags:           0,
 		reservedFlags:         0,
@@ -294,14 +289,16 @@ func Create(f util.File, size, start, blocksize int64, volumeLabel string) (*Fil
 			filesystem:      fs,
 		},
 	}
-	_, err = fs.mkLabel(rootDir, volumeLabel)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create volume label root directory entry '%s': %v", volumeLabel, err)
-	}
 	// write the root directory entries to disk
 	err = fs.writeDirectoryEntries(rootDir)
 	if err != nil {
 		return nil, fmt.Errorf("error writing root directory to disk: %v", err)
+	}
+
+	// set the volume label
+	err = fs.SetLabel(volumeLabel)
+	if err != nil {
+		return nil, fmt.Errorf("failed to set volume label to '%s': %v", volumeLabel, err)
 	}
 
 	return fs, nil
@@ -610,6 +607,61 @@ func (fs *FileSystem) Label() string {
 		return ""
 	}
 	return bpb.volumeLabel
+}
+
+// SetLabel changes the filesystem label
+func (fs *FileSystem) SetLabel(volumeLabel string) error {
+	if volumeLabel == "" {
+		volumeLabel = "NO NAME"
+	}
+
+	// ensure the volumeLabel is proper sized
+	volumeLabel = fmt.Sprintf("%-11.11s", volumeLabel)
+
+	// set the label in the superblock
+	bpb := fs.bootSector.biosParameterBlock
+	if bpb == nil {
+		return fmt.Errorf("failed to load the boot sector")
+	}
+	bpb.volumeLabel = volumeLabel
+
+	// write the boot sector
+	if err := fs.writeBootSector(); err != nil {
+		return fmt.Errorf("failed to write the boot sector")
+	}
+
+	// locate the filesystem root directory or create it
+	rootDir, dirEntries, err := fs.readDirWithMkdir("/", false)
+	if err != nil {
+		return fmt.Errorf("failed to locate root directory: %v", err)
+	}
+
+	// locate the label entry, it may not exist
+	var labelEntry *directoryEntry
+	for _, entry := range dirEntries {
+		if entry.isVolumeLabel {
+			labelEntry = entry
+		}
+	}
+
+	// if have an entry, change the label. Otherwise, create it
+	if labelEntry != nil {
+		labelEntry.filenameShort = volumeLabel[:8]
+		labelEntry.fileExtension = volumeLabel[8:11]
+	} else {
+		_, err = fs.mkLabel(rootDir, volumeLabel)
+		if err != nil {
+			return fmt.Errorf("failed to create volume label root directory entry '%s': %v", volumeLabel, err)
+		}
+	}
+
+	// write the root directory entries to disk
+	err = fs.writeDirectoryEntries(rootDir)
+	if err != nil {
+		return fmt.Errorf("failed to save the root directory to disk: %v", err)
+	}
+
+	return nil
 }
 
 // read directory entries for a given cluster

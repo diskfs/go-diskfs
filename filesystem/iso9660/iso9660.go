@@ -494,3 +494,7 @@ func (fs *FileSystem) Label() string {
 	}
 	return fs.volumes.primary.volumeIdentifier
 }
+
+func (fs *FileSystem) SetLabel(string) error {
+	return fmt.Errorf("ISO9660 filesystem is read-only")
+}
