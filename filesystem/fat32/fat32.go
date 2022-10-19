@@ -89,11 +89,6 @@ func (fs *FileSystem) Equal(a *FileSystem) bool {
 // If the provided blocksize is 0, it will use the default of 512 bytes. If it is any number other than 0
 // or 512, it will return an error.
 func Create(f util.File, size, start, blocksize int64, volumeLabel string) (*FileSystem, error) {
-	if volumeLabel == "" {
-		volumeLabel = "NO NAME"
-	}
-	// ensure the volumeLabel is proper sized
-	volumeLabel = fmt.Sprintf("%-11.11s", volumeLabel)
 	// blocksize must be <=0 or exactly SectorSize512 or error
 	if blocksize != int64(SectorSize512) && blocksize > 0 {
 		return nil, fmt.Errorf("blocksize for FAT32 must be either 512 bytes or 0, not %d", blocksize)
@@ -199,7 +194,7 @@ func Create(f util.File, size, start, blocksize int64, volumeLabel string) (*Fil
 		bootFileName:          [12]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 		extendedBootSignature: longDos71EBPB,
 		volumeSerialNumber:    volid,
-		volumeLabel:           fmt.Sprintf("%-11.11s", volumeLabel), // "NO NAME    "
+		volumeLabel:           "NO NAME    ",
 		fileSystemType:        fileSystemTypeFAT32,
 		mirrorFlags:           0,
 		reservedFlags:         0,
@@ -213,38 +208,6 @@ func Create(f util.File, size, start, blocksize int64, volumeLabel string) (*Fil
 		bootCode:           []byte{},
 		biosParameterBlock: &ebpb,
 	}
-	//nolint:gocritic  // we do not want to remove this commented code, as it is useful for reference and debugging
-	/*
-		err := bs.write(f)
-		if err != nil {
-			return nil, fmt.Errorf("error writing MS-DOS Boot Sector: %v", err)
-		}
-	*/
-	b, err := bs.toBytes()
-	if err != nil {
-		return nil, fmt.Errorf("error converting MS-DOS Boot Sector to bytes: %v", err)
-	}
-	// write to the file
-	count, err := f.WriteAt(b, 0+start)
-	if err != nil {
-		return nil, fmt.Errorf("error writing MS-DOS Boot Sector to disk: %v", err)
-	}
-	if count != int(SectorSize512) {
-		return nil, fmt.Errorf("wrote %d bytes of MS-DOS Boot Sector to disk instead of expected %d", count, SectorSize512)
-	}
-
-	// write backup to the file
-	if backupBootSector > 0 {
-		count, err = f.WriteAt(b, int64(backupBootSector)*int64(SectorSize512)+start)
-		if err != nil {
-			return nil, fmt.Errorf("error writing MS-DOS Boot Sector to disk: %v", err)
-		}
-		if count != int(SectorSize512) {
-			return nil, fmt.Errorf("wrote %d bytes of MS-DOS Boot Sector to disk instead of expected %d", count, SectorSize512)
-		}
-	}
-
-	// boot sector is in place
 
 	// create and allocate FAT32 FSInformationSector
 	fsis := FSInformationSector{
@@ -252,15 +215,7 @@ func Create(f util.File, size, start, blocksize int64, volumeLabel string) (*Fil
 		freeDataClustersCount: 0xffffffff,
 	}
 
-	fsisBytes := fsis.toBytes()
-	fsisPrimary := int64(fsisPrimarySector * uint16(SectorSize512))
-
-	_, _ = f.WriteAt(fsisBytes, fsisPrimary+start)
-	if backupBootSector > 0 {
-		_, _ = f.WriteAt(fsisBytes, int64(backupBootSector+1)*int64(SectorSize512)+start)
-	}
-
-	// write FAT tables
+	// create and allocate the FAT tables
 	eocMarker := uint32(0x0fffffff)
 	unusedMarker := uint32(0x00000000)
 	fatPrimaryStart := reservedSectors * uint16(SectorSize512)
@@ -281,21 +236,10 @@ func Create(f util.File, size, start, blocksize int64, volumeLabel string) (*Fil
 		maxCluster: maxCluster,
 	}
 
-	fatBytes := fat.bytes()
-	_, err = f.WriteAt(fatBytes, int64(fatPrimaryStart)+start)
-	if err != nil {
-		return nil, fmt.Errorf("unable to write primary FAT table: %v", err)
-	}
-	_, err = f.WriteAt(fatBytes, int64(fatSecondaryStart)+start)
-	if err != nil {
-		return nil, fmt.Errorf("unable to write backup FAT table: %v", err)
-	}
-
 	// where does our data start?
 	dataStart := uint32(fatSecondaryStart) + fatSize
 
-	// create root directory
-	// there is nothing in there
+	// create the filesystem
 	fs := &FileSystem{
 		bootSector:      bs,
 		fsis:            fsis,
@@ -307,6 +251,22 @@ func Create(f util.File, size, start, blocksize int64, volumeLabel string) (*Fil
 		file:            f,
 	}
 
+	// write the boot sector
+	if err := fs.writeBootSector(); err != nil {
+		return nil, fmt.Errorf("failed to write the boot sector: %v", err)
+	}
+
+	// write the fsis
+	if err := fs.writeFsis(); err != nil {
+		return nil, fmt.Errorf("failed to write the file system information sector: %v", err)
+	}
+
+	// write the FAT tables
+	if err := fs.writeFat(); err != nil {
+		return nil, fmt.Errorf("failed to write the file allocation table: %v", err)
+	}
+
+	// create root directory
 	// be sure to zero out the root cluster, so we do not pick up phantom
 	// entries.
 	clusterStart := fs.start + int64(fs.dataStart)
@@ -318,7 +278,7 @@ func Create(f util.File, size, start, blocksize int64, volumeLabel string) (*Fil
 		return nil, fmt.Errorf("failed to zero out root directory: %v", err)
 	}
 	if written != len(tmpb) || written != fs.bytesPerCluster {
-		return nil, fmt.Errorf("incomplete zero out of root directory, wrote %d bytes instead of expected %d for cluster size %d", written, len(b), fs.bytesPerCluster)
+		return nil, fmt.Errorf("incomplete zero out of root directory, wrote %d bytes instead of expected %d for cluster size %d", written, len(tmpb), fs.bytesPerCluster)
 	}
 
 	// create a volumelabel entry in the root directory
@@ -329,14 +289,16 @@ func Create(f util.File, size, start, blocksize int64, volumeLabel string) (*Fil
 			filesystem:      fs,
 		},
 	}
-	_, err = fs.mkLabel(rootDir, volumeLabel)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create volume label root directory entry '%s': %v", volumeLabel, err)
-	}
 	// write the root directory entries to disk
 	err = fs.writeDirectoryEntries(rootDir)
 	if err != nil {
 		return nil, fmt.Errorf("error writing root directory to disk: %v", err)
+	}
+
+	// set the volume label
+	err = fs.SetLabel(volumeLabel)
+	if err != nil {
+		return nil, fmt.Errorf("failed to set volume label to '%s': %v", volumeLabel, err)
 	}
 
 	return fs, nil
@@ -427,6 +389,81 @@ func Read(file util.File, size, start, blocksize int64) (*FileSystem, error) {
 		size:            size,
 		file:            file,
 	}, nil
+}
+
+func (fs *FileSystem) writeBootSector() error {
+	//nolint:gocritic  // we do not want to remove this commented code, as it is useful for reference and debugging
+	/*
+		err := bs.write(f)
+		if err != nil {
+			return nil, fmt.Errorf("error writing MS-DOS Boot Sector: %v", err)
+		}
+	*/
+
+	b, err := fs.bootSector.toBytes()
+	if err != nil {
+		return fmt.Errorf("error converting MS-DOS Boot Sector to bytes: %v", err)
+	}
+
+	// write main boot sector
+	count, err := fs.file.WriteAt(b, 0+fs.start)
+	if err != nil {
+		return fmt.Errorf("error writing MS-DOS Boot Sector to disk: %v", err)
+	}
+	if count != int(SectorSize512) {
+		return fmt.Errorf("wrote %d bytes of MS-DOS Boot Sector to disk instead of expected %d", count, SectorSize512)
+	}
+
+	// write backup boot sector to the file
+	if fs.bootSector.biosParameterBlock.backupBootSector > 0 {
+		count, err = fs.file.WriteAt(b, int64(fs.bootSector.biosParameterBlock.backupBootSector)*int64(SectorSize512)+fs.start)
+		if err != nil {
+			return fmt.Errorf("error writing MS-DOS Boot Sector to disk: %v", err)
+		}
+		if count != int(SectorSize512) {
+			return fmt.Errorf("wrote %d bytes of MS-DOS Boot Sector to disk instead of expected %d", count, SectorSize512)
+		}
+	}
+
+	return nil
+}
+
+func (fs *FileSystem) writeFsis() error {
+	fsInformationSector := fs.bootSector.biosParameterBlock.fsInformationSector
+	backupBootSector := fs.bootSector.biosParameterBlock.backupBootSector
+	fsisPrimary := int64(fsInformationSector * uint16(SectorSize512))
+
+	fsisBytes := fs.fsis.toBytes()
+
+	if _, err := fs.file.WriteAt(fsisBytes, fsisPrimary+fs.start); err != nil {
+		return fmt.Errorf("unable to write primary Fsis: %v", err)
+	}
+
+	if backupBootSector > 0 {
+		if _, err := fs.file.WriteAt(fsisBytes, int64(backupBootSector+1)*int64(SectorSize512)+fs.start); err != nil {
+			return fmt.Errorf("unable to write backup Fsis: %v", err)
+		}
+	}
+
+	return nil
+}
+
+func (fs *FileSystem) writeFat() error {
+	reservedSectors := fs.bootSector.biosParameterBlock.dos331BPB.dos20BPB.reservedSectors
+	fatPrimaryStart := uint64(reservedSectors) * uint64(SectorSize512)
+	fatSecondaryStart := fatPrimaryStart + uint64(fs.table.size)
+
+	fatBytes := fs.table.bytes()
+
+	if _, err := fs.file.WriteAt(fatBytes, int64(fatPrimaryStart)+fs.start); err != nil {
+		return fmt.Errorf("unable to write primary FAT table: %v", err)
+	}
+
+	if _, err := fs.file.WriteAt(fatBytes, int64(fatSecondaryStart)+fs.start); err != nil {
+		return fmt.Errorf("unable to write backup FAT table: %v", err)
+	}
+
+	return nil
 }
 
 // Type returns the type code for the filesystem. Always returns filesystem.TypeFat32
@@ -562,14 +599,86 @@ func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 	}, nil
 }
 
-// Label get the label of the filesystem
+// Label get the label of the filesystem from the secial file in the root directory.
+// The label stored in the boot sector is ignored to mimic Windows behavior which
+// only stores and reads the label from the special file in the root directory.
 func (fs *FileSystem) Label() string {
-	// be sane about everything existing
-	bpb := fs.bootSector.biosParameterBlock
-	if bpb == nil {
+	// locate the filesystem root directory
+	_, dirEntries, err := fs.readDirWithMkdir("/", false)
+	if err != nil {
 		return ""
 	}
-	return bpb.volumeLabel
+
+	// locate the label entry, it may not exist
+	var labelEntry *directoryEntry
+	for _, entry := range dirEntries {
+		if entry.isVolumeLabel {
+			labelEntry = entry
+		}
+	}
+
+	// if we have no label entry, return
+	if labelEntry == nil {
+		return ""
+	}
+
+	// reconstruct the label, does not attempt to sanitize anything
+	return labelEntry.filenameShort + labelEntry.fileExtension
+}
+
+// SetLabel changes the filesystem label
+func (fs *FileSystem) SetLabel(volumeLabel string) error {
+	if volumeLabel == "" {
+		volumeLabel = "NO NAME"
+	}
+
+	// ensure the volumeLabel is proper sized
+	volumeLabel = fmt.Sprintf("%-11.11s", volumeLabel)
+
+	// set the label in the superblock
+	bpb := fs.bootSector.biosParameterBlock
+	if bpb == nil {
+		return fmt.Errorf("failed to load the boot sector")
+	}
+	bpb.volumeLabel = volumeLabel
+
+	// write the boot sector
+	if err := fs.writeBootSector(); err != nil {
+		return fmt.Errorf("failed to write the boot sector")
+	}
+
+	// locate the filesystem root directory or create it
+	rootDir, dirEntries, err := fs.readDirWithMkdir("/", false)
+	if err != nil {
+		return fmt.Errorf("failed to locate root directory: %v", err)
+	}
+
+	// locate the label entry, it may not exist
+	var labelEntry *directoryEntry
+	for _, entry := range dirEntries {
+		if entry.isVolumeLabel {
+			labelEntry = entry
+		}
+	}
+
+	// if have an entry, change the label. Otherwise, create it
+	if labelEntry != nil {
+		labelEntry.filenameShort = volumeLabel[:8]
+		labelEntry.fileExtension = volumeLabel[8:11]
+	} else {
+		_, err = fs.mkLabel(rootDir, volumeLabel)
+		if err != nil {
+			return fmt.Errorf("failed to create volume label root directory entry '%s': %v", volumeLabel, err)
+		}
+	}
+
+	// write the root directory entries to disk
+	err = fs.writeDirectoryEntries(rootDir)
+	if err != nil {
+		return fmt.Errorf("failed to save the root directory to disk: %v", err)
+	}
+
+	return nil
 }
 
 // read directory entries for a given cluster
@@ -884,23 +993,16 @@ func (fs *FileSystem) allocateSpace(size uint64, previous uint32) ([]uint32, err
 			}
 		}
 	}
+
 	// update the FSIS
 	fs.fsis.lastAllocatedCluster = lastAllocatedCluster
-	// write them all
-	b := fs.table.bytes()
-	fatPrimary := int64(fs.bootSector.biosParameterBlock.dos331BPB.dos20BPB.reservedSectors) * int64(SectorSize512)
-	fatSize := int64(fs.bootSector.biosParameterBlock.sectorsPerFat) * int64(SectorSize512)
-	fatBackup := fatPrimary + fatSize
-	_, _ = fs.file.WriteAt(b, fatPrimary+fs.start)
-	_, _ = fs.file.WriteAt(b, fatBackup+fs.start)
+	if err := fs.writeFsis(); err != nil {
+		return nil, fmt.Errorf("failed to write the file system information sector: %v", err)
+	}
 
-	fsisBytes := fs.fsis.toBytes()
-	fsisPrimary := fs.bootSector.biosParameterBlock.fsInformationSector
-	backupBootSector := fs.bootSector.biosParameterBlock.backupBootSector
-
-	_, _ = fs.file.WriteAt(fsisBytes, int64(fsisPrimary)*int64(SectorSize512)+fs.start)
-	if backupBootSector > 0 {
-		_, _ = fs.file.WriteAt(fsisBytes, int64(backupBootSector+1)*int64(SectorSize512)+fs.start)
+	// write the FAT tables
+	if err := fs.writeFat(); err != nil {
+		return nil, fmt.Errorf("failed to write the file allocation table: %v", err)
 	}
 
 	// return all of the clusters

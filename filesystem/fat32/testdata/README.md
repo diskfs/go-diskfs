@@ -28,6 +28,7 @@ $ docker run -it --rm -v $PWD:/data alpine:3.6
 # i=0
 # until [ $i -gt 75 ]; do mmd -i /data/fat32.img ::/foo/dir${i}; i=$(( $i+1 )); done
 
+# fatlabel /data/fat32.img go-diskfs
 # exit
 $
 ```

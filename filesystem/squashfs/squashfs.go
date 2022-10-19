@@ -46,6 +46,10 @@ func (fs *FileSystem) Label() string {
 	return ""
 }
 
+func (fs *FileSystem) SetLabel(string) error {
+	return fmt.Errorf("SquashFS filesystem is read-only")
+}
+
 // Workspace get the workspace path
 func (fs *FileSystem) Workspace() string {
 	return fs.workspace

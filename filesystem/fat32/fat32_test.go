@@ -305,11 +305,12 @@ func TestFat32ReadDir(t *testing.T) {
 			err   error
 		}{
 			// should have 4 entries
+			//   <LABEL>
 			//   foo
 			//   TERCER~1
 			//   CORTO1.TXT
 			//   UNARCH~1.DAT
-			{"/", 4, "foo", true, nil},
+			{"/", 5, "foo", true, nil},
 			// should have 80 entries:
 			//  dir0-75 = 76 entries
 			//  dir     =  1 entry
@@ -801,5 +802,148 @@ func TestFat32OpenFile(t *testing.T) {
 		t.Run("embedded filesystem", func(t *testing.T) {
 			runTest(t, 500, 1000)
 		})
+	})
+}
+
+func TestFat32Label(t *testing.T) {
+	t.Run("read-label", func(t *testing.T) {
+		// get a mock filesystem image
+		f, err := tmpFat32(true, 0, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if keepTmpFiles == "" {
+			defer os.Remove(f.Name())
+		} else {
+			fmt.Println(f.Name())
+		}
+
+		fileInfo, err := f.Stat()
+		if err != nil {
+			t.Fatalf("error getting file info for tmpfile %s: %v", f.Name(), err)
+		}
+
+		// read the filesystem
+		fs, err := fat32.Read(f, fileInfo.Size(), 0, 512)
+		if err != nil {
+			t.Fatalf("error reading fat32 filesystem from %s: %v", f.Name(), err)
+		}
+
+		// validate the label
+		label := fs.Label()
+		if label != "go-diskfs" {
+			t.Errorf("Unexpected label '%s', expected '%s'", label, "go-diskfs")
+		}
+	})
+
+	t.Run("create-label", func(t *testing.T) {
+		// get a mock filesystem image
+		f, err := tmpFat32(false, 0, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if keepTmpFiles == "" {
+			defer os.Remove(f.Name())
+		} else {
+			fmt.Println(f.Name())
+		}
+
+		fileInfo, err := f.Stat()
+		if err != nil {
+			t.Fatalf("error getting file info for tmpfile %s: %v", f.Name(), err)
+		}
+
+		// create an empty filesystem
+		fs, err := fat32.Create(f, fileInfo.Size(), 0, 512, "go-diskfs")
+		if err != nil {
+			t.Fatalf("error creating fat32 filesystem: %v", err)
+		}
+
+		// read the label back
+		label := fs.Label()
+		if label != "go-diskfs" {
+			t.Errorf("Unexpected label '%s', expected '%s'", label, "go-diskfs")
+		}
+
+		// re-open the filesystem
+		if err := f.Close(); err != nil {
+			t.Fatalf("error closing file %s: %v", f.Name(), err)
+		}
+		f, err = os.Open(f.Name())
+		if err != nil {
+			t.Fatalf("error re-opening file %s: %v", f.Name(), err)
+		}
+
+		// read the filesystem
+		fs, err = fat32.Read(f, fileInfo.Size(), 0, 512)
+		if err != nil {
+			t.Fatalf("error reading fat32 filesystem from %s: %v", f.Name(), err)
+		}
+
+		// read-back the label
+		label = fs.Label()
+		if label != "go-diskfs" {
+			t.Errorf("Unexpected label '%s', expected '%s'", label, "go-diskfs")
+		}
+	})
+
+	t.Run("write-label", func(t *testing.T) {
+		// get a mock filesystem image
+		f, err := tmpFat32(false, 0, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if keepTmpFiles == "" {
+			defer os.Remove(f.Name())
+		} else {
+			fmt.Println(f.Name())
+		}
+
+		fileInfo, err := f.Stat()
+		if err != nil {
+			t.Fatalf("error getting file info for tmpfile %s: %v", f.Name(), err)
+		}
+
+		// create an empty filesystem
+		fs, err := fat32.Create(f, fileInfo.Size(), 0, 512, "go-diskfs")
+		if err != nil {
+			t.Fatalf("error creating fat32 filesystem: %v", err)
+		}
+
+		// set the label
+		err = fs.SetLabel("Other Label")
+		if err != nil {
+			t.Fatalf("error setting label: %v", err)
+		}
+
+		// read the label back
+		label := fs.Label()
+		if label != "Other Label" {
+			t.Errorf("Unexpected label '%s', expected '%s'", label, "Other Label")
+		}
+
+		// re-open the filesystem
+		if err := f.Close(); err != nil {
+			t.Fatalf("error closing file %s: %v", f.Name(), err)
+		}
+		f, err = os.Open(f.Name())
+		if err != nil {
+			t.Fatalf("error re-opening file %s: %v", f.Name(), err)
+		}
+
+		// read the filesystem
+		fs, err = fat32.Read(f, fileInfo.Size(), 0, 512)
+		if err != nil {
+			t.Fatalf("error reading fat32 filesystem from %s: %v", f.Name(), err)
+		}
+
+		// read-back the label
+		label = fs.Label()
+		if label != "Other Label" {
+			t.Errorf("Unexpected label '%s', expected '%s'", label, "Other Label")
+		}
 	})
 }

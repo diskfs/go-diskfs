@@ -22,7 +22,7 @@ func getValidDos71EBPB() *dos71EBPB {
 		reservedFlags:         0x00,
 		extendedBootSignature: 0x29,
 		volumeSerialNumber:    2712131608,
-		volumeLabel:           "NO NAME",
+		volumeLabel:           "go-diskfs",
 		fileSystemType:        "FAT32",
 	}
 }
