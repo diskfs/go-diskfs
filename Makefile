@@ -8,7 +8,6 @@ GOBIN ?= $(shell go env GOPATH)/bin
 LINTER ?= $(GOBIN)/golangci-lint
 LINTER_VERSION ?= v1.49.0
 
-
 # BUILDARCH is the host architecture
 # ARCH is the target architecture
 # we need to keep track of them separately
@@ -61,7 +60,6 @@ test: image
 golangci-lint: $(LINTER)
 $(LINTER):
 	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(GOBIN) $(LINTER_VERSION)
-
 
 ## Check the file format
 fmt-check:
