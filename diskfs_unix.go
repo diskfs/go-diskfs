@@ -1,5 +1,5 @@
-//go:build !darwin || linux || solaris || aix || freebsd || illumos || netbsd || openbsd || plan9
-// +build !darwin linux solaris aix freebsd illumos netbsd openbsd plan9
+//go:build linux || solaris || aix || freebsd || illumos || netbsd || openbsd || plan9
+// +build linux solaris aix freebsd illumos netbsd openbsd plan9
 
 package diskfs
 

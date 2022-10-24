@@ -1,35 +1,42 @@
 name: Continuous Integration
-on: 
- pull_request:
-   types: [opened, synchronize, reopened]
- push:
-   branches:
-     - master
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches:
+      - master
 
 jobs:
   report:
     name: Report
     runs-on: ubuntu-latest
     steps:
-    - name: ref
-      run: echo ${{ github.ref }} 
-    - name: event_name
-      run: echo ${{ github.event_name }} 
+      - name: ref
+        run: echo ${{ github.ref }}
+      - name: event_name
+        run: echo ${{ github.event_name }}
   build:
     name: Build
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
     steps:
-    - name: checkout
-      uses: actions/checkout@v2
-    - uses: actions/setup-go@v2
-      with:
-        go-version: ^1.16
-    - name: vet
-      run: make vet
-    - name: lint
-      run: make lint
-    - name: image
-      run: make image
-    - name: test
-      run: make test
-
+      - name: checkout
+        uses: actions/checkout@v2
+      - uses: actions/setup-go@v2
+        with:
+          go-version: ^1.16
+      - run: go build
+      - name: vet
+        if: matrix.os != 'windows-latest'
+        run: make vet
+      - name: lint
+        if: matrix.os != 'windows-latest'
+        run: make lint
+      - name: image
+        if: matrix.os == 'ubuntu-latest'
+        run: make image
+      - name: test
+        if: matrix.os == 'ubuntu-latest'
+        run: make test
