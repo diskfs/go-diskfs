@@ -373,6 +373,10 @@ func tableFromBytes(b []byte, logicalBlockSize, physicalBlockSize int) (*Table, 
 	// now for partitions
 	partArrayStart := partitionEntryFirstLBA * uint64(logicalBlockSize)
 	partArrayEnd := partArrayStart + uint64(partitionEntryCount*partitionEntrySize)
+	if partArrayEnd > uint64(cap(b)) {
+		return nil, fmt.Errorf("parition array end index (%d) exceeds gpt area size (%d)", partArrayEnd, cap(b))
+	}
+
 	bpart := b[partArrayStart:partArrayEnd]
 	// we need a CRC/zlib of the partition entries, so we do those first, then append the bytes
 	checksum = crc32.ChecksumIEEE(bpart)
