@@ -3,6 +3,7 @@ package gpt
 import (
 	"crypto/rand"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"testing"
@@ -47,10 +48,9 @@ func GetValidTable() *Table {
 	return &table
 }
 
-//nolint:gocyclo // we really do not care about the cyclomatic complexity of a test function. Maybe someday we will improve it.
 func TestTableFromBytes(t *testing.T) {
 	t.Run("Short byte slice", func(t *testing.T) {
-		b := make([]byte, gptSize+512-1)
+		b := make([]byte, 512+512-1)
 		_, _ = rand.Read(b)
 		table, err := tableFromBytes(b, 512, 512)
 		if table != nil {
@@ -154,6 +154,54 @@ func TestTableFromBytes(t *testing.T) {
 			t.Errorf("error type %s instead of expected %s", err.Error(), expected)
 		}
 	})
+}
+
+type byteBufferReader struct {
+	b   []byte
+	pos int
+}
+
+func (b *byteBufferReader) ReadAt(p []byte, off int64) (n int, err error) {
+	if off >= int64(len(b.b)) {
+		return 0, io.EOF
+	}
+	if off < 0 {
+		return 0, fmt.Errorf("invalid offset %d", off)
+	}
+	n = copy(p, b.b[off:])
+	if n < len(p) {
+		err = io.EOF
+	}
+	return
+}
+
+func (b *byteBufferReader) WriteAt(p []byte, off int64) (n int, err error) {
+	if off >= int64(len(b.b)) {
+		return 0, io.EOF
+	}
+	if off < 0 {
+		return 0, fmt.Errorf("invalid offset %d", off)
+	}
+	n = copy(b.b[off:], p)
+	if n < len(p) {
+		err = io.EOF
+	}
+	return
+}
+
+func (b *byteBufferReader) Seek(offset int64, whence int) (int64, error) {
+	switch whence {
+	case io.SeekStart:
+		b.pos = int(offset)
+	case io.SeekCurrent:
+		b.pos += int(offset)
+	case io.SeekEnd:
+		b.pos = len(b.b) + int(offset)
+	}
+	return int64(b.pos), nil
+}
+
+func TestRead(t *testing.T) {
 	t.Run("invalid EFI Partition Checksum", func(t *testing.T) {
 		b, err := os.ReadFile(gptFile)
 		if err != nil {
@@ -161,7 +209,8 @@ func TestTableFromBytes(t *testing.T) {
 		}
 		// change a single byte in a partition entry
 		b[512+512+400]++
-		table, err := tableFromBytes(b, 512, 512)
+		buf := &byteBufferReader{b: b}
+		table, err := Read(buf, 512, 512)
 		if table != nil {
 			t.Error("should return nil table")
 		}
@@ -178,7 +227,8 @@ func TestTableFromBytes(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unable to read test fixture file %s: %v", gptFile, err)
 		}
-		table, err := tableFromBytes(b, 512, 512)
+		buf := &byteBufferReader{b: b}
+		table, err := Read(buf, 512, 512)
 		if table == nil {
 			t.Error("should not return nil table")
 		}
