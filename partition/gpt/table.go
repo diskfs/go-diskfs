@@ -14,7 +14,6 @@ import (
 
 // gptSize max potential size for partition array reserved 16384
 const (
-	gptSize                  = 128 * 128
 	mbrPartitionEntriesStart = 446
 	mbrPartitionEntriesCount = 4
 	mbrpartitionEntrySize    = 16
@@ -25,18 +24,20 @@ const (
 
 // Table represents a partition table to be applied to a disk or read from a disk
 type Table struct {
-	Partitions         []*Partition // slice of Partition
-	LogicalSectorSize  int          // logical size of a sector
-	PhysicalSectorSize int          // physical size of the sector
-	GUID               string       // disk GUID, can be left blank to auto-generate
-	ProtectiveMBR      bool         // whether or not a protective MBR is in place
-	partitionArraySize int          // how many entries are in the partition array size
-	partitionEntrySize uint32       // size of the partition entry in the table, usually 128 bytes
-	primaryHeader      uint64       // LBA of primary header, always 1
-	secondaryHeader    uint64       // LBA of secondary header, always last sectors on disk
-	firstDataSector    uint64       // LBA of first data sector
-	lastDataSector     uint64       // LBA of last data sector
-	initialized        bool
+	Partitions             []*Partition // slice of Partition
+	LogicalSectorSize      int          // logical size of a sector
+	PhysicalSectorSize     int          // physical size of the sector
+	GUID                   string       // disk GUID, can be left blank to auto-generate
+	ProtectiveMBR          bool         // whether or not a protective MBR is in place
+	partitionArraySize     int          // how many entries are in the partition array size
+	partitionEntrySize     uint32       // size of the partition entry in the table, usually 128 bytes
+	partitionFirstLBA      uint64       // first LBA of the partition array
+	partitionEntryChecksum uint32       // checksum of the partition array
+	primaryHeader          uint64       // LBA of primary header, always 1
+	secondaryHeader        uint64       // LBA of secondary header, always last sectors on disk
+	firstDataSector        uint64       // LBA of first data sector
+	lastDataSector         uint64       // LBA of last data sector
+	initialized            bool
 }
 
 func getEfiSignature() []byte {
@@ -320,12 +321,34 @@ func (t *Table) toGPTBytes(primary bool) ([]byte, error) {
 	return b, nil
 }
 
+func (t *Table) calculatePartitionArrayLocations() (start, size int) {
+	start = int(t.partitionFirstLBA) * t.LogicalSectorSize
+	size = t.partitionArraySize * int(t.partitionEntrySize)
+	return
+}
+
+// readPartitionArrayBytes read the bytes for the partition array
+func readPartitionArrayBytes(b []byte, entrySize, logicalSectorSize, physicalSectorSize int) ([]*Partition, error) {
+	parts := make([]*Partition, 0)
+	for i, c := 0, b; len(c) >= entrySize; c, i = c[entrySize:], i+1 {
+		bpart := c[:entrySize]
+		// write the primary partition entry
+		p, err := partitionFromBytes(bpart, logicalSectorSize, physicalSectorSize)
+		if err != nil {
+			return nil, fmt.Errorf("error reading partition entry %d: %v", i, err)
+		}
+		// augment partition information
+		p.Size = (p.End - p.Start + 1) * uint64(logicalSectorSize)
+		parts = append(parts, p)
+	}
+	return parts, nil
+}
+
 // tableFromBytes read a partition table from a byte slice
 func tableFromBytes(b []byte, logicalBlockSize, physicalBlockSize int) (*Table, error) {
 	// minimum size - gpt entries + header + LBA0 for (protective) MBR
-	minSize := gptSize + logicalBlockSize*2
-	if len(b) < minSize {
-		return nil, fmt.Errorf("data for partition was %d bytes instead of expected minimum %d", len(b), minSize)
+	if len(b) < logicalBlockSize*2 {
+		return nil, fmt.Errorf("data for partition was %d bytes instead of expected minimum %d", len(b), logicalBlockSize*2)
 	}
 
 	// GPT starts at LBA1
@@ -370,53 +393,24 @@ func tableFromBytes(b []byte, logicalBlockSize, physicalBlockSize int) (*Table, 
 		return nil, fmt.Errorf("invalid EFI Header Checksum, expected %v, got %v", checksum, efiHeaderCrc)
 	}
 
-	// now for partitions
-	partArrayStart := partitionEntryFirstLBA * uint64(logicalBlockSize)
-	partArrayEnd := partArrayStart + uint64(partitionEntryCount*partitionEntrySize)
-	if partArrayEnd > uint64(cap(b)) {
-		return nil, fmt.Errorf("parition array end index (%d) exceeds gpt area size (%d)", partArrayEnd, cap(b))
-	}
-
-	bpart := b[partArrayStart:partArrayEnd]
-	// we need a CRC/zlib of the partition entries, so we do those first, then append the bytes
-	checksum = crc32.ChecksumIEEE(bpart)
-	if partitionEntryChecksum != checksum {
-		return nil, fmt.Errorf("invalid EFI Partition Entry Checksum, expected %v, got %v", checksum, partitionEntryChecksum)
-	}
-
 	// potential protective MBR is at LBA0
 	hasProtectiveMBR := readProtectiveMBR(b[:logicalBlockSize], uint32(secondaryHeader))
 
 	table := Table{
-		LogicalSectorSize:  logicalBlockSize,
-		PhysicalSectorSize: physicalBlockSize,
-		partitionEntrySize: partitionEntrySize,
-		primaryHeader:      primaryHeader,
-		secondaryHeader:    secondaryHeader,
-		firstDataSector:    firstDataSector,
-		lastDataSector:     lastDataSector,
-		partitionArraySize: int(partitionEntryCount),
-		ProtectiveMBR:      hasProtectiveMBR,
-		GUID:               strings.ToUpper(diskGUID.String()),
-		initialized:        true,
+		LogicalSectorSize:      logicalBlockSize,
+		PhysicalSectorSize:     physicalBlockSize,
+		partitionEntrySize:     partitionEntrySize,
+		primaryHeader:          primaryHeader,
+		secondaryHeader:        secondaryHeader,
+		firstDataSector:        firstDataSector,
+		lastDataSector:         lastDataSector,
+		partitionArraySize:     int(partitionEntryCount),
+		partitionFirstLBA:      partitionEntryFirstLBA,
+		ProtectiveMBR:          hasProtectiveMBR,
+		GUID:                   strings.ToUpper(diskGUID.String()),
+		partitionEntryChecksum: partitionEntryChecksum,
+		initialized:            true,
 	}
-
-	parts := make([]*Partition, 0, partitionEntryCount)
-	count := int(partitionEntryCount)
-	for i := 0; i < count; i++ {
-		// write the primary partition entry
-		start := i * int(partitionEntrySize)
-		end := start + int(partitionEntrySize)
-		// skip all 0s
-		p, err := partitionFromBytes(bpart[start:end], table.LogicalSectorSize, table.PhysicalSectorSize)
-		if err != nil {
-			return nil, fmt.Errorf("error reading partition entry %d: %v", i, err)
-		}
-		// augment partition information
-		p.Size = (p.End - p.Start + 1) * uint64(logicalBlockSize)
-		parts = append(parts, p)
-	}
-	table.Partitions = parts
 
 	return &table, nil
 }
@@ -506,8 +500,8 @@ func (t *Table) Write(f util.File, size int64) error {
 // if successful, returns a gpt.Table struct
 // returns errors if fails at any stage reading the disk or processing the bytes on disk as a GPT
 func Read(f util.File, logicalBlockSize, physicalBlockSize int) (*Table, error) {
-	// read the data off of the disk
-	b := make([]byte, gptSize+logicalBlockSize*2)
+	// read the data off of the disk - first block is the compatibility MBR, ssecond is the GPT table
+	b := make([]byte, logicalBlockSize*2)
 	read, err := f.ReadAt(b, 0)
 	if err != nil {
 		return nil, fmt.Errorf("error reading GPT from file: %w", err)
@@ -515,7 +509,33 @@ func Read(f util.File, logicalBlockSize, physicalBlockSize int) (*Table, error) 
 	if read != len(b) {
 		return nil, fmt.Errorf("read only %d bytes of GPT from file instead of expected %d", read, len(b))
 	}
-	return tableFromBytes(b, logicalBlockSize, physicalBlockSize)
+	// get the gpt table
+	gptTable, err := tableFromBytes(b, logicalBlockSize, physicalBlockSize)
+	if err != nil {
+		return nil, fmt.Errorf("error reading GPT table: %w", err)
+	}
+	start, size := gptTable.calculatePartitionArrayLocations()
+	b = make([]byte, size)
+	read, err = f.ReadAt(b, int64(start))
+	if read != len(b) {
+		return nil, fmt.Errorf("read only %d bytes of GPT from file instead of expected %d", read, len(b))
+	}
+	if err != nil {
+		return nil, fmt.Errorf("error reading partitions from file: %w", err)
+	}
+	// we need a CRC/zlib of the partition entries, so we do those first, then append the bytes
+	checksum := crc32.ChecksumIEEE(b)
+	if gptTable.partitionEntryChecksum != checksum {
+		return nil, fmt.Errorf("invalid EFI Partition Entry Checksum, expected %v, got %v", checksum, gptTable.partitionEntryChecksum)
+	}
+
+	parts, err := readPartitionArrayBytes(b, int(gptTable.partitionEntrySize), logicalBlockSize, physicalBlockSize)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing partition data: %w", err)
+	}
+	gptTable.Partitions = parts
+	// get the partition table
+	return gptTable, nil
 }
 
 // GetPartitions get the partitions
