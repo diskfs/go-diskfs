@@ -106,6 +106,20 @@ func TestFat32Type(t *testing.T) {
 }
 
 func TestFat32Mkdir(t *testing.T) {
+	t.Run("Creating directory at root with the same name as volume", func(t *testing.T) {
+		f, err := os.CreateTemp("", "*")
+		label := "boot"
+		// create an empty filesystem
+		fs, err := fat32.Create(f, 1000000, 0, 512, label)
+		if err != nil {
+			t.Fatalf("error creating fat32 filesystem: %v", err)
+		}
+		err = fs.Mkdir("/" + label)
+		if err != nil {
+			t.Fatalf("error creating directory with same name as label (%s): %v", label, err)
+		}
+	})
+
 	// only do this test if os.Getenv("TEST_IMAGE") contains a real image
 	if intImage == "" {
 		return
