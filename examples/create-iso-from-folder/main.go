@@ -105,5 +105,5 @@ func CreateIsoFromFolder(srcFolder string, outputFileName string) {
 }
 
 func main() {
-	CreateIsoFromFolder("my-folder", "my-image2.iso")
+	CreateIsoFromFolder("my-folder", "my-image.iso")
 }
