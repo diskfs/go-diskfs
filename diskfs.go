@@ -344,11 +344,11 @@ func Create(device string, size int64, format Format, sectorSize SectorSize) (*d
 	}
 	f, err := os.OpenFile(device, os.O_RDWR|os.O_EXCL|os.O_CREATE, 0o666)
 	if err != nil {
-		return nil, fmt.Errorf("could not create device %s", device)
+		return nil, fmt.Errorf("could not create device %s: %v", device, errors.Unwrap(err))
 	}
 	err = os.Truncate(device, size)
 	if err != nil {
-		return nil, fmt.Errorf("could not expand device %s to size %d", device, size)
+		return nil, fmt.Errorf("could not expand device %s to size %d: %v", device, size, errors.Unwrap(err))
 	}
 	// return our disk
 	return initDisk(f, ReadWriteExclusive, sectorSize)
