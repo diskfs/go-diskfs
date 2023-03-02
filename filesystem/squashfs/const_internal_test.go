@@ -111,7 +111,7 @@ var (
 	testBasicDirectoryEnd   = testBasicDirectoryStart + 0x10
 
 	// this is for /README.md
-	testExtendedFile      = testGetFirstInodeBody().(extendedFile)
+	testExtendedFile, _   = testGetFirstInodeBody().(extendedFile)
 	testExtendedFileStart = 0x0 + 0x10
 	testExtendedFileEnd   = testExtendedFileStart + 0x28
 
