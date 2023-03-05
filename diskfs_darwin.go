@@ -16,11 +16,6 @@ const (
 
 // getSectorSizes get the logical and physical sector sizes for a block device
 func getSectorSizes(f *os.File) (logicalSectorSize, physicalSectorSize int64, err error) {
-	//nolint:gocritic // we keep this for reference to the underlying syscall
-	/*
-		ioctl(fd, BLKPBSZGET, &physicalsectsize);
-
-	*/
 	fd := f.Fd()
 
 	logicalSectorSizeInt, err := unix.IoctlGetInt(int(fd), DKIOCGETBLOCKSIZE)
