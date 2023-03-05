@@ -105,7 +105,6 @@ package diskfs
 import (
 	"errors"
 	"fmt"
-	"io"
 	"os"
 
 	log "github.com/sirupsen/logrus"
@@ -213,14 +212,9 @@ func initDisk(f *os.File, openMode OpenModeOption, sectorSize SectorSize) (*disk
 	case mode&os.ModeDevice != 0:
 		log.Debug("initDisk(): block device")
 		diskType = disk.Device
-		file, err := os.Open(f.Name())
+		size, err = getBlockDeviceSize(f)
 		if err != nil {
-			return nil, fmt.Errorf("error opening block device %s: %s", f.Name(), err)
-		}
-		defer file.Close()
-		size, err = file.Seek(0, io.SeekEnd)
-		if err != nil {
-			return nil, fmt.Errorf("error seeking to end of block device %s: %s", f.Name(), err)
+			return nil, fmt.Errorf("error getting block device %s size: %s", f.Name(), err)
 		}
 		lblksize, pblksize, err = getSectorSizes(f)
 		log.Debugf("initDisk(): logical block size %d, physical block size %d", lblksize, pblksize)
