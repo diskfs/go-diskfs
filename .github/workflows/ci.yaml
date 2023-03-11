@@ -19,6 +19,35 @@ jobs:
     name: Build
     strategy:
       matrix:
+        target: [
+          # Tier 1
+          {arch: amd64, os: linux},   {arch: arm64, os: linux},
+          {arch: amd64, os: windows}, {arch: arm64, os: windows},
+          {arch: amd64, os: darwin},  {arch: arm64, os: darwin},
+
+          # Tier 2 (Best effort)
+          {arch: amd64, os: freebsd}, {arch: arm64, os: freebsd},
+          {arch: amd64, os: netbsd},  {arch: arm64, os: netbsd},
+          {arch: amd64, os: openbsd}, {arch: arm64, os: openbsd},
+          {arch: amd64, os: solaris},
+          {arch: amd64, os: illumos},
+          {arch: ppc64, os: aix},
+        ]
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v2
+      - uses: actions/setup-go@v2
+        with:
+          go-version: ^1.16
+      - run: go build
+        env:
+          GOOS: ${{ matrix.target.os }}
+          GOARCH: ${{ matrix.target.arch }}
+  test:
+    name: Test
+    strategy:
+      matrix:
         os: [macos-latest, windows-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
