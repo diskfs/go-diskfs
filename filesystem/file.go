@@ -1,11 +1,15 @@
 package filesystem
 
-import "io"
+import (
+	"io"
+	"io/fs"
+)
 
 // File a reference to a single file on disk
 type File interface {
-	io.ReadWriteSeeker
-	io.Closer
+	fs.ReadDirFile
+	io.Writer
+	io.Seeker
 	// io.ReaderAt
 	// io.WriterAt
 }

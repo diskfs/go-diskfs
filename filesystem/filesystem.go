@@ -3,11 +3,13 @@
 package filesystem
 
 import (
+	"io/fs"
 	"os"
 )
 
 // FileSystem is a reference to a single filesystem on a disk
 type FileSystem interface {
+	Open(name string) (fs.File, error)
 	// Type return the type of filesystem
 	Type() Type
 	// Mkdir make a directory

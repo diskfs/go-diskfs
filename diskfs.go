@@ -327,6 +327,32 @@ func Open(device string, opts ...OpenOpt) (*disk.Disk, error) {
 	return initDisk(f, ReadWriteExclusive, opt.sectorSize)
 }
 
+func OpenFile(f *os.File, opts ...OpenOpt) (*disk.Disk, error) {
+	// err := checkDevice(device)
+	// if err != nil {
+	// 	return nil, err
+	// }
+
+	opt := openOptsDefaults()
+	for _, o := range opts {
+		if err := o(opt); err != nil {
+			return nil, err
+		}
+	}
+
+	// m, ok := openModeOptions[opt.mode]
+	// if !ok {
+	// 	return nil, errors.New("unsupported file open mode")
+	// }
+
+	// f, err := os.OpenFile(device, m, 0o600)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("could not open device %s exclusively for writing", device)
+	// }
+	// return our disk
+	return initDisk(f, ReadWriteExclusive, opt.sectorSize)
+}
+
 // Create a Disk from a path to a device
 // Should pass a path to a block device e.g. /dev/sda or a path to a file /tmp/foo.img
 // The provided device must not exist at the time you call Create()

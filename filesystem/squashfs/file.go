@@ -3,6 +3,7 @@ package squashfs
 import (
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 )
 
@@ -17,6 +18,14 @@ type File struct {
 	isAppend    bool
 	offset      int64
 	filesystem  *FileSystem
+}
+
+func (fl *File) ReadDir(n int) ([]fs.DirEntry, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (fl *File) Stat() (fs.FileInfo, error) {
+	return nil, fmt.Errorf("not implemented")
 }
 
 // Read reads up to len(b) bytes from the File.

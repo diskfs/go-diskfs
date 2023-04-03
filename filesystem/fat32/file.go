@@ -3,6 +3,7 @@ package fat32
 import (
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 )
 
@@ -14,6 +15,14 @@ type File struct {
 	offset      int64
 	parent      *Directory
 	filesystem  *FileSystem
+}
+
+func (fl *File) ReadDir(n int) ([]fs.DirEntry, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (fl *File) Stat() (fs.FileInfo, error) {
+	return nil, fmt.Errorf("not implemented")
 }
 
 // Read reads up to len(b) bytes from the File.

@@ -3,6 +3,7 @@ package iso9660
 import (
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 )
 
@@ -15,6 +16,27 @@ type File struct {
 	isAppend    bool
 	offset      int64
 	closed      bool
+	fullname    string
+}
+
+func (fl File) ReadDir(n int) ([]fs.DirEntry, error) {
+	if !fl.IsDir() {
+		return nil, fs.ErrNotExist
+	}
+	var res []fs.DirEntry
+
+	if entries, err := fl.filesystem.readDirectory(fl.fullname); err == nil {
+		for _, de := range entries {
+			res = append(res, fs.FileInfoToDirEntry(de))
+		}
+		return res, nil
+	} else {
+		return nil, err
+	}
+}
+
+func (fl File) Stat() (fs.FileInfo, error) {
+	return fl.directoryEntry, nil
 }
 
 // Read reads up to len(b) bytes from the File.

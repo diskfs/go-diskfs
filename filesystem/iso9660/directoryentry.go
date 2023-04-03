@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path"
 	"regexp"
@@ -42,6 +43,14 @@ type directoryEntry struct {
 	filesystem               *FileSystem
 	filename                 string
 	extensions               []directoryEntrySystemUseExtension
+}
+
+func (de directoryEntry) Type() fs.FileMode {
+	return de.Mode()
+}
+
+func (de directoryEntry) Info() (fs.FileInfo, error) {
+	return de, nil
 }
 
 func (de *directoryEntry) countNamelenBytes() int {
@@ -450,11 +459,18 @@ func (de *directoryEntry) getLocation(p string) (location, size uint32, err erro
 }
 
 // Name() string       // base name of the file
-func (de *directoryEntry) Name() string {
+func (de directoryEntry) Name() string {
+	if de.isSelf {
+		return "."
+	}
+
+	if de.isParent {
+		return ".."
+	}
 	name := de.filename
 	if de.filesystem.suspEnabled {
 		for _, e := range de.filesystem.suspExtensions {
-			filename, err := e.GetFilename(de)
+			filename, err := e.GetFilename(&de)
 			switch {
 			case err != nil:
 				continue
@@ -476,27 +492,27 @@ func (de *directoryEntry) Name() string {
 }
 
 // Size() int64        // length in bytes for regular files; system-dependent for others
-func (de *directoryEntry) Size() int64 {
+func (de directoryEntry) Size() int64 {
 	return int64(de.size)
 }
 
 // Mode() FileMode     // file mode bits
-func (de *directoryEntry) Mode() os.FileMode {
+func (de directoryEntry) Mode() os.FileMode {
 	return 0o755
 }
 
 // ModTime() time.Time // modification time
-func (de *directoryEntry) ModTime() time.Time {
+func (de directoryEntry) ModTime() time.Time {
 	return de.creation
 }
 
 // IsDir() bool        // abbreviation for Mode().IsDir()
-func (de *directoryEntry) IsDir() bool {
+func (de directoryEntry) IsDir() bool {
 	return de.isSubdirectory
 }
 
 // Sys() interface{}   // underlying data source (can return nil)
-func (de *directoryEntry) Sys() interface{} {
+func (de directoryEntry) Sys() interface{} {
 	return nil
 }
 

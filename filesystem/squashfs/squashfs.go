@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"io/fs"
 	"math"
 	"os"
 	"path"
@@ -32,6 +33,10 @@ type FileSystem struct {
 	uidsGids   []uint32
 	xattrs     *xAttrTable
 	rootDir    inode
+}
+
+func (fs *FileSystem) Open(name string) (fs.File, error) {
+	return nil, fmt.Errorf("not implemented")
 }
 
 // Equal compare if two filesystems are equal

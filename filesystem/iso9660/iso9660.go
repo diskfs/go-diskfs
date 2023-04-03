@@ -3,8 +3,10 @@ package iso9660
 import (
 	"encoding/binary"
 	"fmt"
+	"io/fs"
 	"os"
 	"path"
+	"strings"
 
 	"github.com/diskfs/go-diskfs/filesystem"
 	"github.com/diskfs/go-diskfs/util"
@@ -31,6 +33,16 @@ type FileSystem struct {
 	suspEnabled    bool  // is the SUSP in use?
 	suspSkip       uint8 // how many bytes to skip in each directory record
 	suspExtensions []suspExtension
+}
+
+func (fs *FileSystem) Open(name string) (fs.File, error) {
+
+	name = strings.TrimPrefix(name, ".")
+
+	if !strings.HasPrefix(name, "/") {
+		name = "/" + name
+	}
+	return fs.OpenFile(name, os.O_RDONLY)
 }
 
 // Equal compare if two filesystems are equal
@@ -360,8 +372,15 @@ func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 	filename := path.Base(p)
 
 	// if the dir == filename, then it is just /
-	if dir == filename {
-		return nil, fmt.Errorf("cannot open directory %s as file", p)
+	if (dir == filename) || (dir == "/" && filename == ".") {
+		return &File{
+			directoryEntry: fs.rootDir,
+			fullname:       "/",
+			isReadWrite:    false,
+			isAppend:       false,
+			offset:         0,
+		}, nil
+
 	}
 
 	// cannot open to write or append or create if we do not have a workspace
@@ -381,10 +400,6 @@ func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 		var targetEntry *directoryEntry
 		for _, e := range entries {
 			eName := e.Name()
-			// cannot do anything with directories
-			if eName == filename && e.IsDir() {
-				return nil, fmt.Errorf("cannot open directory %s as file", p)
-			}
 			if eName == filename {
 				// if we got this far, we have found the file
 				targetEntry = e
@@ -403,6 +418,7 @@ func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 			isReadWrite:    false,
 			isAppend:       false,
 			offset:         0,
+			fullname:       p,
 		}
 	} else {
 		f, err = os.OpenFile(path.Join(fs.workspace, p), flag, 0o644)

@@ -3,6 +3,7 @@ package fat32
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path"
 	"sort"
@@ -61,6 +62,10 @@ type FileSystem struct {
 	size            int64
 	start           int64
 	file            util.File
+}
+
+func (fs *FileSystem) Open(name string) (fs.File, error) {
+	return nil, fmt.Errorf("not implemented")
 }
 
 // Equal compare if two filesystems are equal
