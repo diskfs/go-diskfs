@@ -358,7 +358,7 @@ func TestTableWrite(t *testing.T) {
 }
 func TestGetPartitionSize(t *testing.T) {
 	table := GetValidTable()
-	request := 1
+	request := 0
 	size := table.Partitions[request].GetSize()
 	expected := int64(table.Partitions[request].Size)
 	if size != expected {
@@ -370,7 +370,7 @@ func TestGetPartitionStart(t *testing.T) {
 	maxPart := len(table.Partitions)
 	request := maxPart - 1
 	start := table.Partitions[request].GetStart()
-	expected := int64(table.Partitions[request].Start)
+	expected := int64(table.Partitions[request].Start * uint64(table.LogicalSectorSize))
 	if start != expected {
 		t.Errorf("received start %d instead of %d", start, expected)
 	}

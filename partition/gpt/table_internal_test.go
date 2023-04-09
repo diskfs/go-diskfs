@@ -40,10 +40,7 @@ func GetValidTable() *Table {
 			physicalSectorSize: 512,
 		},
 	}
-	// add 127 Unused partitions to the table
-	for i := 1; i < 128; i++ {
-		parts = append(parts, &Partition{Type: Unused})
-	}
+	// there are 127 Unused partitions, but those are ignored
 	table.Partitions = parts
 	return &table
 }
