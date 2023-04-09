@@ -337,6 +337,9 @@ func readPartitionArrayBytes(b []byte, entrySize, logicalSectorSize, physicalSec
 		if err != nil {
 			return nil, fmt.Errorf("error reading partition entry %d: %v", i, err)
 		}
+		if p == nil {
+			continue
+		}
 		// augment partition information
 		p.Size = (p.End - p.Start + 1) * uint64(logicalSectorSize)
 		parts = append(parts, p)
