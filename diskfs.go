@@ -138,6 +138,8 @@ const (
 	ReadOnly OpenModeOption = iota
 	// ReadWriteExclusive open file in read-write exclusive mode
 	ReadWriteExclusive
+	// ReadWrite open file in read-write mode
+	ReadWrite
 )
 
 // OpenModeOption.String()
@@ -147,6 +149,8 @@ func (m OpenModeOption) String() string {
 		return "read-only"
 	case ReadWriteExclusive:
 		return "read-write exclusive"
+	case ReadWrite:
+		return "read-write"
 	default:
 		return "unknown"
 	}
@@ -155,6 +159,7 @@ func (m OpenModeOption) String() string {
 var openModeOptions = map[OpenModeOption]int{
 	ReadOnly:           os.O_RDONLY,
 	ReadWriteExclusive: os.O_RDWR | os.O_EXCL,
+	ReadWrite:          os.O_RDWR,
 }
 
 // SectorSize represents the sector size to use
