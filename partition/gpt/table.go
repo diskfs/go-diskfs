@@ -294,7 +294,7 @@ func (t *Table) toGPTBytes(primary bool) ([]byte, error) {
 	copy(b[56:72], bytesToUUIDBytes(guid[0:16]))
 
 	// starting LBA of array of partition entries
-	binary.LittleEndian.PutUint64(b[72:80], t.partitionArraySector(primary))
+	binary.LittleEndian.PutUint64(b[72:80], t.partitionArraySector(true))
 
 	// how many entries?
 	binary.LittleEndian.PutUint32(b[80:84], uint32(t.partitionArraySize))
