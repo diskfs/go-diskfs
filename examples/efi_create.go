@@ -43,7 +43,7 @@ func CreateEfi(diskImg string) {
 	 */
 	kernel, err := os.ReadFile("/some/kernel/file")
 
-	spec := diskpkg.FilesystemSpec{Partition: 0, FSType: filesystem.TypeFat32}
+	spec := diskpkg.FilesystemSpec{Partition: 1, FSType: filesystem.TypeFat32}
 	fs, err := disk.CreateFilesystem(spec)
 
 	// make our directories
