@@ -9,7 +9,7 @@ import (
 )
 
 type fsCompatible struct {
-	filesystem.FileSystem
+	fs filesystem.FileSystem
 }
 
 type fsFileWrapper struct {
@@ -25,13 +25,13 @@ func (f *fsFileWrapper) Stat() (fs.FileInfo, error) {
 }
 
 func (f *fsCompatible) Open(name string) (fs.File, error) {
-	file, err := f.OpenFile(name, os.O_RDONLY)
+	file, err := f.fs.OpenFile(name, os.O_RDONLY)
 	if err != nil {
 		return nil, err
 	}
 	dirname := path.Dir(name)
 	var stat *os.FileInfo
-	if info, err := f.ReadDir(dirname); err == nil {
+	if info, err := f.fs.ReadDir(dirname); err == nil {
 		for i := range info {
 			if info[i].Name() == path.Base(name) {
 				stat = &info[i]
@@ -41,6 +41,20 @@ func (f *fsCompatible) Open(name string) (fs.File, error) {
 	return &fsFileWrapper{File: file, stat: stat}, nil
 }
 
-func FS(f filesystem.FileSystem) fs.FS {
+func (f *fsCompatible) ReadDir(name string) ([]fs.DirEntry, error) {
+	entries, err := f.fs.ReadDir(name)
+	if err != nil {
+		return nil, err
+	}
+	direntries := make([]fs.DirEntry, len(entries))
+	for i := range entries {
+		direntries[i] = fs.FileInfoToDirEntry(entries[i])
+	}
+	return direntries, nil
+}
+
+// FS converts a diskfs FileSystem to a fs.FS for compatibility with
+// other utilities
+func FS(f filesystem.FileSystem) fs.ReadDirFS {
 	return &fsCompatible{f}
 }

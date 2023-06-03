@@ -18,6 +18,13 @@ func TestFat32(t *testing.T) {
 	}
 
 	fs := FS(isofs)
+	entries, err := fs.ReadDir("/")
+	if err != nil {
+		t.Fatalf("cannot read /: %s", err)
+	}
+	if len(entries) != 5 {
+		t.Fatalf("should be 5 entries in iso fs")
+	}
 	testfile, err := fs.Open("/README.MD")
 	if err != nil {
 		t.Fatalf("test file: %s", err)
