@@ -33,6 +33,7 @@ func (d *fsDirInfo) Sys() any           { return nil }
 type fsDirWrapper struct {
 	name   string
 	compat *fsCompatible
+	stat   os.FileInfo
 }
 
 func (f *fsDirWrapper) Close() error {
@@ -58,7 +59,7 @@ func (f *fsDirWrapper) ReadDir(n int) ([]fs.DirEntry, error) {
 }
 
 func (f *fsDirWrapper) Stat() (fs.FileInfo, error) {
-	return &fsDirInfo{f.name}, nil
+	return f.stat, nil
 }
 
 func (f *fsFileWrapper) Stat() (fs.FileInfo, error) {
@@ -80,7 +81,7 @@ func (f *fsCompatible) Open(name string) (fs.File, error) {
 	var stat os.FileInfo
 	name = absoluteName(name)
 	if name == "/" {
-		return &fsDirWrapper{name: name, compat: f}, nil
+		return &fsDirWrapper{name: name, compat: f, stat: &fsDirInfo{name: "/"}}, nil
 	}
 	dirname := path.Dir(name)
 	if info, err := f.fs.ReadDir(dirname); err == nil {
@@ -95,7 +96,7 @@ func (f *fsCompatible) Open(name string) (fs.File, error) {
 		return nil, fs.ErrNotExist
 	}
 	if stat.IsDir() {
-		return &fsDirWrapper{name: name, compat: f}, nil
+		return &fsDirWrapper{name: name, compat: f, stat: stat}, nil
 	}
 	file, err := f.fs.OpenFile(name, os.O_RDONLY)
 	if err != nil {
