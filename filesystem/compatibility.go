@@ -44,10 +44,7 @@ func (f *fsDirWrapper) ReadDir(n int) ([]fs.DirEntry, error) {
 	if err != nil {
 		return nil, err
 	}
-	if n < 0 {
-		return entries, nil
-	}
-	if n >= len(entries) {
+	if n < 0 || n >= len(entries) {
 		n = len(entries)
 	}
 	return entries[:n], nil

@@ -12,6 +12,7 @@ func TestISO9660FSCompatibility(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to read iso9660 testfile: %v", err)
 	}
+	defer f.Close()
 	isofs, err := Read(f, 0, 0, 2048)
 	if err != nil {
 		t.Fatalf("iso read: %s", err)
