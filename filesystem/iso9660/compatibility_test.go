@@ -1,23 +1,23 @@
-package converter
+package iso9660
 
 import (
 	"os"
 	"testing"
 
-	"github.com/diskfs/go-diskfs/filesystem/iso9660"
+	"github.com/diskfs/go-diskfs/filesystem"
 )
 
-func TestFat32(t *testing.T) {
-	f, err := os.Open("../filesystem/iso9660/testdata/9660.iso")
+func TestISO9660FSCompatibility(t *testing.T) {
+	f, err := os.Open(ISO9660File)
 	if err != nil {
 		t.Fatalf("Failed to read iso9660 testfile: %v", err)
 	}
-	isofs, err := iso9660.Read(f, 0, 0, 2048)
+	isofs, err := Read(f, 0, 0, 2048)
 	if err != nil {
 		t.Fatalf("iso read: %s", err)
 	}
 
-	fs := FS(isofs)
+	fs := filesystem.FS(isofs)
 	entries, err := fs.ReadDir("/")
 	if err != nil {
 		t.Fatalf("cannot read /: %s", err)

@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/diskfs/go-diskfs/converter"
 	"github.com/diskfs/go-diskfs/filesystem"
 	"github.com/diskfs/go-diskfs/filesystem/fat32"
 	"github.com/diskfs/go-diskfs/filesystem/iso9660"
@@ -39,7 +38,7 @@ func main() {
 		log.Fatalf("Cannot open %s image in %q: %s", *fsType, *filename, err)
 	}
 
-	http.Handle("/", http.FileServer(converter.HTTPFS(fs)))
+	http.Handle("/", http.FileServer(http.FS(filesystem.FS(fs))))
 
 	log.Printf("Serving %q on HTTP port: %s\n", *filename, *addr)
 	log.Fatal(http.ListenAndServe(*addr, nil))

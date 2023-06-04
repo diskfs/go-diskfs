@@ -1,34 +1,29 @@
-package converter
+package filesystem
 
 import (
 	"io/fs"
-	"net/http"
 	"os"
 	"path"
 	"time"
-
-	"github.com/diskfs/go-diskfs/filesystem"
 )
 
 type fsCompatible struct {
-	fs filesystem.FileSystem
+	fs FileSystem
 }
 
 type fsFileWrapper struct {
-	filesystem.File
+	File
 	stat os.FileInfo
 }
 
-type fsDirInfo struct {
-	name string
-}
+type fakeRootDir struct{}
 
-func (d *fsDirInfo) Name() string       { return d.name }
-func (d *fsDirInfo) Size() int64        { return 0 }
-func (d *fsDirInfo) Mode() fs.FileMode  { return 0 }
-func (d *fsDirInfo) ModTime() time.Time { return time.Now() }
-func (d *fsDirInfo) IsDir() bool        { return true }
-func (d *fsDirInfo) Sys() any           { return nil }
+func (d *fakeRootDir) Name() string       { return "/" }
+func (d *fakeRootDir) Size() int64        { return 0 }
+func (d *fakeRootDir) Mode() fs.FileMode  { return 0 }
+func (d *fakeRootDir) ModTime() time.Time { return time.Now() }
+func (d *fakeRootDir) IsDir() bool        { return true }
+func (d *fakeRootDir) Sys() any           { return nil }
 
 type fsDirWrapper struct {
 	name   string
@@ -81,7 +76,7 @@ func (f *fsCompatible) Open(name string) (fs.File, error) {
 	var stat os.FileInfo
 	name = absoluteName(name)
 	if name == "/" {
-		return &fsDirWrapper{name: name, compat: f, stat: &fsDirInfo{name: "/"}}, nil
+		return &fsDirWrapper{name: name, compat: f, stat: &fakeRootDir{}}, nil
 	}
 	dirname := path.Dir(name)
 	if info, err := f.fs.ReadDir(dirname); err == nil {
@@ -119,10 +114,6 @@ func (f *fsCompatible) ReadDir(name string) ([]fs.DirEntry, error) {
 
 // FS converts a diskfs FileSystem to a fs.FS for compatibility with
 // other utilities
-func FS(f filesystem.FileSystem) fs.ReadDirFS {
+func FS(f FileSystem) fs.ReadDirFS {
 	return &fsCompatible{f}
-}
-
-func HTTPFS(f filesystem.FileSystem) http.FileSystem {
-	return http.FS(&fsCompatible{f})
 }
