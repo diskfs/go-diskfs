@@ -326,7 +326,7 @@ func Open(device string, opts ...OpenOpt) (*disk.Disk, error) {
 
 	f, err := os.OpenFile(device, m, 0o600)
 	if err != nil {
-		return nil, fmt.Errorf("could not open device %s exclusively for writing", device)
+		return nil, fmt.Errorf("could not open device %s with mode %v: %w", device, m, err)
 	}
 	// return our disk
 	return initDisk(f, ReadWriteExclusive, opt.sectorSize)
