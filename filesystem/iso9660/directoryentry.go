@@ -482,7 +482,22 @@ func (de *directoryEntry) Size() int64 {
 
 // Mode() FileMode     // file mode bits
 func (de *directoryEntry) Mode() os.FileMode {
+	for _, ext := range de.extensions {
+		if s, ok := ext.(rockRidgeSymlink); ok && !s.continued {
+			return 0o755 | os.ModeSymlink
+		}
+	}
 	return 0o755
+}
+
+// Readlink tries to return the target link, only valid for symlinks
+func (de *directoryEntry) ReadLink() (string, bool) {
+	for _, ext := range de.extensions {
+		if s, ok := ext.(rockRidgeSymlink); ok && !s.continued {
+			return s.name, true
+		}
+	}
+	return "", false
 }
 
 // ModTime() time.Time // modification time
