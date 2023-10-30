@@ -15,7 +15,7 @@ import (
 
 const oneMB = 10 * 1024 * 1024
 
-func tmpDisk(source string) (*os.File, error) {
+func tmpDisk(source string, padding int64) (*os.File, error) {
 	filename := "disk_test"
 	f, err := os.CreateTemp("", filename)
 	if err != nil {
@@ -35,8 +35,18 @@ func tmpDisk(source string) (*os.File, error) {
 		if err != nil {
 			return nil, fmt.Errorf("Failed to write contents of %s to %s: %v", source, filename, err)
 		}
-		if written != len(b) {
-			return nil, fmt.Errorf("wrote only %d bytes of %s to %s instead of %d", written, source, filename, len(b))
+		if padding != 0 {
+			data := make([]byte, padding) // Initialize an empty byte slice
+			writtenPadding, err := f.Write(data)
+			written += writtenPadding
+			if err != nil {
+				return nil, fmt.Errorf("Failed to write contents of %s to %s: %v", source, filename, err)
+			}
+			if written != len(b)+len(data) {
+				return nil, fmt.Errorf("Wrote only %d bytes of %s to %s instead of %d", written, source, filename, len(b))
+			}
+		} else if written != len(b) {
+			return nil, fmt.Errorf("Wrote only %d bytes of %s to %s instead of %d", written, source, filename, len(b))
 		}
 	}
 
@@ -57,8 +67,92 @@ func checkDiskfsErrs(t *testing.T, msg string, err, tterr error, d, ttd *disk.Di
 	}
 }
 
-func TestOpen(t *testing.T) {
-	f, err := tmpDisk("./partition/mbr/testdata/mbr.img")
+func TestGPTOpen(t *testing.T) {
+	f, err := tmpDisk("./partition/gpt/testdata/gpt.img", 0)
+	if err != nil {
+		t.Fatalf("Error creating new temporary disk: %v", err)
+	}
+	defer f.Close()
+	path := f.Name()
+	defer os.Remove(path)
+	fileInfo, err := f.Stat()
+	if err != nil {
+		t.Fatalf("Unable to stat temporary file %s: %v", path, err)
+	}
+	size := fileInfo.Size()
+
+	// Create a padded file, where "disk" has additional space after what the GPT table
+	// thinks should be the final sector
+	fPadded, err := tmpDisk("./partition/gpt/testdata/gpt.img", 1024*1024)
+	if err != nil {
+		t.Fatalf("Error creating new temporary disk: %v", err)
+	}
+	defer fPadded.Close()
+	filePadded := fPadded.Name()
+	defer os.Remove(path)
+	filePaddedInfo, err := fPadded.Stat()
+	if err != nil {
+		t.Fatalf("Unable to stat temporary file %s: %v", path, err)
+	}
+	filePaddedSize := filePaddedInfo.Size()
+
+	tests := []struct {
+		path string
+		disk *disk.Disk
+		err  error
+	}{
+		{"", nil, fmt.Errorf("must pass device name")},
+		{"/tmp/foo/bar/232323/23/2322/disk.img", nil, fmt.Errorf("")},
+		{path, &disk.Disk{Type: disk.File, LogicalBlocksize: 512, PhysicalBlocksize: 512, Size: size}, nil},
+		{filePadded, &disk.Disk{Type: disk.File, LogicalBlocksize: 512, PhysicalBlocksize: 512, Size: filePaddedSize}, nil},
+	}
+
+	for _, tt := range tests {
+		d, err := diskfs.Open(tt.path)
+		msg := fmt.Sprintf("Open(%s)", tt.path)
+		checkDiskfsErrs(t, msg, err, tt.err, d, tt.disk)
+		if d != nil {
+			table, err := d.GetPartitionTable()
+			if err != nil {
+				t.Errorf("%s: mismatched errors, actual %v expected %v", msg, err, tt.err)
+			}
+
+			// Verify will compare the GPT table to the disk and attempt to read the secondary header if possible
+			err = table.Verify(d.File, uint64(tt.disk.Size))
+			if err != nil {
+				// We log this as it's epected to be an error
+				t.Logf("%s: mismatched errors, actual %v expected %v", msg, err, tt.err)
+			}
+
+			// Will correct the internal structures of the primary GPT table
+			err = table.Repair(uint64(tt.disk.Size))
+			if err != nil {
+				t.Errorf("%s: mismatched errors, actual %v expected %v", msg, err, tt.err)
+			}
+
+			// Update both tables on disk
+			err = table.Write(d.File, tt.disk.Size)
+			if err != nil {
+				t.Errorf("%s: mismatched errors, actual %v expected %v", msg, err, tt.err)
+			}
+
+			// Check that things are as expected.
+			err = table.Verify(d.File, uint64(tt.disk.Size))
+			if err != nil {
+				t.Errorf("%s: mismatched errors, actual %v expected %v", msg, err, tt.err)
+			}
+		}
+	}
+
+	for i, tt := range tests {
+		d, err := diskfs.Open(tt.path, diskfs.WithOpenMode(diskfs.ReadOnly))
+		msg := fmt.Sprintf("%d: Open(%s)", i, tt.path)
+		checkDiskfsErrs(t, msg, err, tt.err, d, tt.disk)
+	}
+}
+
+func TestMBROpen(t *testing.T) {
+	f, err := tmpDisk("./partition/mbr/testdata/mbr.img", 1024*1024)
 	if err != nil {
 		t.Fatalf("error creating new temporary disk: %v", err)
 	}

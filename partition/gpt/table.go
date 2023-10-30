@@ -347,15 +347,9 @@ func readPartitionArrayBytes(b []byte, entrySize, logicalSectorSize, physicalSec
 	return parts, nil
 }
 
-// tableFromBytes read a partition table from a byte slice
-func tableFromBytes(b []byte, logicalBlockSize, physicalBlockSize int) (*Table, error) {
-	// minimum size - gpt entries + header + LBA0 for (protective) MBR
-	if len(b) < logicalBlockSize*2 {
-		return nil, fmt.Errorf("data for partition was %d bytes instead of expected minimum %d", len(b), logicalBlockSize*2)
-	}
-
-	// GPT starts at LBA1
-	gpt := b[logicalBlockSize:]
+// readGPTHeader reads the GPT header from the given byte slice
+func readGPTHeader(b []byte) (*Table, error) {
+	gpt := b
 	// start with fixed headers
 	efiSignature := gpt[0:8]
 	efiRevision := gpt[8:12]
@@ -396,12 +390,7 @@ func tableFromBytes(b []byte, logicalBlockSize, physicalBlockSize int) (*Table, 
 		return nil, fmt.Errorf("invalid EFI Header Checksum, expected %v, got %v", checksum, efiHeaderCrc)
 	}
 
-	// potential protective MBR is at LBA0
-	hasProtectiveMBR := readProtectiveMBR(b[:logicalBlockSize], uint32(secondaryHeader))
-
 	table := Table{
-		LogicalSectorSize:      logicalBlockSize,
-		PhysicalSectorSize:     physicalBlockSize,
 		partitionEntrySize:     partitionEntrySize,
 		primaryHeader:          primaryHeader,
 		secondaryHeader:        secondaryHeader,
@@ -409,13 +398,61 @@ func tableFromBytes(b []byte, logicalBlockSize, physicalBlockSize int) (*Table, 
 		lastDataSector:         lastDataSector,
 		partitionArraySize:     int(partitionEntryCount),
 		partitionFirstLBA:      partitionEntryFirstLBA,
-		ProtectiveMBR:          hasProtectiveMBR,
 		GUID:                   strings.ToUpper(diskGUID.String()),
 		partitionEntryChecksum: partitionEntryChecksum,
-		initialized:            true,
 	}
 
 	return &table, nil
+}
+
+// tableHeaderFromBytes read a partition table from a byte slice, mainly used to validate the secondary header
+func tableHeaderFromBytes(b []byte, logicalBlockSize, physicalBlockSize int, skipMBR bool) (*Table, error) {
+	// minimum size - gpt entries + header + LBA0 for (protective) MBR
+	minSize := logicalBlockSize
+	if len(b) < minSize {
+		return nil, fmt.Errorf("data for partition was %d bytes instead of expected minimum %d", len(b), minSize)
+	}
+	gpt := b
+	if skipMBR {
+		gpt = b[logicalBlockSize:]
+	}
+
+	table, err := readGPTHeader(gpt)
+	if err != nil {
+		return nil, err
+	}
+
+	// potential protective MBR is at LBA0
+	table.ProtectiveMBR = readProtectiveMBR(b[:logicalBlockSize], uint32(table.secondaryHeader))
+	table.LogicalSectorSize = logicalBlockSize
+	table.PhysicalSectorSize = physicalBlockSize
+	table.initialized = true
+
+	return table, nil
+}
+
+// tableFromBytes read a partition table from a byte slice
+func tableFromBytes(b []byte, logicalBlockSize, physicalBlockSize int) (*Table, error) {
+	// minimum size - gpt entries + header + LBA0 for (protective) MBR
+	if len(b) < logicalBlockSize*2 {
+		return nil, fmt.Errorf("data for partition was %d bytes instead of expected minimum %d", len(b), logicalBlockSize*2)
+	}
+
+	// GPT starts at LBA1
+	gpt := b[logicalBlockSize:]
+
+	table, err := readGPTHeader(gpt)
+	if err != nil {
+		return nil, err
+	}
+
+	// potential protective MBR is at LBA0
+	table.ProtectiveMBR = readProtectiveMBR(b[:logicalBlockSize], uint32(table.secondaryHeader))
+	table.LogicalSectorSize = logicalBlockSize
+	table.PhysicalSectorSize = physicalBlockSize
+	table.initialized = true
+
+	return table, nil
 }
 
 // Type report the type of table, always "gpt"
@@ -549,4 +586,34 @@ func (t *Table) GetPartitions() []part.Partition {
 		parts[i] = p
 	}
 	return parts
+}
+
+// Verify will attempt to evaluate the headers
+func (t *Table) Verify(f util.File, diskSize uint64) error {
+	// Determine the size of disk that GPT expects
+	expectedDiskSize := (t.secondaryHeader + 1) * uint64(t.LogicalSectorSize)
+	if diskSize != expectedDiskSize {
+		return fmt.Errorf("secondary Header is not at end of the disk, expected =>  %d / actual => %d", expectedDiskSize, diskSize)
+	}
+	b := make([]byte, t.LogicalSectorSize)
+	seekAddress := int64(t.secondaryHeader) * int64(t.LogicalSectorSize)
+	_, err := f.ReadAt(b, seekAddress)
+	if err != nil {
+		return fmt.Errorf("error reading GPT from file at %d / disksize %d : %v", seekAddress, diskSize, err)
+	}
+	secondaryTable, err := tableHeaderFromBytes(b, t.LogicalSectorSize, t.PhysicalSectorSize, false)
+	if err != nil {
+		return fmt.Errorf("error reading GPT from file at %d / disksize %d : %v", seekAddress, diskSize, err)
+	}
+	if t.firstDataSector != secondaryTable.firstDataSector {
+		return fmt.Errorf("error comparing GPT headers expected =>  %d / actual => %d", t.firstDataSector, secondaryTable.firstDataSector)
+	}
+	return nil
+}
+
+// Repair will attempt to evaluate the headers fix the header location and re-write the primary and secondary header
+func (t *Table) Repair(diskSize uint64) error {
+	t.secondaryHeader = (diskSize / uint64(t.LogicalSectorSize)) - 1
+
+	return nil
 }
