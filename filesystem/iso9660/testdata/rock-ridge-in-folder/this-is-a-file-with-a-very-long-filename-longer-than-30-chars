@@ -1,0 +1,1 @@
+iso9660 only supports filenames up to 30 characters. Rock Ridge supports filenames up to 255 characters.
