@@ -10,9 +10,12 @@ import (
 	"io"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/diskfs/go-diskfs"
+	"github.com/diskfs/go-diskfs/disk"
 	"github.com/diskfs/go-diskfs/filesystem"
 	"github.com/diskfs/go-diskfs/filesystem/iso9660"
 )
@@ -479,12 +482,12 @@ func TestIso9660OpenFile(t *testing.T) {
 			}
 			for i, tt := range tests {
 				for _, fs := range []*iso9660.FileSystem{fsTemp, fsUser} {
-					filepath := path.Join(fs.Workspace(), tt.path)
+					fullpath := path.Join(fs.Workspace(), tt.path)
 					// remove any old file if it exists - ignore errors
-					_ = os.Remove(filepath)
+					_ = os.Remove(fullpath)
 					// if the file is supposed to exist, create it and add its contents
 					if tt.mode&os.O_CREATE != os.O_CREATE {
-						_ = os.WriteFile(filepath, []byte(baseContent), 0o600)
+						_ = os.WriteFile(fullpath, []byte(baseContent), 0o600)
 					}
 					header := fmt.Sprintf("%d: OpenFile(%s, %s, %t)", i, tt.path, getOpenMode(tt.mode), tt.beginning)
 					readWriter, err := fs.OpenFile(tt.path, tt.mode)
@@ -537,5 +540,104 @@ func TestIso9660OpenFile(t *testing.T) {
 }
 
 func TestIso9660Finalize(t *testing.T) {
+	var createISOFilesystem = func(inDir, outputFileName string, rockRidge bool) error {
+		var LogicalBlocksize diskfs.SectorSize = 2048
 
+		// Create the disk image
+		// TODO: Explain why we need to use Raw here
+		mydisk, err := diskfs.Create(outputFileName, 100*1024, diskfs.Raw, LogicalBlocksize)
+		if err != nil {
+			return err
+		}
+
+		// Create the ISO filesystem on the disk image
+		fspec := disk.FilesystemSpec{
+			Partition:   0,
+			FSType:      filesystem.TypeISO9660,
+			VolumeLabel: "label",
+		}
+		fs, err := mydisk.CreateFilesystem(fspec)
+		if err != nil {
+			return err
+		}
+
+		// Walk the source folder to copy all files and folders to the ISO filesystem
+		err = filepath.Walk(inDir, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+
+			relPath, err := filepath.Rel(inDir, path)
+			if err != nil {
+				return err
+			}
+
+			// If the current path is a folder, create the folder in the ISO filesystem
+			if info.IsDir() {
+				// Create the directory in the ISO file
+				err = fs.Mkdir(relPath)
+				if err != nil {
+					return err
+				}
+				return nil
+			}
+
+			// If the current path is a file, copy the file to the ISO filesystem
+			if !info.IsDir() {
+				// Open the file in the ISO file for writing
+				rw, err := fs.OpenFile(relPath, os.O_CREATE|os.O_RDWR)
+				if err != nil {
+					return err
+				}
+
+				// Open the source file for reading
+				in, errorOpeningFile := os.Open(path)
+				if errorOpeningFile != nil {
+					return errorOpeningFile
+				}
+				defer in.Close()
+
+				// Copy the contents of the source file to the ISO file
+				_, err = io.Copy(rw, in)
+				if err != nil {
+					return err
+				}
+			}
+
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+
+		iso, ok := fs.(*iso9660.FileSystem)
+		if !ok {
+			return fmt.Errorf("not an iso9660 filesystem")
+		}
+		opts := iso9660.FinalizeOptions{}
+		if rockRidge {
+			opts.RockRidge = true
+		}
+		return iso.Finalize(opts)
+	}
+	tests := []struct {
+		name           string
+		inDir          string
+		outputFileName string
+		rockRidge      bool
+	}{
+		{"normal", "testdata/iso-in-folder", "iso-image.iso", false},
+		{"rock ridge", "testdata/rock-ridge-in-folder", "rock-ridge-image.iso", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := os.TempDir()
+			outfile := path.Join(tmpDir, tt.outputFileName)
+			defer os.RemoveAll(outfile)
+			err := createISOFilesystem(tt.inDir, outfile, tt.rockRidge)
+			if err != nil {
+				t.Errorf("Failed to create ISO filesystem: %v", err)
+			}
+		})
+	}
 }
