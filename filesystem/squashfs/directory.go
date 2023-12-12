@@ -64,8 +64,8 @@ func parseDirectory(b []byte) (*directory, error) {
 		if err != nil {
 			return nil, fmt.Errorf("could not parse directory header: %v", err)
 		}
-		if directoryHeader.count+1 > maxDirEntries {
-			return nil, fmt.Errorf("corrupted directory, had %d entries instead of max %d", directoryHeader.count+1, maxDirEntries)
+		if directoryHeader.count > maxDirEntries {
+			return nil, fmt.Errorf("corrupted directory, had %d entries instead of max %d", directoryHeader.count, maxDirEntries)
 		}
 		pos += dirHeaderSize
 		for count := uint32(0); count < directoryHeader.count; count++ {
