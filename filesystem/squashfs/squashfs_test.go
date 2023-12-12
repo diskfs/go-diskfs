@@ -1,6 +1,7 @@
 package squashfs_test
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"os"
@@ -291,6 +292,71 @@ func TestSquashfsRead(t *testing.T) {
 			}
 			// we do not match the filesystems here, only check functional accuracy
 		})
+	}
+}
+
+// Check the directory listing is correct
+func TestSquashfsCheckListing(t *testing.T) {
+	// read the directory listing in
+	var listing = map[string]struct{}{}
+	flist, err := os.Open(squashfs.SquashfsfileListing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer flist.Close()
+	scanner := bufio.NewScanner(flist)
+	for scanner.Scan() {
+		line := scanner.Text()
+		line = strings.TrimPrefix(line, ".")
+		if line == "/" {
+			continue
+		}
+		listing[line] = struct{}{}
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Open the squash file
+	f, err := os.Open(squashfs.Squashfsfile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	fi, err := f.Stat()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// create the filesystem
+	fs, err := squashfs.Read(f, fi.Size(), 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var list func(dir string)
+	list = func(dir string) {
+		fis, err := fs.ReadDir(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, fi := range fis {
+			p := path.Join(dir, fi.Name())
+			if _, found := listing[p]; found {
+				delete(listing, p)
+			} else {
+				t.Errorf("Found unexpected path %q in listing", p)
+			}
+			if fi.IsDir() {
+				list(p)
+			}
+		}
+	}
+
+	list("/")
+
+	// listing should be empty now
+	for p := range listing {
+		t.Errorf("Didn't find %q in listing", p)
 	}
 }
 
