@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/klauspost/compress/zstd"
 	"github.com/pierrec/lz4/v4"
 	"github.com/ulikunitz/xz"
 	"github.com/ulikunitz/xz/lzma"
@@ -328,6 +329,32 @@ func (c *CompressorZstd) optionsBytes() []byte {
 func (c *CompressorZstd) flavour() compression {
 	return compressionZstd
 }
+func (c *CompressorZstd) compress(in []byte) ([]byte, error) {
+	var b bytes.Buffer
+	z, err := zstd.NewWriter(&b)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create zstd compressor: %w", err)
+	}
+	if _, err := z.Write(in); err != nil {
+		return nil, err
+	}
+	if err := z.Close(); err != nil {
+		return nil, err
+	}
+	return b.Bytes(), nil
+}
+func (c *CompressorZstd) decompress(in []byte) ([]byte, error) {
+	z, err := zstd.NewReader(nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create zstd decompressor: %w", err)
+	}
+	defer z.Close()
+	p, err := z.DecodeAll(in, nil)
+	if err != nil {
+		return nil, fmt.Errorf("error decompressing zstd: %w", err)
+	}
+	return p, nil
+}
 
 func newCompressor(flavour compression) (Compressor, error) {
 	var c Compressor
@@ -345,7 +372,7 @@ func newCompressor(flavour compression) (Compressor, error) {
 	case compressionLz4:
 		c = &CompressorLz4{}
 	case compressionZstd:
-		return nil, fmt.Errorf("zstd compression not yet supported")
+		c = &CompressorZstd{}
 	default:
 		return nil, fmt.Errorf("unknown compression type: %d", flavour)
 	}

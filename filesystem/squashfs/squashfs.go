@@ -147,7 +147,7 @@ func Read(file util.File, size, start, blocksize int64) (*FileSystem, error) {
 	// create the compressor function we will use
 	compress, err := newCompressor(s.compression)
 	if err != nil {
-		return nil, fmt.Errorf("unable to create compressor")
+		return nil, fmt.Errorf("unable to create compressor: %v", err)
 	}
 
 	// load fragments
