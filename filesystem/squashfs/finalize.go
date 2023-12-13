@@ -750,7 +750,7 @@ func writeDirectories(dirs []*finalizeFileInfo, f util.File, compressor Compress
 
 // writeFragmentTable write the fragment table
 //
-//nolint:unparam // this does not use fragmentBlocksStart yet, but only because we have not yet added support
+//nolint:unparam,unused,revive // this does not use fragmentBlocksStart yet, but only because we have not yet added support
 func writeFragmentTable(fragmentBlocks []fragmentBlock, fragmentBlocksStart int64, f util.File, compressor Compressor, location int64) (fragmentsWritten int, finalLocation uint64, err error) {
 	// now write the actual fragment table entries
 	var (

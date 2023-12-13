@@ -18,6 +18,8 @@ func (c *testCompressorAddBytes) decompress(b []byte) ([]byte, error) {
 	}
 	return append(b, c.b...), nil
 }
+
+//nolint:unused,revive // it is important to implement the interface
 func (c *testCompressorAddBytes) loadOptions(b []byte) error {
 	return nil
 }

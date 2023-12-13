@@ -379,6 +379,7 @@ func TestSquashfsReadDirXattr(t *testing.T) {
 	}
 }
 
+//nolint:unused,revive // keep for future when we implement it and will need t
 func TestFinalize(t *testing.T) {
 
 }

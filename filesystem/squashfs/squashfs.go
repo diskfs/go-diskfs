@@ -704,7 +704,7 @@ func readXattrsTable(s *superblock, file util.File, c Compressor) (*xAttrTable, 
 	return parseXattrsTable(xAttrData, bIndex, s.idTableStart, c)
 }
 
-//nolint:unparam // this does not use offset or compressor yet, but only because we have not yet added support
+//nolint:unparam,unused,revive // this does not use offset or compressor yet, but only because we have not yet added support
 func parseXattrsTable(bUIDXattr, bIndex []byte, offset uint64, c Compressor) (*xAttrTable, error) {
 	// create the ID list
 	var (

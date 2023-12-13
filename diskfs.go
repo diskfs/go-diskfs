@@ -335,7 +335,7 @@ func Open(device string, opts ...OpenOpt) (*disk.Disk, error) {
 // Create a Disk from a path to a device
 // Should pass a path to a block device e.g. /dev/sda or a path to a file /tmp/foo.img
 // The provided device must not exist at the time you call Create()
-func Create(device string, size int64, format Format, sectorSize SectorSize) (*disk.Disk, error) {
+func Create(device string, size int64, _ Format, sectorSize SectorSize) (*disk.Disk, error) {
 	if device == "" {
 		return nil, errors.New("must pass device name")
 	}

@@ -189,9 +189,8 @@ func dirEntryExtensionsToBytes(extensions []directoryEntrySystemUseExtension, ma
 			}
 			b = append(b, ce.Bytes()...)
 			break
-		} else {
-			b = append(b, b2...)
 		}
+		b = append(b, b2...)
 	}
 	ret = append(ret, b)
 	if len(continuedBytes) > 0 {
