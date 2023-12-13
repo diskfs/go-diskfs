@@ -42,9 +42,9 @@ func (fl *File) Read(b []byte) (int, error) {
 	//      e.g. if starting block is at position 10245, then we want blocks 27,28,29 from the disk
 	// 5- read in and uncompress the necessary blocks
 	fs := fl.filesystem
-	size := int(fl.size()) - int(fl.offset)
+	size := fl.size() - fl.offset
 	location := int64(fl.startBlock)
-	maxRead := size
+	maxRead := len(b)
 
 	// if there is nothing left to read, just return EOF
 	if size <= 0 {
@@ -54,14 +54,14 @@ func (fl *File) Read(b []byte) (int, error) {
 	// we stop when we hit the lesser of
 	//   1- len(b)
 	//   2- file end
-	if len(b) < maxRead {
-		maxRead = len(b)
+	if size < int64(maxRead) {
+		maxRead = int(size)
 	}
 
 	// just read the requested number of bytes and change our offset
 	// figure out which block number has the bytes we are looking for
 	startBlock := int(fl.offset / fs.blocksize)
-	endBlock := int((fl.offset + int64(maxRead)) / fs.blocksize)
+	endBlock := int((fl.offset + int64(maxRead) - 1) / fs.blocksize)
 
 	// do we end in fragment territory?
 	fragments := false
@@ -71,10 +71,27 @@ func (fl *File) Read(b []byte) (int, error) {
 	}
 
 	read := 0
-	offset := fl.offset
+	offsetEnd := fl.offset + int64(maxRead)
+	pos := int64(0)
+
+	// send input to b, clipping as appropriate
+	outputBlock := func(input []byte) {
+		inputSize := int64(len(input))
+		start := fl.offset - pos
+		end := offsetEnd - pos
+		if start >= 0 && start < inputSize {
+			if end > inputSize {
+				end = inputSize
+			}
+			n := copy(b[read:], input[start:end])
+			read += n
+			fl.offset += int64(n)
+		}
+	}
+
 	// we need to cycle through all of the blocks to find where the desired one starts
 	for i, block := range fl.blockSizes {
-		if i > endBlock || read > maxRead {
+		if i > endBlock || read >= maxRead {
 			break
 		}
 		// if we are in the range of desired ones, read it in
@@ -83,29 +100,31 @@ func (fl *File) Read(b []byte) (int, error) {
 			if err != nil {
 				return read, fmt.Errorf("error reading data block %d from squashfs: %v", i, err)
 			}
-			// we do not need to limit it to the remaining space of b, since copy() only will copy
-			//   to what space it has in b
-			copy(b[read:], input[offset:])
-			read += len(input)
-			fl.offset += int64(read)
-			offset = 0
+			outputBlock(input)
 		}
 		location += int64(block.size)
+		pos += fs.blocksize
 	}
+
 	// did we have a fragment to read?
-	if fragments {
+	if read < maxRead && fragments {
+		if fl.fragmentBlockIndex == 0xffffffff {
+			return read, fmt.Errorf("expecting fragment to read %d bytes but no fragment found", maxRead-read)
+		}
 		input, err := fs.readFragment(fl.fragmentBlockIndex, fl.fragmentOffset, fl.size()%fs.blocksize)
 		if err != nil {
 			return read, fmt.Errorf("error reading fragment block %d from squashfs: %v", fl.fragmentBlockIndex, err)
 		}
-		copy(b[read:], input)
+		pos = int64(len(fl.blockSizes)) * fs.blocksize
+		outputBlock(input)
 	}
-	fl.offset += int64(maxRead)
 	var retErr error
-	if fl.offset >= int64(size) {
+	if fl.offset >= fl.size() {
 		retErr = io.EOF
+	} else if read == 0 {
+		retErr = fmt.Errorf("internal error: read no bytes")
 	}
-	return maxRead, retErr
+	return read, retErr
 }
 
 // Write writes len(b) bytes to the File.
