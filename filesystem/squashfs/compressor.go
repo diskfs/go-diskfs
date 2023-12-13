@@ -51,6 +51,8 @@ func (c *CompressorLzma) decompress(in []byte) ([]byte, error) {
 	}
 	return p, nil
 }
+
+//nolint:unused,revive // it is important to implement the interface
 func (c *CompressorLzma) loadOptions(b []byte) error {
 	// lzma has no supported optiosn
 	return nil

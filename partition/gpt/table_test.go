@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	. "github.com/diskfs/go-diskfs/partition/gpt"
+	"github.com/diskfs/go-diskfs/partition/gpt"
 	"github.com/diskfs/go-diskfs/testhelper"
 )
 
@@ -94,7 +94,7 @@ func compareGPTBytes(b1, b2 []byte) bool {
 
 func TestTableType(t *testing.T) {
 	expected := "gpt"
-	table := GetValidTable()
+	table := gpt.GetValidTable()
 	tableType := table.Type()
 	if tableType != expected {
 		t.Errorf("Type() returned unexpected table type, actual %s expected %s", tableType, expected)
@@ -109,7 +109,7 @@ func TestTableRead(t *testing.T) {
 				return 0, errors.New(expected)
 			},
 		}
-		table, err := Read(f, 512, 512)
+		table, err := gpt.Read(f, 512, 512)
 		if table != nil {
 			t.Errorf("returned table instead of nil")
 		}
@@ -128,7 +128,7 @@ func TestTableRead(t *testing.T) {
 				return size, nil
 			},
 		}
-		table, err := Read(f, 512, 512)
+		table, err := gpt.Read(f, 512, 512)
 		if table != nil {
 			t.Errorf("returned table instead of nil")
 		}
@@ -144,14 +144,14 @@ func TestTableRead(t *testing.T) {
 		if err != nil {
 			t.Fatalf("error opening file %s to read: %v", gptFile, err)
 		}
-		table, err := Read(f, 512, 512)
+		table, err := gpt.Read(f, 512, 512)
 		if table == nil {
 			t.Errorf("returned nil instead of table")
 		}
 		if err != nil {
 			t.Errorf("returned error %v instead of nil", err)
 		}
-		expected := GetValidTable()
+		expected := gpt.GetValidTable()
 		if table == nil || !table.Equal(expected) {
 			t.Errorf("actual table was %v instead of expected %v", table, expected)
 		}
@@ -161,7 +161,7 @@ func TestTableRead(t *testing.T) {
 //nolint:gocyclo // we really do not care about the cyclomatic complexity of a test function. Maybe someday we will improve it.
 func TestTableWrite(t *testing.T) {
 	t.Run("error writing file", func(t *testing.T) {
-		table := GetValidTable()
+		table := gpt.GetValidTable()
 		expected := "error writing protective MBR to disk"
 		f := &testhelper.FileImpl{
 			Writer: func(b []byte, offset int64) (int, error) {
@@ -177,7 +177,7 @@ func TestTableWrite(t *testing.T) {
 		}
 	})
 	t.Run("insufficient data written", func(t *testing.T) {
-		table := GetValidTable()
+		table := gpt.GetValidTable()
 		var size int
 		f := &testhelper.FileImpl{
 			Writer: func(b []byte, offset int64) (int, error) {
@@ -195,17 +195,17 @@ func TestTableWrite(t *testing.T) {
 		}
 	})
 	t.Run("successful write", func(t *testing.T) {
-		table := GetValidTable()
-		gpt, err := os.Open(gptFile)
+		table := gpt.GetValidTable()
+		gptFileRef, err := os.Open(gptFile)
 		if err != nil {
 			t.Fatalf("unable to open gpt file: %v", err)
 		}
-		defer gpt.Close()
+		defer gptFileRef.Close()
 		if err != nil {
 			t.Fatalf("error opening file %s: %v", gptFile, err)
 		}
 		firstBytes := make([]byte, gptSize+512*2)
-		firstRead, err := gpt.ReadAt(firstBytes, 0)
+		firstRead, err := gptFileRef.ReadAt(firstBytes, 0)
 		if err != nil {
 			t.Fatalf("error reading primary header from file %s: %v", gptFile, err)
 		}
@@ -270,9 +270,9 @@ func TestTableWrite(t *testing.T) {
 		// make it a 5MB partition
 		partitionEnd := uint64(5*1024*1024/sectorSize) + partitionStart
 		name := "EFI System Tester"
-		table := &Table{
-			Partitions: []*Partition{
-				{Start: partitionStart, End: partitionEnd, Type: EFISystemPartition, Name: name},
+		table := &gpt.Table{
+			Partitions: []*gpt.Partition{
+				{Start: partitionStart, End: partitionEnd, Type: gpt.EFISystemPartition, Name: name},
 			},
 			LogicalSectorSize: sectorSize,
 			ProtectiveMBR:     true,
@@ -322,8 +322,8 @@ func TestTableWrite(t *testing.T) {
 			switch {
 			case len(partitionType) < 2:
 				t.Errorf("unable to retrieve partition type %v", partitionType)
-			case partitionType[1] != string(EFISystemPartition):
-				t.Errorf("Mismatched partition type, actual %s expected %s", partitionType[1], EFISystemPartition)
+			case partitionType[1] != string(gpt.EFISystemPartition):
+				t.Errorf("Mismatched partition type, actual %s expected %s", partitionType[1], gpt.EFISystemPartition)
 			}
 
 			switch {
@@ -357,7 +357,7 @@ func TestTableWrite(t *testing.T) {
 	})
 }
 func TestGetPartitionSize(t *testing.T) {
-	table := GetValidTable()
+	table := gpt.GetValidTable()
 	request := 0
 	size := table.Partitions[request].GetSize()
 	expected := int64(table.Partitions[request].Size)
@@ -366,7 +366,7 @@ func TestGetPartitionSize(t *testing.T) {
 	}
 }
 func TestGetPartitionStart(t *testing.T) {
-	table := GetValidTable()
+	table := gpt.GetValidTable()
 	maxPart := len(table.Partitions)
 	request := maxPart - 1
 	start := table.Partitions[request].GetStart()
@@ -376,7 +376,7 @@ func TestGetPartitionStart(t *testing.T) {
 	}
 }
 func TestReadPartitionContents(t *testing.T) {
-	table := GetValidTable()
+	table := gpt.GetValidTable()
 	maxPart := len(table.Partitions)
 	request := maxPart - 1
 	var b bytes.Buffer
@@ -405,7 +405,7 @@ func TestReadPartitionContents(t *testing.T) {
 	}
 }
 func TestWritePartitionContents(t *testing.T) {
-	table := GetValidTable()
+	table := gpt.GetValidTable()
 	request := 0
 	size := table.Partitions[request].Size
 	b := make([]byte, size)

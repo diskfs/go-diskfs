@@ -120,6 +120,8 @@ func (t *Table) Type() string {
 }
 
 // Read read a partition table from a disk, given the logical block size and physical block size
+//
+//nolint:unused,revive // not used in MBR, but it is important to implement the interface
 func Read(f util.File, logicalBlockSize, physicalBlockSize int) (*Table, error) {
 	// read the data off of the disk
 	b := make([]byte, mbrSize)
@@ -155,6 +157,8 @@ func (t *Table) toBytes() []byte {
 
 // Write writes a given MBR Table to disk.
 // Must be passed the util.File to write to and the size of the disk
+//
+//nolint:unused,revive // not used in MBR, but it is important to implement the interface
 func (t *Table) Write(f util.File, size int64) error {
 	b := t.toBytes()
 
@@ -178,11 +182,15 @@ func (t *Table) GetPartitions() []part.Partition {
 }
 
 // Verify will attempt to evaluate the headers
+//
+//nolint:unused,revive // not used in MBR, but it is important to implement the interface
 func (t *Table) Verify(f util.File, diskSize uint64) error {
 	return nil
 }
 
 // Repair will attempt to repair a broken Master Boot Record
+//
+//nolint:unused,revive // not used in MBR, but it is important to implement the interface
 func (t *Table) Repair(diskSize uint64) error {
 	return nil
 }

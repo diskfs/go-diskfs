@@ -111,6 +111,8 @@ func (fl *File) Read(b []byte) (int, error) {
 // Write writes len(b) bytes to the File.
 //
 //	you cannot write to a finished squashfs, so this returns an error
+//
+//nolint:unused,revive // but it is important to implement the interface
 func (fl *File) Write(p []byte) (int, error) {
 	return 0, fmt.Errorf("cannot write to a read-only squashfs filesystem")
 }

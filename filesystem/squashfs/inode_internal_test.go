@@ -22,7 +22,8 @@ type inodeTestImpl struct {
 func (i *inodeTestImpl) toBytes() []byte {
 	return nil
 }
-func (i *inodeTestImpl) equal(o inode) bool {
+
+func (i *inodeTestImpl) equal(_ inode) bool {
 	return false
 }
 func (i *inodeTestImpl) size() int64 {
@@ -191,6 +192,7 @@ func TestBasicDirectory(t *testing.T) {
 	})
 }
 
+//nolint:unused,revive // keep for future when we implement it and will need t
 func TestExtendedDirectory(t *testing.T) {
 	// do some day when we have good raw data
 
@@ -381,6 +383,7 @@ func TestBasicSymlink(t *testing.T) {
 	})
 }
 
+//nolint:unused,revive // keep for future when we implement it and will need t
 func TestExtendedSymlink(t *testing.T) {
 	// when we have more data with which to work
 
@@ -389,6 +392,7 @@ func TestExtendedSymlink(t *testing.T) {
 	// func parseExtendedSymlink(b []byte) (*extendedSymlink, error) {
 }
 
+//nolint:unused,revive // keep for future when we implement it and will need t
 func TestBasicDevice(t *testing.T) {
 	// when we have more data with which to work
 
@@ -397,6 +401,7 @@ func TestBasicDevice(t *testing.T) {
 	// func parseBasicDevice(b []byte) (*basicDevice, error) {
 }
 
+//nolint:unused,revive // keep for future when we implement it and will need t
 func TestExtendedDevice(t *testing.T) {
 	// when we have more data with which to work
 
@@ -406,6 +411,7 @@ func TestExtendedDevice(t *testing.T) {
 
 }
 
+//nolint:unused,revive // keep for future when we implement it and will need t
 func TestBasicIPC(t *testing.T) {
 	// when we have more data with which to work
 
@@ -414,6 +420,7 @@ func TestBasicIPC(t *testing.T) {
 	// func parseBasicIPC(b []byte) (*basicIPC, error) {
 }
 
+//nolint:unused,revive // keep for future when we implement it and will need t
 func TestExtendedIPC(t *testing.T) {
 	// when we have more data with which to work
 

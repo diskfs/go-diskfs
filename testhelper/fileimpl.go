@@ -23,6 +23,8 @@ func (f *FileImpl) WriteAt(b []byte, offset int64) (int, error) {
 }
 
 // Seek seek a particular offset - does not actually work
+//
+//nolint:unused,revive // to implement the interface
 func (f *FileImpl) Seek(offset int64, whence int) (int64, error) {
 	return 0, fmt.Errorf("FileImpl does not implement Seek()")
 }
