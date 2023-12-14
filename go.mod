@@ -13,3 +13,5 @@ require (
 	golang.org/x/sys v0.5.0
 	gopkg.in/djherbis/times.v1 v1.3.0
 )
+
+require github.com/klauspost/compress v1.17.4 // indirect
