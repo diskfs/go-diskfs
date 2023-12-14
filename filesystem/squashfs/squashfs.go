@@ -160,7 +160,7 @@ func Read(file util.File, size, start, blocksize int64) (*FileSystem, error) {
 	var (
 		xattrs *xAttrTable
 	)
-	if !s.noXattrs {
+	if !s.noXattrs && s.xattrTableStart != 0xffff_ffff_ffff_ffff {
 		// xattr is right to the end of the disk
 		xattrs, err = readXattrsTable(s, file, compress)
 		if err != nil {
