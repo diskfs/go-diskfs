@@ -96,6 +96,9 @@ func (fl *File) Read(b []byte) (int, error) {
 		}
 		// if we are in the range of desired ones, read it in
 		if i >= startBlock {
+			if int64(block.size) > fs.blocksize {
+				return read, fmt.Errorf("unexpected block.size=%d > fs.blocksize=%d", block.size, fs.blocksize)
+			}
 			input, err := fs.readBlock(location, block.compressed, block.size)
 			if err != nil {
 				return read, fmt.Errorf("error reading data block %d from squashfs: %v", i, err)
