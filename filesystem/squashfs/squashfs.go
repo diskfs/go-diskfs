@@ -517,6 +517,10 @@ func (fs *FileSystem) getDirectory(blockOffset uint32, byteOffset uint16, size i
 }
 
 func (fs *FileSystem) readBlock(location int64, compressed bool, size uint32) ([]byte, error) {
+	// Zero size is a sparse block of blocksize
+	if size == 0 {
+		return make([]byte, fs.superblock.blocksize), nil
+	}
 	b := make([]byte, size)
 	read, err := fs.file.ReadAt(b, location)
 	if err != nil && err != io.EOF {
