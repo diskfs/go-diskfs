@@ -180,7 +180,7 @@ func Read(file util.File, size, start, blocksize int64) (*FileSystem, error) {
 		size:       size,
 		file:       file,
 		superblock: s,
-		blocksize:  blocksize,
+		blocksize:  int64(s.blocksize), // use the blocksize in the superblock
 		xattrs:     xattrs,
 		compressor: compress,
 		fragments:  fragments,
