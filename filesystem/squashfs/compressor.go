@@ -110,6 +110,9 @@ func (c *CompressorGzip) decompress(in []byte) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error decompressing: %v", err)
 	}
+	if err := gz.Close(); err != nil {
+		return nil, err
+	}
 	return p, nil
 }
 
