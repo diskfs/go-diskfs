@@ -25,4 +25,7 @@ mksquashfs . /data/file.sqs
 
 # uncompressed version
 mksquashfs . /data/file_uncompressed.sqs -noI -noD -noF
+
+# create listing to check
+find . > /data/list.txt
 EOF

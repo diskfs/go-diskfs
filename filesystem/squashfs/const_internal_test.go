@@ -16,6 +16,7 @@ import (
 const (
 	Squashfsfile             = "./testdata/file.sqs"
 	SquashfsUncompressedfile = "./testdata/file_uncompressed.sqs"
+	SquashfsfileListing      = "./testdata/list.txt"
 )
 
 // first header

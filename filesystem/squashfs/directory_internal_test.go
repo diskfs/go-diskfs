@@ -26,6 +26,9 @@ var (
 	testDirectory = &directory{
 		entries: testDirectoryEntries,
 	}
+	testDirectoryTableWithNoEntries = []byte{
+		0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+	}
 )
 
 func TestParseDirectoryHeader(t *testing.T) {
@@ -115,7 +118,8 @@ func TestParseDirectory(t *testing.T) {
 		err error
 	}{
 		{testDirectoryTable, testDirectory, nil},
-		{testDirectoryTable[:10], nil, fmt.Errorf("could not parse directory header: header was 10 bytes, less than minimum 12")},
+		{testDirectoryTable[:10], &directory{}, nil},
+		{testDirectoryTableWithNoEntries, nil, fmt.Errorf("corrupted directory, must have at least one entry")},
 	}
 	for i, tt := range tests {
 		dir, err := parseDirectory(tt.b)
