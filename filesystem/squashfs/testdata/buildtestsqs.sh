@@ -1,5 +1,7 @@
 #!/bin/sh
 set -e
+rm -f file.sqs file_uncompressed.sqs list.txt
+
 cat << "EOF" | docker run -i --rm -v $PWD:/data alpine:3.11
 set -e
 apk --update add squashfs-tools coreutils attr
@@ -29,3 +31,45 @@ mksquashfs . /data/file_uncompressed.sqs -noI -noD -noF
 # create listing to check
 find . > /data/list.txt
 EOF
+
+rm -f read_test.sqs read_test.md5sums
+
+# We use a newer alpine here because mksquashfs has a bug which is
+# triggered in 3.11!
+
+cat << "EOF" | docker run -i --rm -v $PWD:/data alpine:3.19
+set -e
+apk --update add squashfs-tools coreutils attr
+mkdir -p /build
+cd /build
+
+touch empty
+truncate -s 1 small-zero
+echo -n "x" > small-random
+truncate -s 10 small-zero-10
+echo -n "randomdata" > small-random-10
+
+dd if=/dev/zero of=zeros bs=1M count=1
+cp -av zeros zeros-minus
+truncate -s 1048575 zeros-minus
+cp -av zeros zeros-plus
+truncate -s 1048577 zeros-plus
+
+dd if=/dev/urandom of=random bs=1M count=1
+cp -av random random-minus
+truncate -s 1048575 random-minus
+cp -av random random-zero-tail
+truncate -s 1048586 random-zero-tail
+cp -av random random-plus
+echo -n "randomdata" >> random-plus
+
+dd if=/dev/urandom bs=1k count=16 | hd > compressible-small
+dd if=/dev/urandom bs=1k count=192 | hd > compressible-large
+
+# compressed version
+mksquashfs . /data/read_test.sqs
+
+# create md5sums check file
+find . -type f -exec sh -c 'md=$(md5sum "$0"); size=$(wc -c <"$0"); echo ${md} ${size}' {} \; > /data/read_test.md5sums
+EOF
+

@@ -2,10 +2,13 @@ package squashfs_test
 
 import (
 	"bufio"
+	"crypto/md5" //nolint:gosec // MD5 is still fine for detecting file corruptions
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
 	"path"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -370,6 +373,163 @@ func TestSquashfsCheckListing(t *testing.T) {
 	// listing should be empty now
 	for p := range listing {
 		t.Errorf("Didn't find %q in listing", p)
+	}
+}
+
+// readTest describes a file reading test
+type readTest struct {
+	name   string
+	p      string
+	size   int
+	md5sum string
+}
+
+// Read the file named in the test in with the blocksize passed in and
+// check its size and md5sum are OK.
+//
+// The test returns true if it thinks more tests for this file would
+// be counterproductive.
+//
+//nolint:thelper // this is not a helper function
+func testReadFile(t *testing.T, fs *squashfs.FileSystem, test readTest, blockSize int) bool {
+	fh, err := fs.OpenFile(test.p, os.O_RDONLY)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fh.Close()
+
+	var buf []byte
+
+	if blockSize <= 0 {
+		buf, err = io.ReadAll(fh)
+		if err != nil {
+			t.Error(err)
+			return true
+		}
+	} else {
+		maxReads := test.size/blockSize + 1
+		block := make([]byte, blockSize)
+	OUTER:
+		for reads := 0; ; reads++ {
+			n, err := fh.Read(block)
+			buf = append(buf, block[:n]...)
+			switch {
+			case err == io.EOF:
+				break OUTER
+			case err != nil:
+				t.Error(err)
+				return true
+			case n != blockSize:
+				t.Errorf("expected %d bytes to be read but got %d", blockSize, n)
+				return true
+			case reads > maxReads:
+				t.Errorf("read more than %d blocks - something has gone wrong", maxReads)
+				return true
+			}
+		}
+	}
+
+	if len(buf) != test.size {
+		t.Errorf("expected %d bytes read but got %d", test.size, len(buf))
+		return true
+	}
+
+	//nolint:gosec // MD5 is still fine for detecting file corruptions
+	md5sumBytes := md5.Sum(buf)
+	md5sum := hex.EncodeToString(md5sumBytes[:])
+	if md5sum != test.md5sum {
+		t.Errorf("expected md5sum %q got %q", test.md5sum, md5sum)
+
+		// Write corrupted file to disk for examination
+		f, err := os.CreateTemp("", test.name+"-*.bin")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer f.Close()
+		_, err = f.Write(buf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("Written corrupted file %q to disk as %q", test.name, f.Name())
+		return true
+	}
+	return false
+}
+
+// Check that we can read some specially crafted files
+func TestSquashfsReadFile(t *testing.T) {
+	var tests []readTest
+
+	// read the check files in creating the tests
+	flist, err := os.Open(squashfs.SquashfsReatTestMd5sums)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer flist.Close()
+	scanner := bufio.NewScanner(flist)
+	for scanner.Scan() {
+		line := scanner.Text()
+		field := strings.Fields(line)
+		size, err := strconv.Atoi(field[2])
+		if err != nil {
+			t.Fatal(err)
+		}
+		name := strings.TrimPrefix(field[1], ".")
+		tests = append(tests, readTest{
+			name:   strings.TrimPrefix(name, "/"),
+			p:      name,
+			size:   size,
+			md5sum: field[0],
+		})
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Open the squash file
+	f, err := os.Open(squashfs.SquashfsReadTestFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	fi, err := f.Stat()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// create the filesystem
+	fs, err := squashfs.Read(f, fi.Size(), 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Block sizes to test
+	blockSizes := []int{
+		0,      // use io.ReadAll
+		4095,   // medium non binary
+		4096,   // medium binary
+		4097,   // medium non binary
+		131071, // chunk size -1
+		131072, // chunk size
+		131073, // chunk size +1
+		262143, // two chunks -1
+		262144, // two chunks
+		262145, // two chunks +1
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			for _, blockSize := range blockSizes {
+				quit := false
+				t.Run(fmt.Sprintf("%d", blockSize), func(t *testing.T) {
+					if testReadFile(t, fs, test, blockSize) {
+						quit = true
+					}
+				})
+				if quit {
+					break
+				}
+			}
+		})
 	}
 }
 
