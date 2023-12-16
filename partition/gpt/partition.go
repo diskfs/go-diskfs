@@ -291,3 +291,8 @@ func (p *Partition) sectorSizes() (physical, logical int) {
 func (p *Partition) Equal(o *Partition) bool {
 	return p != nil && o != nil && *p == *o
 }
+
+// UUID returns the partitions UUID
+func (p *Partition) UUID() string {
+	return p.GUID
+}

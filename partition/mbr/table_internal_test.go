@@ -10,12 +10,15 @@ import (
 
 const (
 	mbrFile = "./testdata/mbr.img"
+	// retrieved via `blkid ./testdata/mbr.img`
+	testPartitionTableUUID = "10e9203d"
 )
 
 func GetValidTable() *Table {
 	table := &Table{
 		LogicalSectorSize:  512,
 		PhysicalSectorSize: 512,
+		partitionTableUUID: testPartitionTableUUID,
 	}
 	parts := []*Partition{
 		{
@@ -29,11 +32,12 @@ func GetValidTable() *Table {
 			EndCylinder:   0x00,
 			Start:         partitionStart,
 			Size:          partitionSize,
+			partitionUUID: formatPartitionUUID(testPartitionTableUUID, 1),
 		},
 	}
-	// add 127 Unused partitions to the table
+	// add 3 unused partitions to the table
 	for i := 1; i < 4; i++ {
-		parts = append(parts, &Partition{Type: Empty})
+		parts = append(parts, &Partition{Type: Empty, partitionUUID: formatPartitionUUID(testPartitionTableUUID, i+1)})
 	}
 	table.Partitions = parts
 	return table
@@ -88,6 +92,19 @@ func TestTableFromBytes(t *testing.T) {
 		expected := GetValidTable()
 		if table == nil && expected != nil || !table.Equal(expected) {
 			t.Errorf("actual table was %v instead of expected %v", table, expected)
+		}
+		if table.partitionTableUUID != testPartitionTableUUID {
+			t.Errorf("expected partition table UUID %s, but found %s", testPartitionTableUUID, table.partitionTableUUID)
+		}
+		for i := range table.Partitions {
+			if table.Partitions[i].UUID() != expected.Partitions[i].UUID() {
+				t.Errorf(
+					"expected partition nr %d to have UUID %s, but found %s",
+					i+1,
+					expected.Partitions[i].UUID(),
+					table.Partitions[i].UUID(),
+				)
+			}
 		}
 	})
 }
