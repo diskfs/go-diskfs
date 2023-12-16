@@ -536,8 +536,8 @@ func parseExtendedFile(b []byte, blocksize int) (*extendedFile, int, error) {
 	}
 	// do we have enough data left to read those?
 	extra = blockListSize * 4
-	if len(b[16:]) >= extra {
-		d.blockSizes = parseFileBlockSizes(b[16:], blockListSize)
+	if len(b[40:]) >= extra {
+		d.blockSizes = parseFileBlockSizes(b[40:], blockListSize)
 		extra = 0
 	}
 	return d, extra, nil
