@@ -73,3 +73,29 @@ mksquashfs . /data/read_test.sqs
 find . -type f -exec sh -c 'md=$(md5sum "$0"); size=$(wc -c <"$0"); echo ${md} ${size}' {} \; > /data/read_test.md5sums
 EOF
 
+rm -f dir_read.sqs
+
+# Build a test sqs file to test corner cases in directory reading
+#
+# This fills up a metadata page with 300 extended file inodes in order
+# to test the corner cases in the directory reading code when reading
+# inodes which are assumed to be standard sized but turn out to be
+# extended sized. The inodes are forced to be extended by having xattr
+# set on them.
+#
+# It also tests corner cases in the xattr parsing code!
+#
+# See: TestSquashfsReadDirCornerCases
+cat << "EOF" | docker run -i --rm -v $PWD:/data alpine:3.19
+set -e
+apk --update add squashfs-tools coreutils attr
+mkdir -p /build
+cd /build
+
+for i in $(seq -w 300); do
+    touch file_$i
+    setfattr -n user.test -v $i file_$i
+done
+
+mksquashfs . /data/dir_read.sqs  -comp zstd -Xcompression-level 3 -b 4k -all-root
+EOF

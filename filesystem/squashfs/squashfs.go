@@ -453,6 +453,14 @@ func (fs *FileSystem) getInode(blockOffset uint32, byteOffset uint16, iType inod
 	}
 	if header.inodeType != iType {
 		iType = header.inodeType
+		size = inodeTypeToSize(iType)
+		// Read more data if necessary (quite rare)
+		if size > len(uncompressed) {
+			uncompressed, err = readMetadata(fs.file, fs.compressor, int64(fs.superblock.inodeTableStart), blockOffset, byteOffset, size)
+			if err != nil {
+				return nil, fmt.Errorf("error reading block at position %d: %v", blockOffset, err)
+			}
+		}
 	}
 	// now read the body, which may have a variable size
 	body, extra, err := parseInodeBody(uncompressed[inodeHeaderSize:], int(fs.blocksize), iType)

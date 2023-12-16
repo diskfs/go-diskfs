@@ -692,6 +692,41 @@ func TestSquashfsReadDirXattr(t *testing.T) {
 	}
 }
 
+// Check a squash file with some corner cases
+func TestSquashfsReadDirCornerCases(t *testing.T) {
+	// Open the squash file
+	f, err := os.Open(squashfs.SquashfsReadDirTestFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	fi, err := f.Stat()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// create the filesystem
+	fs, err := squashfs.Read(f, fi.Size(), 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fis, err := fs.ReadDir("/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := 300
+	if want != len(fis) {
+		t.Errorf("Want %d entries but got %d", want, len(fis))
+	}
+	for i, fi := range fis {
+		want := fmt.Sprintf("file_%03d", i+1)
+		got := fi.Name()
+		if want != got {
+			t.Errorf("Want name %q but got %q", want, got)
+		}
+	}
+}
+
 //nolint:unused,revive // keep for future when we implement it and will need t
 func TestFinalize(t *testing.T) {
 
