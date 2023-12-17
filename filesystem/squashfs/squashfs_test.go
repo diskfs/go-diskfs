@@ -349,6 +349,19 @@ func TestSquashfsCheckListing(t *testing.T) {
 			if fi.IsDir() {
 				list(p)
 			}
+			// Check the type
+			var wantMode = os.FileMode(0)
+			if fi.IsDir() {
+				wantMode |= os.ModeDir
+			}
+			switch p {
+			case "/symlink", "/goodlink", "/emptylink":
+				wantMode |= os.ModeSymlink
+			}
+			gotMode := fi.Mode()
+			if (gotMode & os.ModeType) != wantMode {
+				t.Errorf("%s: want mode 0o%o got mode 0o%o", p, wantMode, gotMode&os.ModeType)
+			}
 		}
 	}
 

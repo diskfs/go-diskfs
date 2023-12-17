@@ -107,7 +107,46 @@ func (d *directoryEntry) ModTime() time.Time {
 
 // Mode FileMode     // file mode bits
 func (d *directoryEntry) Mode() os.FileMode {
-	return d.mode
+	mode := d.mode
+
+	// We need to adjust the Linux mode into a Go mode
+	// The bottom 3*3 bits are the traditional unix permissions.
+
+	// Clear the non permissions bits
+	mode &= os.ModePerm
+
+	if d.inode == nil {
+		return mode
+	}
+	switch d.inode.inodeType() {
+	case inodeBasicDirectory, inodeExtendedDirectory:
+		mode |= os.ModeDir // d: is a directory
+	case inodeBasicFile, inodeExtendedFile:
+		// zero mode
+	case inodeBasicSymlink, inodeExtendedSymlink:
+		mode |= os.ModeSymlink // L: symbolic link
+	case inodeBasicBlock, inodeExtendedBlock:
+		mode |= os.ModeDevice // D: device file
+	case inodeBasicChar, inodeExtendedChar:
+		mode |= os.ModeDevice     // D: device file
+		mode |= os.ModeCharDevice // c: Unix character device, when ModeDevice is set
+	case inodeBasicFifo, inodeExtendedFifo:
+		mode |= os.ModeNamedPipe // p: named pipe (FIFO)
+	case inodeBasicSocket, inodeExtendedSocket:
+		mode |= os.ModeSocket // S: Unix domain socket
+	default:
+		mode |= os.ModeIrregular // ?: non-regular file; nothing else is known about this file
+	}
+
+	// Not currently translated
+	// mode |= os.ModeAppend          // a: append-only
+	// mode |= os.ModeExclusive       // l: exclusive use
+	// mode |= os.ModeTemporary       // T: temporary file; Plan 9 only
+	// mode |= os.ModeSetuid          // u: setuid
+	// mode |= os.ModeSetgid          // g: setgid
+	// mode |= os.ModeSticky          // t: sticky
+
+	return mode
 }
 
 // Sys interface{}   // underlying data source (can return nil)
