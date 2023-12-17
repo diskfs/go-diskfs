@@ -588,6 +588,11 @@ func (t *Table) GetPartitions() []part.Partition {
 	return parts
 }
 
+// UUID returns the partition table UUID (disk UUID)
+func (t *Table) UUID() string {
+	return t.GUID
+}
+
 // Verify will attempt to evaluate the headers
 func (t *Table) Verify(f util.File, diskSize uint64) error {
 	// Determine the size of disk that GPT expects

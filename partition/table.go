@@ -12,4 +12,5 @@ type Table interface {
 	GetPartitions() []part.Partition
 	Repair(diskSize uint64) error
 	Verify(f util.File, diskSize uint64) error
+	UUID() string
 }
