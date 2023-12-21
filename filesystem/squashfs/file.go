@@ -13,10 +13,12 @@ import (
 //	include all of the data
 type File struct {
 	*extendedFile
-	isReadWrite bool
-	isAppend    bool
-	offset      int64
-	filesystem  *FileSystem
+	isReadWrite   bool
+	isAppend      bool
+	offset        int64
+	filesystem    *FileSystem
+	blockLocation int64  // the position of the last block decompressed
+	block         []byte // the actual last block decompressed
 }
 
 // Read reads up to len(b) bytes from the File.
@@ -99,9 +101,19 @@ func (fl *File) Read(b []byte) (int, error) {
 			if int64(block.size) > fs.blocksize {
 				return read, fmt.Errorf("unexpected block.size=%d > fs.blocksize=%d", block.size, fs.blocksize)
 			}
-			input, err := fs.readBlock(location, block.compressed, block.size)
-			if err != nil {
-				return read, fmt.Errorf("error reading data block %d from squashfs: %v", i, err)
+			var input []byte
+			if fl.blockLocation == location && fl.block != nil {
+				// Read last block from cache
+				input = fl.block
+			} else {
+				var err error
+				input, err = fs.readBlock(location, block.compressed, block.size)
+				if err != nil {
+					return read, fmt.Errorf("error reading data block %d from squashfs: %v", i, err)
+				}
+				// Cache the last block
+				fl.blockLocation = location
+				fl.block = input
 			}
 			outputBlock(input)
 		}
