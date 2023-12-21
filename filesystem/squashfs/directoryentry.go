@@ -5,6 +5,8 @@ import (
 	"io/fs"
 	"os"
 	"time"
+
+	"github.com/diskfs/go-diskfs/filesystem"
 )
 
 // FileStat is the extended data underlying a single file, similar to https://golang.org/pkg/syscall/#Stat_t
@@ -21,7 +23,7 @@ type FileStat = *directoryEntry
 //	IsDir() bool        // abbreviation for Mode().IsDir()
 //	Sys() interface{}   // underlying data source (can return nil)
 type directoryEntry struct {
-	isSubdirectory bool
+	fs             *FileSystem // the FileSystem this entry is part of
 	name           string
 	size           int64
 	modTime        time.Time
@@ -30,6 +32,7 @@ type directoryEntry struct {
 	uid            uint32
 	gid            uint32
 	xattrs         map[string]string
+	isSubdirectory bool
 }
 
 func (d *directoryEntry) equal(o *directoryEntry) bool {
@@ -157,4 +160,40 @@ func (d *directoryEntry) Readlink() (string, error) {
 		return "", fs.ErrNotExist
 	}
 	return target, nil
+}
+
+// Open returns an filesystem.File from which you can read the
+// contents of a file.
+//
+// Calling this on anything but a file will return an error.
+//
+// Calling this Open method is more efficient than calling
+// FileSystem.OpenFile as it doesn't have to find the file by
+// traversing the directory entries first.
+func (d *directoryEntry) Open() (filesystem.File, error) {
+	// get the inode data for this file
+	// now open the file
+	// get the inode for the file
+	var eFile *extendedFile
+	in := d.inode
+	iType := in.inodeType()
+	body := in.getBody()
+	//nolint:exhaustive // all other cases fall under default
+	switch iType {
+	case inodeBasicFile:
+		extFile := body.(*basicFile).toExtended()
+		eFile = &extFile
+	case inodeExtendedFile:
+		eFile, _ = body.(*extendedFile)
+	default:
+		return nil, fmt.Errorf("inode is of type %d, neither basic nor extended file", iType)
+	}
+
+	return &File{
+		extendedFile: eFile,
+		isReadWrite:  false,
+		isAppend:     false,
+		offset:       0,
+		filesystem:   d.fs,
+	}, nil
 }

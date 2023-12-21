@@ -263,6 +263,57 @@ func TestSquashfsOpenFile(t *testing.T) {
 	})
 }
 
+// Test the Open method on the directory entry
+func TestSquashfsOpen(t *testing.T) {
+	fs, err := getValidSquashfsFSReadOnly()
+	if err != nil {
+		t.Errorf("Failed to get read-only squashfs filesystem: %v", err)
+	}
+	fis, err := fs.ReadDir("/")
+	if err != nil {
+		t.Errorf("Failed to list squashfs filesystem: %v", err)
+	}
+	var dir = make(map[string]os.FileInfo, len(fis))
+	for _, fi := range fis {
+		dir[fi.Name()] = fi
+	}
+
+	// Check a file
+	fi := dir["README.md"]
+	fix, ok := fi.Sys().(squashfs.FileStat)
+	if !ok {
+		t.Fatal("Wrong type")
+	}
+	fh, err := fix.Open()
+	if err != nil {
+		t.Errorf("Failed to open file: %v", err)
+	}
+	gotBuf, err := io.ReadAll(fh)
+	if err != nil {
+		t.Errorf("Failed to read file: %v", err)
+	}
+	err = fh.Close()
+	if err != nil {
+		t.Errorf("Failed to close file: %v", err)
+	}
+	wantBuf := "README\n"
+	if string(gotBuf) != wantBuf {
+		t.Errorf("Expecting to read %q from file but read %q", wantBuf, string(gotBuf))
+	}
+
+	// Check a directory
+	fi = dir["foo"]
+	fix, ok = fi.Sys().(squashfs.FileStat)
+	if !ok {
+		t.Fatal("Wrong type")
+	}
+	_, err = fix.Open()
+	wantErr := fmt.Errorf("inode is of type 8, neither basic nor extended file")
+	if err.Error() != wantErr.Error() {
+		t.Errorf("Want error %q but got %q", wantErr, err)
+	}
+}
+
 func TestSquashfsRead(t *testing.T) {
 	tests := []struct {
 		blocksize  int64
