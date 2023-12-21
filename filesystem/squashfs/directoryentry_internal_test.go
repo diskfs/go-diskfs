@@ -1,6 +1,7 @@
 package squashfs
 
 import (
+	"reflect"
 	"testing"
 	"time"
 )
@@ -12,6 +13,9 @@ func TestDirectoryEntry(t *testing.T) {
 		size:           8675309,
 		modTime:        time.Now(),
 		mode:           0o766,
+		uid:            32,
+		gid:            33,
+		xattrs:         map[string]string{"test": "value"},
 	}
 	switch {
 	case de.Name() != de.name:
@@ -28,23 +32,20 @@ func TestDirectoryEntry(t *testing.T) {
 		t.Errorf("Mismatched Sys(), unexpected nil")
 	}
 	// check that Sys() is convertible
-	if _, ok := de.Sys().(FileStat); !ok {
+	fs, ok := de.Sys().(FileStat)
+	if !ok {
 		t.Errorf("Mismatched Sys(), could not convert to FileStat")
 	}
-}
-
-func TestFileStatUID(t *testing.T) {
-	fs := FileStat{uid: 32}
 	uid := fs.UID()
 	if uid != fs.uid {
 		t.Errorf("Mismatched UID, actual %d expected %d", uid, fs.uid)
 	}
-}
-
-func TestFileStatGID(t *testing.T) {
-	fs := FileStat{gid: 32}
 	gid := fs.GID()
 	if gid != fs.gid {
 		t.Errorf("Mismatched GID, actual %d expected %d", gid, fs.gid)
+	}
+	xattrs := fs.Xattrs()
+	if !reflect.DeepEqual(xattrs, fs.xattrs) {
+		t.Errorf("Mismatched Xattrs, actual %+v expected %+v", xattrs, fs.xattrs)
 	}
 }

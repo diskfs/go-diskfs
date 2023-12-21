@@ -446,11 +446,9 @@ func (fs *FileSystem) hydrateDirectoryEntries(entries []*directoryEntryRaw) ([]*
 			modTime:        header.modTime,
 			mode:           header.mode,
 			inode:          in,
-			sys: FileStat{
-				uid:    fs.uidsGids[header.uidIdx],
-				gid:    fs.uidsGids[header.gidIdx],
-				xattrs: xattrs,
-			},
+			uid:            fs.uidsGids[header.uidIdx],
+			gid:            fs.uidsGids[header.gidIdx],
+			xattrs:         xattrs,
 		})
 	}
 	return fullEntries, nil
