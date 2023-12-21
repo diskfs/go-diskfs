@@ -442,7 +442,7 @@ func (fs *FileSystem) getInode(blockOffset uint32, byteOffset uint16, iType inod
 	// get the block
 	// start by getting the minimum for the proposed type. It very well might be wrong.
 	size := inodeTypeToSize(iType)
-	uncompressed, err := readMetadata(fs.file, fs.compressor, int64(fs.superblock.inodeTableStart), blockOffset, byteOffset, size)
+	uncompressed, err := fs.readMetadata(fs.file, fs.compressor, int64(fs.superblock.inodeTableStart), blockOffset, byteOffset, size)
 	if err != nil {
 		return nil, fmt.Errorf("error reading block at position %d: %v", blockOffset, err)
 	}
@@ -470,7 +470,7 @@ func (fs *FileSystem) getInode(blockOffset uint32, byteOffset uint16, iType inod
 	// if it returns extra > 0, then it needs that many more bytes to be read, and to be reparsed
 	if extra > 0 {
 		size += extra
-		uncompressed, err = readMetadata(fs.file, fs.compressor, int64(fs.superblock.inodeTableStart), blockOffset, byteOffset, size)
+		uncompressed, err = fs.readMetadata(fs.file, fs.compressor, int64(fs.superblock.inodeTableStart), blockOffset, byteOffset, size)
 		if err != nil {
 			return nil, fmt.Errorf("error reading block at position %d: %v", blockOffset, err)
 		}
@@ -490,7 +490,7 @@ func (fs *FileSystem) getInode(blockOffset uint32, byteOffset uint16, iType inod
 // block when uncompressed.
 func (fs *FileSystem) getDirectory(blockOffset uint32, byteOffset uint16, size int) (*directory, error) {
 	// get the block
-	uncompressed, err := readMetadata(fs.file, fs.compressor, int64(fs.superblock.directoryTableStart), blockOffset, byteOffset, size)
+	uncompressed, err := fs.readMetadata(fs.file, fs.compressor, int64(fs.superblock.directoryTableStart), blockOffset, byteOffset, size)
 	if err != nil {
 		return nil, fmt.Errorf("error reading block at position %d: %v", blockOffset, err)
 	}
@@ -594,8 +594,9 @@ func readFragmentTable(s *superblock, file util.File, c Compressor) ([]*fragment
 	// load in the actual fragment entries
 	// read each block and uncompress it
 	var fragmentTable []*fragmentEntry
+	var fs = &FileSystem{}
 	for i, offset := range offsets {
-		uncompressed, _, err := readMetaBlock(file, c, offset)
+		uncompressed, _, err := fs.readMetaBlock(file, c, offset)
 		if err != nil {
 			return nil, fmt.Errorf("error reading meta block %d at position %d: %v", i, offset, err)
 		}
@@ -664,13 +665,14 @@ func readXattrsTable(s *superblock, file util.File, c Compressor) (*xAttrTable, 
 	var (
 		uncompressed []byte
 		size         uint16
+		fs           = &FileSystem{}
 	)
 
 	bIndex := make([]byte, 0)
 	// convert those into indexes
 	for i := 0; i+8-1 < len(b); i += 8 {
 		locn := binary.LittleEndian.Uint64(b[i : i+8])
-		uncompressed, _, err = readMetaBlock(file, c, int64(locn))
+		uncompressed, _, err = fs.readMetaBlock(file, c, int64(locn))
 		if err != nil {
 			return nil, fmt.Errorf("error reading xattr index meta block %d at position %d: %v", i, locn, err)
 		}
@@ -681,7 +683,7 @@ func readXattrsTable(s *superblock, file util.File, c Compressor) (*xAttrTable, 
 	xAttrEnd := binary.LittleEndian.Uint64(b[:8])
 	xAttrData := make([]byte, 0)
 	for i := xAttrStart; i < xAttrEnd; {
-		uncompressed, size, err = readMetaBlock(file, c, int64(i))
+		uncompressed, size, err = fs.readMetaBlock(file, c, int64(i))
 		if err != nil {
 			return nil, fmt.Errorf("error reading xattr data meta block at position %d: %v", i, err)
 		}
@@ -755,13 +757,14 @@ func readUidsGids(s *superblock, file util.File, c Compressor) ([]uint32, error)
 
 	var (
 		uncompressed []byte
+		fs           = &FileSystem{}
 	)
 
 	data := make([]byte, 0)
 	// convert those into indexes
 	for i := 0; i+8-1 < len(b); i += 8 {
 		locn := binary.LittleEndian.Uint64(b[i : i+8])
-		uncompressed, _, err = readMetaBlock(file, c, int64(locn))
+		uncompressed, _, err = fs.readMetaBlock(file, c, int64(locn))
 		if err != nil {
 			return nil, fmt.Errorf("error reading uidgid index meta block %d at position %d: %v", i, locn, err)
 		}
