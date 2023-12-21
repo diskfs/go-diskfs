@@ -1,6 +1,8 @@
 package squashfs
 
 import (
+	"fmt"
+	"io/fs"
 	"os"
 	"time"
 )
@@ -128,4 +130,31 @@ func (d *directoryEntry) GID() uint32 {
 // Xattrs get extended attributes of file
 func (d *directoryEntry) Xattrs() map[string]string {
 	return d.xattrs
+}
+
+// Readlink returns the destination of the symbolic link if this entry
+// is a symbolic link.
+//
+// If this entry is not a symbolic link then it will return fs.ErrNotExist
+func (d *directoryEntry) Readlink() (string, error) {
+	var target string
+	body := d.inode.getBody()
+	//nolint:exhaustive // all other cases fall under default
+	switch d.inode.inodeType() {
+	case inodeBasicSymlink:
+		link, ok := body.(*basicSymlink)
+		if !ok {
+			return "", fmt.Errorf("internal error: inode wasn't basic symlink: %T", body)
+		}
+		target = link.target
+	case inodeExtendedSymlink:
+		link, ok := body.(*extendedSymlink)
+		if !ok {
+			return "", fmt.Errorf("internal error: inode wasn't extended symlink: %T", body)
+		}
+		target = link.target
+	default:
+		return "", fs.ErrNotExist
+	}
+	return target, nil
 }
