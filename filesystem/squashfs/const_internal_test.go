@@ -220,14 +220,14 @@ func testGetFilesystemRoot() []*directoryEntry {
 	// data taken from reading the bytes of the file SquashfsUncompressedfile
 	modTime := time.Unix(0x5c20d8d7, 0)
 	return []*directoryEntry{
-		{true, "foo", 9949, modTime, 0o755, nil, FileStat{0, 0, map[string]string{}}},
-		{true, "zero", 32, modTime, 0o755, nil, FileStat{0, 0, map[string]string{}}},
-		{true, "random", 32, modTime, 0o755, nil, FileStat{0, 0, map[string]string{}}},
-		{false, "emptylink", 0, modTime, 0o777, nil, FileStat{0, 0, map[string]string{}}},
-		{false, "goodlink", 0, modTime, 0o777, nil, FileStat{0, 0, map[string]string{}}},
-		{false, "hardlink", 7, modTime, 0o644, nil, FileStat{1, 2, map[string]string{}}},
-		{false, "README.md", 7, modTime, 0o644, nil, FileStat{1, 2, map[string]string{}}},
-		{false, "attrfile", 5, modTime, 0o644, nil, FileStat{0, 0, map[string]string{"abc": "def", "myattr": "hello"}}},
+		{true, "foo", 9949, modTime, 0o755, nil, 0, 0, map[string]string{}},
+		{true, "zero", 32, modTime, 0o755, nil, 0, 0, map[string]string{}},
+		{true, "random", 32, modTime, 0o755, nil, 0, 0, map[string]string{}},
+		{false, "emptylink", 0, modTime, 0o777, nil, 0, 0, map[string]string{}},
+		{false, "goodlink", 0, modTime, 0o777, nil, 0, 0, map[string]string{}},
+		{false, "hardlink", 7, modTime, 0o644, nil, 1, 2, map[string]string{}},
+		{false, "README.md", 7, modTime, 0o644, nil, 1, 2, map[string]string{}},
+		{false, "attrfile", 5, modTime, 0o644, nil, 0, 0, map[string]string{"abc": "def", "myattr": "hello"}},
 	}
 }
 

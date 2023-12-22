@@ -1,50 +1,14 @@
 package squashfs
 
 import (
+	"fmt"
+	"io/fs"
 	"os"
 	"time"
 )
 
 // FileStat is the extended data underlying a single file, similar to https://golang.org/pkg/syscall/#Stat_t
-type FileStat struct {
-	uid    uint32
-	gid    uint32
-	xattrs map[string]string
-}
-
-func (f *FileStat) equal(o *FileStat) bool {
-	if f.uid != o.uid || f.gid != o.gid {
-		return false
-	}
-	if len(f.xattrs) != len(o.xattrs) {
-		return false
-	}
-	for k, v := range f.xattrs {
-		ov, ok := o.xattrs[k]
-		if !ok {
-			return false
-		}
-		if ov != v {
-			return false
-		}
-	}
-	return true
-}
-
-// UID get uid of file
-func (f *FileStat) UID() uint32 {
-	return f.uid
-}
-
-// GID get gid of file
-func (f *FileStat) GID() uint32 {
-	return f.gid
-}
-
-// Xattrs get extended attributes of file
-func (f *FileStat) Xattrs() map[string]string {
-	return f.xattrs
-}
+type FileStat = *directoryEntry
 
 // directoryEntry is a single directory entry
 // it combines information from inode and the actual entry
@@ -63,14 +27,13 @@ type directoryEntry struct {
 	modTime        time.Time
 	mode           os.FileMode
 	inode          inode
-	sys            FileStat
+	uid            uint32
+	gid            uint32
+	xattrs         map[string]string
 }
 
 func (d *directoryEntry) equal(o *directoryEntry) bool {
 	if o == nil {
-		return false
-	}
-	if !d.sys.equal(&o.sys) {
 		return false
 	}
 	if d.inode == nil && o.inode == nil {
@@ -151,5 +114,47 @@ func (d *directoryEntry) Mode() os.FileMode {
 
 // Sys interface{}   // underlying data source (can return nil)
 func (d *directoryEntry) Sys() interface{} {
-	return d.sys
+	return d
+}
+
+// UID get uid of file
+func (d *directoryEntry) UID() uint32 {
+	return d.uid
+}
+
+// GID get gid of file
+func (d *directoryEntry) GID() uint32 {
+	return d.gid
+}
+
+// Xattrs get extended attributes of file
+func (d *directoryEntry) Xattrs() map[string]string {
+	return d.xattrs
+}
+
+// Readlink returns the destination of the symbolic link if this entry
+// is a symbolic link.
+//
+// If this entry is not a symbolic link then it will return fs.ErrNotExist
+func (d *directoryEntry) Readlink() (string, error) {
+	var target string
+	body := d.inode.getBody()
+	//nolint:exhaustive // all other cases fall under default
+	switch d.inode.inodeType() {
+	case inodeBasicSymlink:
+		link, ok := body.(*basicSymlink)
+		if !ok {
+			return "", fmt.Errorf("internal error: inode wasn't basic symlink: %T", body)
+		}
+		target = link.target
+	case inodeExtendedSymlink:
+		link, ok := body.(*extendedSymlink)
+		if !ok {
+			return "", fmt.Errorf("internal error: inode wasn't extended symlink: %T", body)
+		}
+		target = link.target
+	default:
+		return "", fs.ErrNotExist
+	}
+	return target, nil
 }

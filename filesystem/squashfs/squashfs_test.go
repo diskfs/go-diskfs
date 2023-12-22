@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	stdfs "io/fs"
 	"os"
 	"path"
 	"strconv"
@@ -357,13 +358,35 @@ func TestSquashfsCheckListing(t *testing.T) {
 			if fi.IsDir() {
 				wantMode |= os.ModeDir
 			}
+			var wantTarget string
 			switch p {
-			case "/symlink", "/goodlink", "/emptylink":
+			case "/goodlink":
+				wantTarget = "README.md"
+				wantMode |= os.ModeSymlink
+			case "/emptylink":
+				wantTarget = "/a/b/c/d/ef/g/h"
 				wantMode |= os.ModeSymlink
 			}
 			gotMode := fi.Mode()
 			if (gotMode & os.ModeType) != wantMode {
 				t.Errorf("%s: want mode 0o%o got mode 0o%o", p, wantMode, gotMode&os.ModeType)
+			}
+			fix, ok := fi.Sys().(squashfs.FileStat)
+			if !ok {
+				t.Fatal("Wrong type")
+			}
+			gotTarget, err := fix.Readlink()
+			if wantTarget == "" {
+				if err != stdfs.ErrNotExist {
+					t.Errorf("%s: ReadLink want error %q got error %q", p, stdfs.ErrNotExist, err)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("%s: ReadLink returned error: %v", p, err)
+				}
+				if wantTarget != gotTarget {
+					t.Errorf("%s: ReadLink want target %q got target %q", p, wantTarget, gotTarget)
+				}
 			}
 		}
 	}
