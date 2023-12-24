@@ -220,14 +220,14 @@ func testGetFilesystemRoot() []*directoryEntry {
 	// data taken from reading the bytes of the file SquashfsUncompressedfile
 	modTime := time.Unix(0x5c20d8d7, 0)
 	return []*directoryEntry{
-		{true, "foo", 9949, modTime, 0o755, nil, 0, 0, map[string]string{}},
-		{true, "zero", 32, modTime, 0o755, nil, 0, 0, map[string]string{}},
-		{true, "random", 32, modTime, 0o755, nil, 0, 0, map[string]string{}},
-		{false, "emptylink", 0, modTime, 0o777, nil, 0, 0, map[string]string{}},
-		{false, "goodlink", 0, modTime, 0o777, nil, 0, 0, map[string]string{}},
-		{false, "hardlink", 7, modTime, 0o644, nil, 1, 2, map[string]string{}},
-		{false, "README.md", 7, modTime, 0o644, nil, 1, 2, map[string]string{}},
-		{false, "attrfile", 5, modTime, 0o644, nil, 0, 0, map[string]string{"abc": "def", "myattr": "hello"}},
+		{isSubdirectory: true, name: "foo", size: 9949, modTime: modTime, mode: 0o755},
+		{isSubdirectory: true, name: "zero", size: 32, modTime: modTime, mode: 0o755},
+		{isSubdirectory: true, name: "random", size: 32, modTime: modTime, mode: 0o755},
+		{isSubdirectory: false, name: "emptylink", size: 0, modTime: modTime, mode: 0o777},
+		{isSubdirectory: false, name: "goodlink", size: 0, modTime: modTime, mode: 0o777},
+		{isSubdirectory: false, name: "hardlink", size: 7, modTime: modTime, mode: 0o644, uid: 1, gid: 2},
+		{isSubdirectory: false, name: "README.md", size: 7, modTime: modTime, mode: 0o644, uid: 1, gid: 2},
+		{isSubdirectory: false, name: "attrfile", size: 5, modTime: modTime, mode: 0o644, xattrs: map[string]string{"abc": "def", "myattr": "hello"}},
 	}
 }
 

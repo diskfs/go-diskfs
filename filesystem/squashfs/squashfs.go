@@ -307,30 +307,9 @@ func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 		if targetEntry == nil {
 			return nil, fmt.Errorf("target file %s does not exist", p)
 		}
-		// get the inode data for this file
-		// now open the file
-		// get the inode for the file
-		var eFile *extendedFile
-		in := targetEntry.inode
-		iType := in.inodeType()
-		body := in.getBody()
-		//nolint:exhaustive // all other cases fall under default
-		switch iType {
-		case inodeBasicFile:
-			extFile := body.(*basicFile).toExtended()
-			eFile = &extFile
-		case inodeExtendedFile:
-			eFile, _ = body.(*extendedFile)
-		default:
-			return nil, fmt.Errorf("inode is of type %d, neither basic nor extended directory", iType)
-		}
-
-		f = &File{
-			extendedFile: eFile,
-			isReadWrite:  false,
-			isAppend:     false,
-			offset:       0,
-			filesystem:   fs,
+		f, err = targetEntry.Open()
+		if err != nil {
+			return nil, err
 		}
 	} else {
 		f, err = os.OpenFile(path.Join(fs.workspace, p), flag, 0o644)
@@ -440,6 +419,7 @@ func (fs *FileSystem) hydrateDirectoryEntries(entries []*directoryEntryRaw) ([]*
 			}
 		}
 		fullEntries = append(fullEntries, &directoryEntry{
+			fs:             fs,
 			isSubdirectory: e.isSubdirectory,
 			name:           e.name,
 			size:           body.size(),
