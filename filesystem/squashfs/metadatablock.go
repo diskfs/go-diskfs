@@ -73,32 +73,34 @@ func (m *metadatablock) toBytes(c Compressor) ([]byte, error) {
 }
 
 func (fs *FileSystem) readMetaBlock(r io.ReaderAt, c Compressor, location int64) (data []byte, size uint16, err error) {
-	// read bytes off the reader to determine how big it is and if compressed
-	b := make([]byte, 2)
-	_, _ = r.ReadAt(b, location)
-	size, compressed, err := getMetadataSize(b)
-	if err != nil {
-		return nil, 0, fmt.Errorf("error getting size and compression for metadata block at %d: %v", location, err)
-	}
-	b = make([]byte, size)
-	read, err := r.ReadAt(b, location+2)
-	if err != nil && err != io.EOF {
-		return nil, 0, fmt.Errorf("unable to read metadata block of size %d at location %d: %v", size, location, err)
-	}
-	if read != len(b) {
-		return nil, 0, fmt.Errorf("read %d instead of expected %d bytes for metadata block at location %d", read, size, location)
-	}
-	data = b
-	if compressed {
-		if c == nil {
-			return nil, 0, fmt.Errorf("metadata block at %d compressed, but no compressor provided", location)
-		}
-		data, err = c.decompress(b)
+	return fs.cache.get(location, func() (data []byte, size uint16, err error) {
+		// read bytes off the reader to determine how big it is and if compressed
+		b := make([]byte, 2)
+		_, _ = r.ReadAt(b, location)
+		size, compressed, err := getMetadataSize(b)
 		if err != nil {
-			return nil, 0, fmt.Errorf("decompress error: %v", err)
+			return nil, 0, fmt.Errorf("error getting size and compression for metadata block at %d: %v", location, err)
 		}
-	}
-	return data, size + 2, nil
+		b = make([]byte, size)
+		read, err := r.ReadAt(b, location+2)
+		if err != nil && err != io.EOF {
+			return nil, 0, fmt.Errorf("unable to read metadata block of size %d at location %d: %v", size, location, err)
+		}
+		if read != len(b) {
+			return nil, 0, fmt.Errorf("read %d instead of expected %d bytes for metadata block at location %d", read, size, location)
+		}
+		data = b
+		if compressed {
+			if c == nil {
+				return nil, 0, fmt.Errorf("metadata block at %d compressed, but no compressor provided", location)
+			}
+			data, err = c.decompress(b)
+			if err != nil {
+				return nil, 0, fmt.Errorf("decompress error: %v", err)
+			}
+		}
+		return data, size + 2, nil
+	})
 }
 
 // readMetadata read as many bytes of metadata as required for the given size, with the byteOffset provided as a starting

@@ -17,6 +17,7 @@ const (
 	metadataBlockSize = 8 * KB
 	minBlocksize      = 4 * KB
 	maxBlocksize      = 1 * MB
+	defaultCacheSize  = 128 * MB
 )
 
 // FileSystem implements the FileSystem interface
@@ -32,6 +33,7 @@ type FileSystem struct {
 	uidsGids   []uint32
 	xattrs     *xAttrTable
 	rootDir    inode
+	cache      *lru
 }
 
 // Equal compare if two filesystems are equal
@@ -111,7 +113,38 @@ func Create(f util.File, size, start, blocksize int64) (*FileSystem, error) {
 // which allow you to work directly with partitions, rather than having to calculate (and hopefully not make any errors)
 // where a partition starts and ends.
 //
-// If the provided blocksize is 0, it will use the default of 2K bytes
+// If the provided blocksize is 0, it will use the default of 2K bytes.
+//
+// This will use a cache for the decompressed blocks of 128 MB by
+// default. (You can set this with the SetCacheSize method and read
+// its size with the GetCacheSize method). A block cache is essential
+// for performance when reading. This implements a cache for the
+// fragments (tail ends of files) and the metadata (directory
+// listings) which otherwise would be read, decompressed and discarded
+// many times.
+//
+// Unpacking a 3 GB squashfs made from the tensorflow docker image like this:
+//
+//	docker export $(docker create tensorflow/tensorflow:latest-gpu-jupyter) -o tensorflow.tar.gz
+//	mkdir -p tensorflow && tar xf tensorflow.tar.gz -C tensorflow
+//	[ -f tensorflow.sqfs ] && rm tensorflow.sqfs
+//	mksquashfs tensorflow tensorflow.sqfs  -comp zstd -Xcompression-level 3 -b 1M -no-xattrs -all-root
+//
+// Gives these timings with and without cache:
+//
+// - no caching:   206s
+// - 256 MB cache:  16.7s
+// - 128 MB cache:  17.5s (the default)
+// - 64 MB cache:   23.4s
+// - 32 MB cache:   54.s
+//
+// The cached versions compare favourably to the C program unsquashfs
+// which takes 12.0s to unpack the same archive.
+//
+// These tests were done using rclone and the archive backend which
+// uses this library like this:
+//
+//	rclone -P --transfers 16 --checkers 16 copy :archive:/path/to/tensorflow.sqfs /tmp/tensorflow
 func Read(file util.File, size, start, blocksize int64) (*FileSystem, error) {
 	var (
 		read int
@@ -185,6 +218,7 @@ func Read(file util.File, size, start, blocksize int64) (*FileSystem, error) {
 		compressor: compress,
 		fragments:  fragments,
 		uidsGids:   uidsgids,
+		cache:      newLRU(int(defaultCacheSize) / int(s.blocksize)),
 	}
 	// for efficiency, read in the root inode right now
 	rootInode, err := fs.getInode(s.rootInode.block, s.rootInode.offset, inodeBasicDirectory)
@@ -198,6 +232,30 @@ func Read(file util.File, size, start, blocksize int64) (*FileSystem, error) {
 // Type returns the type code for the filesystem. Always returns filesystem.TypeFat32
 func (fs *FileSystem) Type() filesystem.Type {
 	return filesystem.TypeSquashfs
+}
+
+// SetCacheSize set the maximum memory used by the block cache to cacheSize bytes.
+//
+// The default is 128 MB.
+//
+// If this is <= 0 then the cache will be disabled.
+func (fs *FileSystem) SetCacheSize(cacheSize int) {
+	if fs.cache == nil {
+		return
+	}
+	blocks := cacheSize / int(fs.blocksize)
+	if blocks <= 0 {
+		blocks = 0
+	}
+	fs.cache.setMaxBlocks(blocks)
+}
+
+// GetCacheSize get the maximum memory used by the block cache in bytes.
+func (fs *FileSystem) GetCacheSize() int {
+	if fs.cache == nil {
+		return 0
+	}
+	return fs.cache.maxBlocks * int(fs.blocksize)
 }
 
 // Mkdir make a directory at the given path. It is equivalent to `mkdir -p`, i.e. idempotent, in that:
@@ -456,7 +514,7 @@ func (fs *FileSystem) getInode(blockOffset uint32, byteOffset uint16, iType inod
 		size = inodeTypeToSize(iType)
 		// Read more data if necessary (quite rare)
 		if size > len(uncompressed) {
-			uncompressed, err = readMetadata(fs.file, fs.compressor, int64(fs.superblock.inodeTableStart), blockOffset, byteOffset, size)
+			uncompressed, err = fs.readMetadata(fs.file, fs.compressor, int64(fs.superblock.inodeTableStart), blockOffset, byteOffset, size)
 			if err != nil {
 				return nil, fmt.Errorf("error reading block at position %d: %v", blockOffset, err)
 			}
@@ -533,25 +591,32 @@ func (fs *FileSystem) readFragment(index, offset uint32, fragmentSize int64) ([]
 		return nil, fmt.Errorf("cannot find fragment block with index %d", index)
 	}
 	fragmentInfo := fs.fragments[index]
-	// figure out the size of the compressed block and if it is compressed
-	b := make([]byte, fragmentInfo.size)
-	read, err := fs.file.ReadAt(b, int64(fragmentInfo.start))
-	if err != nil && err != io.EOF {
-		return nil, fmt.Errorf("unable to read fragment block %d: %v", index, err)
-	}
-	if read != len(b) {
-		return nil, fmt.Errorf("read %d instead of expected %d bytes for fragment block %d", read, len(b), index)
-	}
+	pos := int64(fragmentInfo.start)
+	data, _, err := fs.cache.get(pos, func() (data []byte, size uint16, err error) {
+		// figure out the size of the compressed block and if it is compressed
+		b := make([]byte, fragmentInfo.size)
+		read, err := fs.file.ReadAt(b, pos)
+		if err != nil && err != io.EOF {
+			return nil, 0, fmt.Errorf("unable to read fragment block %d: %v", index, err)
+		}
+		if read != len(b) {
+			return nil, 0, fmt.Errorf("read %d instead of expected %d bytes for fragment block %d", read, len(b), index)
+		}
 
-	data := b
-	if fragmentInfo.compressed {
-		if fs.compressor == nil {
-			return nil, fmt.Errorf("fragment compressed but do not have valid compressor")
+		data = b
+		if fragmentInfo.compressed {
+			if fs.compressor == nil {
+				return nil, 0, fmt.Errorf("fragment compressed but do not have valid compressor")
+			}
+			data, err = fs.compressor.decompress(b)
+			if err != nil {
+				return nil, 0, fmt.Errorf("decompress error: %v", err)
+			}
 		}
-		data, err = fs.compressor.decompress(b)
-		if err != nil {
-			return nil, fmt.Errorf("decompress error: %v", err)
-		}
+		return data, 0, nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	// now get the data from the offset
 	return data[offset : int64(offset)+fragmentSize], nil

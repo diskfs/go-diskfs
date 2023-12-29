@@ -68,6 +68,29 @@ func TestSquashfsType(t *testing.T) {
 	}
 }
 
+func TestSquashfsSetCacheSize(t *testing.T) {
+	fs, err := getValidSquashfsFSReadOnly()
+	if err != nil {
+		t.Fatalf("Failed to get read-only squashfs filesystem: %v", err)
+	}
+	assertCacheSize := func(want int) {
+		got := fs.GetCacheSize()
+		if want != got {
+			t.Errorf("Want cache size %d but got %d", want, got)
+		}
+	}
+	// Check we can set the Cache size for a Read FileSystem
+	assertCacheSize(128 * 1024 * 1024)
+	fs.SetCacheSize(1024 * 1024)
+	assertCacheSize(1024 * 1024)
+	fs.SetCacheSize(0)
+	fs.SetCacheSize(-1)
+	assertCacheSize(0)
+	// Check we can set the Cache size for a Write FileSystem
+	fs = &squashfs.FileSystem{}
+	assertCacheSize(0)
+}
+
 func TestSquashfsMkdir(t *testing.T) {
 	t.Run("read-only", func(t *testing.T) {
 		fs, err := getValidSquashfsFSReadOnly()
