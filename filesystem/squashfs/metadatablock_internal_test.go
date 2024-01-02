@@ -122,8 +122,9 @@ func TestReadMetaBlock(t *testing.T) {
 		{[]byte{0x5, 0x00, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, 0, &testCompressorAddBytes{err: fmt.Errorf("unknown")}, 0x0, fmt.Errorf("decompress error: unknown"), nil},
 	}
 
+	var fs = &FileSystem{}
 	for i, tt := range tests {
-		b, size, err := readMetaBlock(bytes.NewReader(tt.b), tt.c, tt.location)
+		b, size, err := fs.readMetaBlock(bytes.NewReader(tt.b), tt.c, tt.location)
 		switch {
 		case (err == nil && tt.err != nil) || (err != nil && tt.err == nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
 			t.Errorf("%d: mismatched error, actual then expected", i)
