@@ -24,6 +24,7 @@ jobs:
           {arch: amd64, os: linux},   {arch: arm64, os: linux},
           {arch: amd64, os: windows}, {arch: arm64, os: windows},
           {arch: amd64, os: darwin},  {arch: arm64, os: darwin},
+          {arch: wasm, os: wasip1},
 
           # Tier 2 (Best effort)
           {arch: amd64, os: freebsd}, {arch: arm64, os: freebsd},
