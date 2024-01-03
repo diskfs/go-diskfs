@@ -7,7 +7,7 @@ import (
 	"sort"
 	"time"
 
-	"gopkg.in/djherbis/times.v1"
+	"github.com/djherbis/times"
 )
 
 const (
