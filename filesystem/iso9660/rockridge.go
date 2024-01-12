@@ -184,7 +184,7 @@ func (r *rockRidgeExtension) UsePathtable() bool {
 // Relocate restructure so that all directories are at a depth of 8 or fewer
 func (r *rockRidgeExtension) Relocate(dirs map[string]*finalizeFileInfo) ([]*finalizeFileInfo, map[string]*finalizeFileInfo, error) {
 	files := make([]*finalizeFileInfo, 0)
-	root := dirs["."]
+	root := dirs["/"]
 	relocationDir := root
 	if relocationDir.depth == 8 {
 		return nil, nil, fmt.Errorf("cannot relocate when relocation parent already is max depth 8")

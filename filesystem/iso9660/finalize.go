@@ -400,7 +400,7 @@ func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 	}
 
 	// starting point
-	root := dirList["."]
+	root := dirList["/"]
 	root.addProperties(1)
 
 	// if we need to relocate directories, must do them here, before finalizing order and sizes
@@ -811,36 +811,53 @@ func createPathTable(fi []*finalizeFileInfo) *pathTable {
 }
 
 func walkTree(workspace string) ([]*finalizeFileInfo, map[string]*finalizeFileInfo, error) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return nil, nil, fmt.Errorf("could not get pwd: %v", err)
-	}
-	// make everything relative to the workspace
-	_ = os.Chdir(workspace)
 	dirList := make(map[string]*finalizeFileInfo)
 	fileList := make([]*finalizeFileInfo, 0)
+
 	var entry *finalizeFileInfo
-	err = filepath.Walk(".", func(fp string, fi os.FileInfo, err error) error {
+
+	err := filepath.Walk(workspace, func(fp string, fi os.FileInfo, err error) error {
 		if err != nil {
 			return fmt.Errorf("error walking path %s: %v", fp, err)
 		}
-		isRoot := fp == "."
-		name := fi.Name()
-		shortname, extension := calculateShortnameExtension(name)
+
+		isRoot := fp == workspace
+		var name, shortname, extension, parentDir string
 
 		if isRoot {
+			fp = "/"
 			name = string([]byte{0x00})
+			parentDir = fp
 			shortname = name
+		} else {
+			fp = strings.TrimPrefix(fp, workspace)
+			name = strings.TrimPrefix(fi.Name(), workspace)
+			parentDir, _ = filepath.Split(fp)
+			shortname, extension = calculateShortnameExtension(name)
+
+			if len(parentDir) > 1 {
+				parentDir = strings.TrimSuffix(parentDir, "/")
+			}
 		}
-		entry = &finalizeFileInfo{path: fp, name: name, isDir: fi.IsDir(), isRoot: isRoot, modTime: fi.ModTime(), mode: fi.Mode(), size: fi.Size(), shortname: shortname}
+
+		entry = &finalizeFileInfo{
+			isDir:     fi.IsDir(),
+			isRoot:    isRoot,
+			modTime:   fi.ModTime(),
+			mode:      fi.Mode(),
+			name:      name,
+			path:      fp,
+			shortname: shortname,
+			size:      fi.Size(),
+		}
 
 		// we will have to save it as its parent
-		parentDir := filepath.Dir(fp)
 		parentDirInfo := dirList[parentDir]
 
 		if fi.IsDir() {
 			entry.children = make([]*finalizeFileInfo, 0, 20)
 			dirList[fp] = entry
+
 			if !isRoot {
 				parentDirInfo.children = append(parentDirInfo.children, entry)
 				dirList[parentDir] = parentDirInfo
@@ -853,13 +870,13 @@ func walkTree(workspace string) ([]*finalizeFileInfo, map[string]*finalizeFileIn
 			dirList[parentDir] = parentDirInfo
 			fileList = append(fileList, entry)
 		}
+
 		return nil
 	})
 	if err != nil {
 		return nil, nil, err
 	}
-	// reset the workspace
-	_ = os.Chdir(cwd)
+
 	return fileList, dirList, nil
 }
 
