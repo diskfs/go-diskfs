@@ -348,3 +348,24 @@ func TestFat32ReadDirWithMkdir(t *testing.T) {
 		}
 	}
 }
+
+func TestFat32ValidateAndFormatVolumeLabel(t *testing.T) {
+	label, err := validateAndFormatVolumeLabel("foo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if label != "foo        " {
+		t.Fatal("invalid format")
+	}
+
+	label, err = validateAndFormatVolumeLabel("ahfkjsdhfkjshdkjfhkhsdf")
+	if err == nil {
+		t.Fatal("expected error validating input over accepted length")
+	}
+
+	label, err = validateAndFormatVolumeLabel("*")
+	if err == nil {
+		t.Fatal("expected error validating input with bad character")
+	}
+
+}
