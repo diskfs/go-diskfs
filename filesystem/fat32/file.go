@@ -1,6 +1,7 @@
 package fat32
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -206,3 +207,35 @@ func (fl *File) Close() error {
 	fl.filesystem = nil
 	return nil
 }
+
+func (fl *File) GetContentSection() (int64, int64, error) {
+	fs := fl.filesystem
+	bytesPerCluster := fs.bytesPerCluster
+	clusters, err := fs.getClusterList(fl.clusterLocation)
+	start := int(fs.dataStart)
+	if fl.fileSize == 0 {
+		return 0, 0, nil
+	}
+	if err != nil {
+		return 0, 0, fmt.Errorf("unable to get list of clusters for file: %v", err)
+	}
+	if len(clusters) == 0 {
+		return 0, 0, fmt.Errorf("file has no clusters")
+	}
+	offset := uint32(start) + (clusters[0]-2)*uint32(bytesPerCluster)
+	size := int64(bytesPerCluster)
+
+	// check if clusters are contiguous
+	last := clusters[0]
+	for _, cluster := range clusters[1:] {
+		if cluster != last+1 {
+			return int64(offset), size, ErrNotContiguous
+		}
+		last = cluster
+		size += int64(bytesPerCluster)
+	}
+
+	return int64(offset), int64(fl.fileSize), nil
+}
+
+var ErrNotContiguous = errors.New("file is not contiguous")
