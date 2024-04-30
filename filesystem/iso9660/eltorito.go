@@ -76,7 +76,7 @@ type ElToritoEntry struct {
 	SystemType mbr.Type
 	// LoadSize how many blocks of BootFile to load, equivalent to genisoimage option `-boot-load-size`
 	LoadSize uint16
-	size     uint16
+	size     uint32
 	location uint32
 }
 
@@ -127,7 +127,7 @@ func (e *ElToritoEntry) headerBytes(last bool, entries uint16) []byte {
 func (e *ElToritoEntry) entryBytes() []byte {
 	blocks := e.LoadSize
 	if blocks == 0 {
-		blocks = e.size / 512
+		blocks = uint16(e.size / 512)
 		if e.size%512 > 1 {
 			blocks++
 		}
@@ -153,7 +153,7 @@ func (e *ElToritoEntry) generateBootTable(pvdSector uint32, p string) ([]byte, e
 	b := make([]byte, 56)
 	binary.LittleEndian.PutUint32(b[0:4], pvdSector)
 	binary.LittleEndian.PutUint32(b[4:8], e.location)
-	binary.LittleEndian.PutUint32(b[8:12], uint32(e.size))
+	binary.LittleEndian.PutUint32(b[8:12], e.size)
 	// Checksum - simply add up all 32-bit words beginning at byte position 64
 	f, err := os.Open(p)
 	if err != nil {
