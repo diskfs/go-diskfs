@@ -504,7 +504,7 @@ func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 				}
 			}
 			// save the child so we can add location late
-			e.size = uint16(child.size)
+			e.size = uint32(child.size)
 			child.elToritoEntry = e
 		}
 	}
