@@ -850,6 +850,7 @@ func (fs *FileSystem) readDirWithMkdir(p string, doMake bool) (*Directory, []*di
 				if err != nil {
 					return nil, nil, fmt.Errorf("failed to create subdirectory %s", "/"+strings.Join(paths[0:i+1], "/"))
 				}
+				currentDir.modifyTime = subdirEntry.createTime
 				// make a basic entry for the new subdir
 				parentDirectoryCluster := currentDir.clusterLocation
 				if parentDirectoryCluster == 2 {
@@ -859,8 +860,22 @@ func (fs *FileSystem) readDirWithMkdir(p string, doMake bool) (*Directory, []*di
 				dir := &Directory{
 					directoryEntry: directoryEntry{clusterLocation: subdirEntry.clusterLocation},
 					entries: []*directoryEntry{
-						{filenameShort: ".", isSubdirectory: true, clusterLocation: subdirEntry.clusterLocation},
-						{filenameShort: "..", isSubdirectory: true, clusterLocation: parentDirectoryCluster},
+						{
+							filenameShort:   ".",
+							isSubdirectory:  true,
+							clusterLocation: subdirEntry.clusterLocation,
+							createTime:      subdirEntry.createTime,
+							modifyTime:      subdirEntry.modifyTime,
+							accessTime:      subdirEntry.accessTime,
+						},
+						{
+							filenameShort:   "..",
+							isSubdirectory:  true,
+							clusterLocation: parentDirectoryCluster,
+							createTime:      currentDir.createTime,
+							modifyTime:      currentDir.modifyTime,
+							accessTime:      currentDir.accessTime,
+						},
 					},
 				}
 				// write the new directory entries to disk
