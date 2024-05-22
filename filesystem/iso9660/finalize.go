@@ -292,7 +292,7 @@ func (fi *finalizeFileInfo) calculateDirectorySize(fsm *FileSystem) (dirEntrySiz
 		recSize, recCE int
 	)
 	if !fi.IsDir() {
-		return 0, 0, fmt.Errorf("cannot convert a file entry to a directtory")
+		return 0, 0, fmt.Errorf("cannot convert a file entry to a directory")
 	}
 	recSize, recCE, err = fi.calculateRecordSize(fsm, true, false)
 	if err != nil {
@@ -437,7 +437,7 @@ func (fsm *FileSystem) Finalize(options FinalizeOptions) error {
 	/*
 		There is nothing in the iso9660 spec about the order of directories and files,
 		other than that they must be accessible in the location specified in directory entry and/or path table
-		However, most implementations seem to it as follows:
+		However, most implementations seem to do it as follows:
 		- each directory follows its parent
 		- data (i.e. file) sectors in each directory are immediately after its directory and immediately before the next sibling directory to its parent
 
