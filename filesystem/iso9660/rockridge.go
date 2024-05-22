@@ -96,7 +96,7 @@ func (r *rockRidgeExtension) GetFilename(de *directoryEntry) (string, error) {
 	}
 	return name, nil
 }
-func (r *rockRidgeExtension) GetFileExtensions(fp string, isSelf, isParent bool) ([]directoryEntrySystemUseExtension, error) {
+func (r *rockRidgeExtension) GetFileExtensionsOld(fp string, isSelf, isParent bool) ([]directoryEntrySystemUseExtension, error) {
 	// we always do PX, TF, NM, SL order
 	ret := []directoryEntrySystemUseExtension{}
 	// do not follow symlinks
@@ -143,6 +143,41 @@ func (r *rockRidgeExtension) GetFileExtensions(fp string, isSelf, isParent bool)
 			return nil, fmt.Errorf("error reading symlink target at %s", fp)
 		}
 		ret = append(ret, rockRidgeSymlink{continued: false, name: target})
+	}
+
+	return ret, nil
+}
+
+func (r *rockRidgeExtension) GetFileExtensions(ffi *finalizeFileInfo, isSelf, isParent bool) ([]directoryEntrySystemUseExtension, error) {
+	// we always do PX, TF, NM, SL order
+	ret := []directoryEntrySystemUseExtension{}
+
+	// PX
+	mtime := ffi.ModTime()
+
+	ret = append(ret, rockRidgePosixAttributes{
+		mode:      ffi.Mode(),
+		linkCount: ffi.Nlink(),
+		uid:       ffi.UID(),
+		gid:       ffi.GID(),
+		length:    r.pxLength,
+	})
+	// TF
+	tf := rockRidgeTimestamps{longForm: false, stamps: []rockRidgeTimestamp{
+		{timestampType: rockRidgeTimestampModify, time: mtime},
+		{timestampType: rockRidgeTimestampAccess, time: ffi.AccessTime()},
+		{timestampType: rockRidgeTimestampAttribute, time: ffi.ChangeTime()},
+	}}
+
+	ret = append(ret, tf)
+	// NM
+	if !isSelf && !isParent {
+		ret = append(ret, rockRidgeName{name: ffi.name})
+	}
+	// SL
+	if ffi.Mode()&os.ModeSymlink == os.ModeSymlink {
+		// need the target if it is a symlink
+		ret = append(ret, rockRidgeSymlink{continued: false, name: ffi.LinkTarget()})
 	}
 
 	return ret, nil
