@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/user"
+	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -148,12 +149,13 @@ func TestGetExtensions(t *testing.T) {
 	gid := uint32(gidI)
 	now := time.Now()
 
-	// symlinks have fixed perms based on OS, we will get it and then set it
-	if err = os.Symlink("testa", "testb"); err != nil {
+	// symlinks have fixed perms based on OS, so we just create a random symlink somewhere to get the OS-specific perms
+	linkfile := path.Join(dir, "testb")
+	if err = os.Symlink("testa", linkfile); err != nil {
 		t.Fatalf("unable to create test symlink %s: %v", "testb", err)
 	}
 	defer os.Remove("testb")
-	fi, err := os.Lstat("testb")
+	fi, err := os.Lstat(linkfile)
 	if err != nil {
 		t.Fatalf("unable to ready file info for test symlink: %v", err)
 	}
@@ -176,13 +178,14 @@ func TestGetExtensions(t *testing.T) {
 			},
 			},
 			rockRidgeName{name: "regular01"},
-		}, func(path string) {
-			if err := os.WriteFile(path, []byte("some data"), 0o600); err != nil {
-				t.Fatalf("unable to create regular file %s: %v", path, err)
+		}, func(p string) {
+			content := []byte("some data")
+			if err := os.WriteFile(p, content, 0o600); err != nil {
+				t.Fatalf("unable to create regular file %s: %v", p, err)
 			}
 			// because of umask, must set explicitly
-			if err := os.Chmod(path, 0o764); err != nil {
-				t.Fatalf("unable to chmod %s: %v", path, err)
+			if err := os.Chmod(p, 0o764); err != nil {
+				t.Fatalf("unable to chmod %s: %v", p, err)
 			}
 		},
 		},
@@ -196,13 +199,13 @@ func TestGetExtensions(t *testing.T) {
 			},
 			},
 			rockRidgeName{name: "directory02"},
-		}, func(path string) {
-			if err := os.Mkdir(path, 0o754); err != nil {
-				t.Fatalf("unable to create directory %s: %v", path, err)
+		}, func(p string) {
+			if err := os.Mkdir(p, 0o754); err != nil {
+				t.Fatalf("unable to create directory %s: %v", p, err)
 			}
 			// because of umask, must set explicitly
-			if err := os.Chmod(path, 0o754); err != nil {
-				t.Fatalf("unable to chmod %s: %v", path, err)
+			if err := os.Chmod(p, 0o754); err != nil {
+				t.Fatalf("unable to chmod %s: %v", p, err)
 			}
 		},
 		},
@@ -217,9 +220,10 @@ func TestGetExtensions(t *testing.T) {
 			},
 			rockRidgeName{name: "symlink03"},
 			rockRidgeSymlink{continued: false, name: "/a/b/c/d/efgh"},
-		}, func(path string) {
-			if err := os.Symlink("/a/b/c/d/efgh", path); err != nil {
-				t.Fatalf("unable to create symlink %s: %v", path, err)
+		}, func(p string) {
+			target := "/a/b/c/d/efgh"
+			if err := os.Symlink(target, p); err != nil {
+				t.Fatalf("unable to create symlink %s: %v", p, err)
 			}
 		},
 		},
@@ -232,9 +236,9 @@ func TestGetExtensions(t *testing.T) {
 				{timestampType: rockRidgeTimestampAttribute, time: now},
 			},
 			},
-		}, func(path string) {
-			if err := os.Mkdir(path, 0o754); err != nil {
-				t.Fatalf("unable to create parent directory %s: %v", path, err)
+		}, func(p string) {
+			if err := os.Mkdir(p, 0o754); err != nil {
+				t.Fatalf("unable to create parent directory %s: %v", p, err)
 			}
 		},
 		},
@@ -247,40 +251,50 @@ func TestGetExtensions(t *testing.T) {
 				{timestampType: rockRidgeTimestampAttribute, time: now},
 			},
 			},
-		}, func(path string) {
-			if err := os.Mkdir(path, 0o754); err != nil {
-				t.Fatalf("unable to create self directory %s: %v", path, err)
+		}, func(p string) {
+			if err := os.Mkdir(p, 0o754); err != nil {
+				t.Fatalf("unable to create self directory %s: %v", p, err)
 			}
 		},
 		},
 	}
 	for _, tt := range tests {
-		// random filename
-		fp := filepath.Join(dir, tt.name)
-		// create the file
-		tt.createFile(fp)
+		t.Run(tt.name, func(t *testing.T) {
+			// random filename
+			fp := filepath.Join(dir, tt.name)
+			// create the file
+			tt.createFile(fp)
+			fi, err := os.Lstat(fp)
+			if err != nil {
+				t.Fatalf("unable to os.Stat(%s): %v", fp, err)
+			}
+			ffi, err := finalizeFileInfoFromFile(fp, fp, fi)
+			if err != nil {
+				t.Fatalf("unable to create finalizeFileInfo from file %s: %v", fp, err)
+			}
 
-		// get the extensions
-		ext, err := rr.GetFileExtensions(fp, tt.self, tt.parent)
-		if err != nil {
-			t.Fatalf("%s: Unexpected error getting extensions for %s: %v", tt.name, fp, err)
-		}
-		if len(ext) != len(tt.extensions) {
-			t.Fatalf("%s: rock ridge extensions gave %d extensions instead of expected %d", tt.name, len(ext), len(tt.extensions))
-		}
-		// loop through each attribute
-		for i, e := range ext {
-			if stamp, ok := e.(rockRidgeTimestamps); ok {
-				if !stamp.Close(tt.extensions[i]) {
+			// get the extensions
+			ext, err := rr.GetFileExtensions(ffi, tt.self, tt.parent)
+			if err != nil {
+				t.Fatalf("%s: Unexpected error getting extensions for %s: %v", tt.name, fp, err)
+			}
+			if len(ext) != len(tt.extensions) {
+				t.Fatalf("%s: rock ridge extensions gave %d extensions instead of expected %d", tt.name, len(ext), len(tt.extensions))
+			}
+			// loop through each attribute
+			for i, e := range ext {
+				if stamp, ok := e.(rockRidgeTimestamps); ok {
+					if !stamp.Close(tt.extensions[i]) {
+						t.Errorf("%s: Mismatched extension number %d for %s, actual then expected", tt.name, i, fp)
+						t.Logf("%#v\n", e)
+						t.Logf("%#v\n", tt.extensions[i])
+					}
+				} else if !e.Equal(tt.extensions[i]) {
 					t.Errorf("%s: Mismatched extension number %d for %s, actual then expected", tt.name, i, fp)
 					t.Logf("%#v\n", e)
 					t.Logf("%#v\n", tt.extensions[i])
 				}
-			} else if !e.Equal(tt.extensions[i]) {
-				t.Errorf("%s: Mismatched extension number %d for %s, actual then expected", tt.name, i, fp)
-				t.Logf("%#v\n", e)
-				t.Logf("%#v\n", tt.extensions[i])
 			}
-		}
+		})
 	}
 }
