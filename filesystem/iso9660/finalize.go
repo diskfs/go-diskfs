@@ -589,6 +589,9 @@ func (fsm *FileSystem) Finalize(options FinalizeOptions) error {
 					return fmt.Errorf("unable to find image child %s: %v", e.BootFile, err)
 				}
 			}
+			if child == nil {
+				return fmt.Errorf("unable to find image child %s: %v", e.BootFile, err)
+			}
 			// save the child so we can add location late
 			e.size = uint32(child.size)
 			child.elToritoEntry = e
