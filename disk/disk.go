@@ -246,3 +246,12 @@ func (d *Disk) GetFilesystem(part int) (filesystem.FileSystem, error) {
 	}
 	return nil, fmt.Errorf("unknown filesystem on partition %d", part)
 }
+
+// Close the disk. Once successfully closed, it can no longer be used.
+func (d *Disk) Close() error {
+	if err := d.File.Close(); err != nil {
+		return err
+	}
+	*d = Disk{}
+	return nil
+}
