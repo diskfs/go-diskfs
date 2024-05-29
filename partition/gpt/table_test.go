@@ -353,6 +353,40 @@ func TestTableWrite(t *testing.T) {
 			case partitionName[1] != name:
 				t.Errorf("Mismatched partition name, actual %s expected %s", partitionName[1], name)
 			}
+
+			err = testhelper.DockerRun(nil, output, false, true, mounts, intImage, "sgdisk", "--print", mpath)
+			outString = output.String()
+			if err != nil {
+				t.Errorf("unexpected err: %v", err)
+				t.Log(outString)
+			}
+
+			/* expected output format
+			Sector size (logical): 512 bytes
+			Disk identifier (GUID): E818397E-4D04-45D0-8CE9-B1D355EABCE5
+			Partition table holds up to 128 entries
+			Main partition table begins at sector 2 and ends at sector 33
+			First usable sector is 34, last usable sector is 20446
+			Partitions will be aligned on 2048-sector boundaries
+			Total free space is 10172 sectors (5.0 MiB)
+
+			Number  Start (sector)    End (sector)  Size       Code  Name
+			   1            2048           12288   5.0 MiB     EF00  EFI System Tester
+			*/
+
+			usableSectorMatcher := regexp.MustCompile(`First usable sector is (\d+), last usable sector is (\d+)`)
+			usableSector := usableSectorMatcher.FindStringSubmatch(outString)
+			firstUsableSectorExpected := "34"
+			lastUsableSectorExpected := "20446"
+
+			switch {
+			case len(usableSector) < 3:
+				t.Errorf("unable to get usable sectors %v", usableSector)
+			case usableSector[1] != firstUsableSectorExpected:
+				t.Errorf("Mismatched first usable sector, actual %s expected %s", usableSector[1], firstUsableSectorExpected)
+			case usableSector[2] != lastUsableSectorExpected:
+				t.Errorf("Mismatched last usable sector, actual %s expected %s", usableSector[2], lastUsableSectorExpected)
+			}
 		}
 	})
 }

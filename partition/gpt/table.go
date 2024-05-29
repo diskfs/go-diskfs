@@ -106,7 +106,7 @@ func (t *Table) initTable(size int64) {
 		t.secondaryHeader = diskSectors - 1
 	}
 	if t.lastDataSector == 0 {
-		t.lastDataSector = diskSectors - 1 - partSectors
+		t.lastDataSector = t.secondaryHeader - partSectors - 1
 	}
 
 	t.initialized = true
