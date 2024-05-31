@@ -238,3 +238,69 @@ func TestRead(t *testing.T) {
 		}
 	})
 }
+
+func TestRepairVerify(t *testing.T) {
+	const sizeBefore = 10 * 1024 * 1024
+	const sizeAfter = 20 * 1024 * 1024
+
+	filename := "disk_test"
+	f, err := os.CreateTemp("", filename)
+	if err != nil {
+		t.Fatalf("unable to create tempfile %s :%v", filename, err)
+	}
+	defer f.Close()
+
+	err = f.Truncate(sizeBefore)
+	if err != nil {
+		t.Fatalf("unable to size file: %v", err)
+	}
+
+	table := &Table{
+		Partitions: []*Partition{
+			{
+				Start: 2048,
+				End:   sizeBefore,
+				Type:  LinuxFilesystem,
+			},
+		},
+	}
+
+	err = table.Write(f, sizeBefore)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = table.Verify(f, sizeBefore)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Increase the size of the disk.
+	err = f.Truncate(sizeAfter)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify should fail because the secondary header is no longer at the end of the disk.
+	err = table.Verify(f, sizeAfter)
+	if err == nil {
+		t.Fatal("table verification should have failed after resizing the disk")
+	}
+
+	// Reset the secondary header and last data sector locations.
+	err = table.Repair(sizeAfter)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Table should get updated with the new values.
+	err = table.Write(f, sizeAfter)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = table.Verify(f, sizeAfter)
+	if err != nil {
+		t.Error(err)
+	}
+}

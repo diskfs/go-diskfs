@@ -595,6 +595,11 @@ func (t *Table) UUID() string {
 
 // Verify will attempt to evaluate the headers
 func (t *Table) Verify(f util.File, diskSize uint64) error {
+	if t.LogicalSectorSize == 0 {
+		// Avoid divide by zero panic.
+		return fmt.Errorf("table is not initialized")
+	}
+
 	// Determine the size of disk that GPT expects
 	expectedDiskSize := (t.secondaryHeader + 1) * uint64(t.LogicalSectorSize)
 	if diskSize != expectedDiskSize {
@@ -613,12 +618,25 @@ func (t *Table) Verify(f util.File, diskSize uint64) error {
 	if t.firstDataSector != secondaryTable.firstDataSector {
 		return fmt.Errorf("error comparing GPT headers expected =>  %d / actual => %d", t.firstDataSector, secondaryTable.firstDataSector)
 	}
+	partSectors := uint64(t.partitionArraySize) * uint64(t.partitionEntrySize) / uint64(t.LogicalSectorSize)
+	lastDataSector := t.secondaryHeader - partSectors - 1
+	if t.lastDataSector != lastDataSector {
+		return fmt.Errorf("error comparing GPT secondary headers expected =>  %d / actual => %d", t.lastDataSector, lastDataSector)
+	}
 	return nil
 }
 
 // Repair will attempt to evaluate the headers fix the header location and re-write the primary and secondary header
 func (t *Table) Repair(diskSize uint64) error {
+	if t.LogicalSectorSize == 0 {
+		// Avoid divide by zero panic.
+		return fmt.Errorf("table is not initialized")
+	}
+
+	partSectors := uint64(t.partitionArraySize) * uint64(t.partitionEntrySize) / uint64(t.LogicalSectorSize)
+
 	t.secondaryHeader = (diskSize / uint64(t.LogicalSectorSize)) - 1
+	t.lastDataSector = t.secondaryHeader - partSectors - 1
 
 	return nil
 }
