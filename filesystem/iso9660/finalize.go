@@ -84,6 +84,7 @@ type finalizeFileInfo struct {
 	// content in memory content of file. If this is anything other than nil, including a zero-length slice,
 	// then this content is used, rather than anything on disk.
 	content []byte
+	serial  uint64
 }
 
 func finalizeFileInfoFromFile(p, fullPath string, fi fs.FileInfo) (*finalizeFileInfo, error) {
@@ -913,9 +914,12 @@ func walkTree(workspace string) ([]*finalizeFileInfo, map[string]*finalizeFileIn
 	}
 	// make everything relative to the workspace
 	_ = os.Chdir(workspace)
-	dirList := make(map[string]*finalizeFileInfo)
-	fileList := make([]*finalizeFileInfo, 0)
-	var entry *finalizeFileInfo
+	var (
+		dirList  = make(map[string]*finalizeFileInfo)
+		fileList = make([]*finalizeFileInfo, 0)
+		entry    *finalizeFileInfo
+		serial   uint64
+	)
 	err = filepath.Walk(".", func(fp string, fi os.FileInfo, err error) error {
 		if err != nil {
 			return fmt.Errorf("error walking path %s: %v", fp, err)
@@ -929,6 +933,8 @@ func walkTree(workspace string) ([]*finalizeFileInfo, map[string]*finalizeFileIn
 		if err != nil {
 			return err
 		}
+		entry.serial = serial
+		serial++
 
 		// we will have to save it as its parent
 		parentDir := filepath.Dir(fp)
