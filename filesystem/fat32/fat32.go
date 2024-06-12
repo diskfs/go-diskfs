@@ -375,7 +375,7 @@ func Read(file util.File, size, start, blocksize int64) (*FileSystem, error) {
 	_, _ = file.ReadAt(b, int64(fatSecondaryStart)+start)
 	fat2 := tableFromBytes(b)
 	if !fat.equal(fat2) {
-		return nil, errors.New("fat tables did not much")
+		return nil, errors.New("fat tables did not match")
 	}
 	dataStart := uint32(fatSecondaryStart) + fat.size
 
