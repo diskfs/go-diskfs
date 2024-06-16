@@ -3,7 +3,6 @@ module github.com/diskfs/go-diskfs
 go 1.21
 
 require (
-	github.com/bits-and-blooms/bitset v1.2.1
 	github.com/djherbis/times v1.6.0
 	github.com/elliotwutingfeng/asciiset v0.0.0-20230602022725-51bbb787efab
 	github.com/go-test/deep v1.0.8
@@ -13,8 +12,7 @@ require (
 	github.com/satori/go.uuid v1.2.0
 	github.com/sirupsen/logrus v1.9.4-0.20230606125235-dd1b4c2e81af
 	github.com/ulikunitz/xz v0.5.11
-	golang.org/x/crypto v0.0.0-20210921155107-089bfa567519
-	golang.org/x/sys v0.5.0
+	golang.org/x/sys v0.15.0
 )
 
 require github.com/klauspost/compress v1.17.4
