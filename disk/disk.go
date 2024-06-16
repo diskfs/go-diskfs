@@ -247,6 +247,12 @@ func (d *Disk) GetFilesystem(part int) (filesystem.FileSystem, error) {
 	if err == nil {
 		return squashFS, nil
 	}
+	log.Debug("trying ext4")
+	ext4FS, err := ext4.Read(d.File, size, start, d.LogicalBlocksize)
+	if err == nil {
+		return ext4FS, nil
+	}
+	log.Debugf("ext4 failed: %v", err)
 	return nil, fmt.Errorf("unknown filesystem on partition %d", part)
 }
 
