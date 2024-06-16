@@ -14,6 +14,7 @@ import (
 	"github.com/diskfs/go-diskfs/filesystem/ext4/crc"
 	"github.com/diskfs/go-diskfs/util"
 	uuid "github.com/satori/go.uuid"
+	"github.com/willf/bitset"
 )
 
 // SectorSize indicates what the sector size in bytes is
@@ -1077,8 +1078,376 @@ func recalculateBlocksize(numblocks, size int64) (sectorsPerBlock int, blocksize
 }
 
 // mkSubdir make a subdirectory of a given name inside the parent
+// 1- allocate a single data block for the directory
+// 2- create an inode in the inode table pointing to that data block
+// 3- mark the inode in the inode bitmap
+// 4- mark the data block in the data block bitmap
+// 5- create a directory entry in the parent directory data blocks
 //
 //nolint:revive // params are unused because this still is read-only, but it will be read-write at some point
 func (fs *FileSystem) mkSubdir(parent *Directory, name string) (*directoryEntry, error) {
-	return nil, errors.New("mksubdir not yet supported")
+	// still to do:
+	//  - write directory entry in parent
+	//  - write inode to disk
+
+	// create an inode
+	inodeNumber, err := fs.allocateInode(parent.inode)
+	if err != nil {
+		return nil, fmt.Errorf("Could not allocate inode for file %s: %v", name, err)
+	}
+	// get extents for the file - prefer in the same block group as the inode, if possible
+	newExtents, err := fs.allocateExtents(1, nil, uint64(inodeNumber))
+	if err != nil {
+		return nil, fmt.Errorf("Could not allocate disk space for file %s: %v", name, err)
+	}
+	extentTreeParsed, err := extendExtentTree(newExtents, nil, fs.superblock.blockSize)
+	if err != nil {
+		return nil, fmt.Errorf("Could not convert extents into tree: %v", err)
+	}
+	// normally, after getting a tree from extents, you would need to then allocate all of the blocks
+	//    in the extent tree - leafs and intermediate. However, because we are allocating a new directory
+	//    with a single extent, we *know* it can fit in the inode itself (which has a max of 4), so no need
+
+	// create a directory entry for the file
+	de := directoryEntry{
+		inode:    uint32(inodeNumber),
+		filename: name,
+		fileType: fileTypeDirectory,
+	}
+	parent.entries = append(parent.entries, &de)
+	// write the parent out to disk
+	bytesPerBlock := fs.superblock.blockSize
+	b, err := parent.toBytes(int(bytesPerBlock))
+	if err != nil {
+		return nil, fmt.Errorf("Error writing parent to bytes: %v", err)
+	}
+	// check if parent has increased in size beyond allocated blocks
+	parentInode, err := fs.readInode(parent.inode)
+	if err != nil {
+		return nil, fmt.Errorf("Could not read inode %d of parent directory: %v", parent.inode)
+	}
+	// get the allocated space and the new size
+	allocatedBlocks := parentInode.blocks
+	allocatedBytes := allocatedBlocks * uint64(fs.superblock.blockSize)
+	requiredBytes := len(b)
+
+	// if necessary, allocate another data block for the parent and update the extentTreeNode
+	if uint64(requiredBytes) > allocatedBytes {
+		// allocate one new block
+		newParentExtents, err := fs.allocateExtents(uint64(requiredBytes), parentInode.extents.blocks(), uint64(parent.inode))
+		// convert it back into a tree
+		updatedTree, err := extendExtentTree(newParentExtents, parentInode.extents, fs.superblock.blockSize)
+		if err != nil {
+			return nil, fmt.Errorf("Could not convert updated extents to tree for parent directory: %v", err)
+		}
+		// save it on the parent inode
+		parentInode.extents = updatedTree
+		// increment the number of blocks in the parent
+		parentInode.blocks++
+		// write the inode back out
+		iBytes, err := parentInode.toBytes(fs.superblock)
+		if err != nil {
+			return nil, fmt.Errorf("Could not convert updated parent inode back to bytes: %v", err)
+		}
+		err = fs.writeInode(parentInode)
+		if err != nil {
+			return nil, fmt.Errorf("Could not write updated parent inode back to bytes: %v", err)
+		}
+	}
+	// write the directory entry in the parent
+	// figure out which block it goes into, and possibly rebalance the directory entries hash tree
+
+	// put entries for . and .. in the first block for the new directory
+	initialEntries := []*directoryEntry{
+		&directoryEntry{
+			inode:    uint32(inodeNumber),
+			filename: ".",
+			fileType: fileTypeDirectory,
+		},
+		&directoryEntry{
+			inode:    parent.inode,
+			filename: "..",
+			fileType: fileTypeDirectory,
+		},
+	}
+	newDir := Directory{
+		directoryEntry: de,
+		root:           false,
+		entries:        initialEntries,
+	}
+	dirBytes, err := newDir.toBytes(int(fs.superblock.blockSize))
+	if err != nil {
+		return nil, fmt.Errorf("Unable to convert new directory to bytes: %v", err)
+	}
+	// write the bytes out to disk
+	wrote, err := fs.file.WriteAt(dirBytes, int64(newExtents.extents[0].startingBlock))
+	if err != nil {
+		return nil, fmt.Errorf("Unable to write new directory: %v", err)
+	}
+	if wrote != len(dirBytes) {
+		return nil, fmt.Errorf("Wrote only %d bytes instead of expected %d for new directory", wrote, dirBytes)
+	}
+
+	// need current time
+	now := time.Now()
+	// write the inode for the new subdirectory out
+	in := inode{
+		number:                 inodeNumber,
+		permissionsGroup:       parentInode.permissionsGroup,
+		permissionsOwner:       parentInode.permissionsOwner,
+		permissionsOther:       parentInode.permissionsOther,
+		fileType:               fileTypeDirectory,
+		owner:                  parentInode.owner,
+		group:                  parentInode.group,
+		size:                   uint64(len(dirBytes)),
+		hardLinks:              2,
+		blocks:                 newExtents.blocks(),
+		flags:                  &inodeFlags{},
+		nfsFileVersion:         0,
+		version:                0,
+		inodeSize:              parentInode.inodeSize,
+		deletionTime:           0,
+		accessTime:             now,
+		changeTime:             now,
+		createTime:             now,
+		modifyTime:             now,
+		extendedAttributeBlock: 0,
+		project:                0,
+		extents:                extentTreeParsed,
+	}
+	// write the inode to disk
+
+	// return
+	return &de, nil
+}
+
+// allocateInode allocate a single inode
+// passed the parent, so it can know where to allocate it
+// logic:
+//   - parent is  0 : root inode, will allocate at 2
+//   - parent is  2 : child of root, will try to spread out
+//   - else         : try to collocate with parent, if possible
+func (fs *FileSystem) allocateInode(parent uint32) (uint32, error) {
+	var (
+		inodeNumberInGroup       = -1
+		targetBG           int64 = -1
+		parentBG                 = (parent - 1) / fs.superblock.blocksPerGroup
+	)
+	switch parent {
+	case 0:
+		// allocate in the first block group
+		inodeNumberInGroup = 2
+		targetBG = 0
+	case 2:
+		// look for the least loaded group, starting with first
+		var (
+			leastCount uint32 = 0
+			i          int64
+		)
+		for i = 0; i < fs.blockGroups; i++ {
+			freeBlocks := fs.groupDescriptors.descriptors[i].freeBlocks
+			if freeBlocks > leastCount {
+				leastCount = freeBlocks
+				targetBG = i
+			}
+		}
+	default:
+		// start with the blockgroup the parent is in, and move forward until we find a group with at least 8 free blocks
+		var (
+			i int64
+		)
+		for i = 0; i < fs.blockGroups; i++ {
+			bg := i + int64(parentBG)
+			if bg > fs.blockGroups {
+				bg = bg % fs.blockGroups
+			}
+			freeBlocks := fs.groupDescriptors.descriptors[bg].freeBlocks
+			if freeBlocks >= 8 {
+				targetBG = bg
+				break
+			}
+		}
+	}
+	// load the inode bitmap
+	descriptor := fs.groupDescriptors.descriptors[targetBG]
+	bitmapLocation := descriptor.inodeBitmapLocation
+	bitmapBytes := make([]byte, fs.superblock.blockSize, fs.superblock.blockSize)
+	inodeOffset := int64(bitmapLocation*uint64(fs.superblock.blockSize) + uint64(fs.start))
+	read, err := fs.file.ReadAt(bitmap, inodeOffset)
+	if err != nil {
+		return 0, fmt.Errorf("Unable to read inode bitmap for blockgroup %d: %v", targetBG, err)
+	}
+	if read != int(fs.superblock.blockSize) {
+		return 0, fmt.Errorf("Read only %d bytes instead of expected %d for inode bitmap of block group %d", read, fs.superblock.blockSize, targetBG)
+	}
+	// create a bitset
+	// 8 bits, because the blocksize is a uint32
+	bs := bitset.New(8)
+
+	if inodeNumberInGroup < 0 {
+		err = bs.UnmarshalBinary(bitmapBytes)
+		if err != nil {
+			return 0, fmt.Errorf("Unable to parse inode bitmap for blockgroup %d: %v", i, err)
+		}
+		// find the next free inode and allocate it
+		inodeNumberInGroup = bs.NextClear(0)
+	}
+	// set it as marked
+	bs.Set(inodeNumberInGroup)
+	// reduce number of free inodes in that descriptor table
+	descriptor.freeInodes--
+
+	// get the inode bitmap as bytes
+	inodeBitmapBytes, err := bs.MarshalBinary()
+	if err != nil {
+		return 0, fmt.Errorf("Unable to create inode bitmap bytes for blockgroup %d: %v", targetBG, err)
+	}
+	// get the group descriptor as bytes
+	gdtChecksumType := gdtChecksumNone
+	if p.Checksum {
+		gdtChecksumType = gdtChecksumMetadata
+	}
+	gdBytes, err := descriptor.toBytes(gdtChecksumType, fs.superblock.uuid.Bytes())
+	if err != nil {
+		return 0, fmt.Errorf("Unable to create group descriptor bytes for blockgroup %d: %v", targetBG, err)
+	}
+
+	// write the inode bitmap bytes
+	wrote, err := fs.file.WriteAt(inodeBitmapBytes, inodeOffset)
+	if err != nil {
+		return 0, fmt.Errorf("Unable to write inode bitmap for blockgroup %d: %v", targetBG, err)
+	}
+	if wrote != fs.superblock.blockSize {
+		return 0, fmt.Errorf("Wrote only %d bytes instead of expected %d for inode bitmap of block group %d", wrote, fs.superblock.blockSize, targetBG)
+	}
+
+	// write the group descriptor bytes
+	// gdt starts in block 1 of any redundant copies, specifically in BG 0
+	gdtBlock := 1
+	blockByteLocation := gdtBlock * fs.superblock.blockSize
+	gdOffset := fs.start + blockByteLocation + targetBG*fs.superblock.groupDescriptorSize
+	wrote, err = fs.file.WriteAt(gdBytes, gdOffset)
+	if err != nil {
+		return 0, fmt.Errorf("Unable to write group descriptor bytes for blockgroup %d: %v", targetBG, err)
+	}
+	if wrote != len(gdBytes) {
+		return 0, fmt.Errorf("Wrote only %d bytes instead of expected %d for group descriptor of block group %d", wrote, len(gdBytes), targetBG)
+	}
+
+	// convert to absolute inodeNumber
+	inodeNumber := inodeNumberInGroup * fs.superblock.inodesPerGroups
+
+	return inodeNumber, nil
+}
+
+// allocateExtents allocate the data blocks in extents that are
+// to be used for a file of a given size
+// arguments are file size in bytes and existing extents
+// if previous is nil, then we are not (re)sizing an existing file but creating a new one
+// returns the extents to be used in order
+func (fs *FileSystem) allocateExtents(size uint64, previous *extents, inode uint64) (*extents, error) {
+	ext := make([]extent, 10)
+	// 1- calculate how many blocks are needed
+	required := size / uint64(fs.superblock.blockSize)
+	// 2- see how many blocks already are allocated
+	allocated := 0
+	if previous != nil {
+		allocated = previous.blocks()
+	}
+	// 3- if needed, allocate new blocks in extents
+	extraBlockCount := required - allocated
+	// if we have enough, do not add anything
+	if extraBlockCount <= 0 {
+		return previous, nil
+	}
+
+	// if there are not enough blocks left
+	if fs.superblock.freeBlocks < extraBlockCount {
+		return nil, fmt.Errorf("Only %d blocks free, requires additional %d", fs.superblock.freeBlocks, extraBlockCount)
+	}
+
+	// now we need to look for as many contiguous blocks as possible
+	// first calculate how many extents minimum are needed
+	minExtents := extraBlockCount / maxBlocksPerExtent
+	if extraBlockCount%maxBlocksPerExtent > 0 {
+		minExtents++
+	}
+	// if all of the extents, except possibly the last, are maximum size, then we need minExtents extents
+	// we loop through, trying to allocate an extent as large as our remaining blocks or maxBlocksPerExtent,
+	//   whichever is smaller
+	blockGroupCount := fs.blockGroups
+	// keep track of which block groups were updated
+	updatedBG := map[uint64]bool{}
+	// instead of starting with BG 0, should start with BG where the inode for this file/dir is located
+	for i := 0; i < blockGroupCount && len(allocated) < extraBlockCount; i++ {
+		// keep track if we allocated anything in this blockgroup
+		// 1- read the GDT for this blockgroup to find the location of the block bitmap
+		//    and total free blocks
+		// 2- read the block bitmap from disk
+		// 3- find the maximum contiguous space available
+		bitmapLocation := fs.groupDescriptors.descriptors[i].blockBitmapLocation
+		bitmapBytes := make([]byte, fs.superblock.blockSize, fs.superblock.blockSize)
+		read, err := fs.file.ReadAt(bitmap, bitmapLocation*fs.superblock.blockSize+fs.start)
+		if err != nil {
+			return nil, fmt.Errorf("Unable to read block bitmap for blockgroup %d: %v", i, err)
+		}
+		if read != fs.superblock.blockSize {
+			return nil, fmt.Errorf("Read only %d bytes instead of expected %d for block bitmap of block group %d", read, fs.superblock.blockSize, i)
+		}
+		// create a bitset
+		bs := bitset.New(fs.superblock.blockSize)
+		err = bs.UnmarshalBinary(bitmapBytes)
+		if err != nil {
+			return nil, fmt.Errof("Unable to parse block bitmap for blockgroup %d: %v", i, err)
+		}
+		// now find our unused blocks and how many there are in a row as potential extents
+		lastIndex := -1
+		targetLength := extraBlockCount
+		if targetLength > maxBlocksPerExtent {
+			targetLength = maxBlocksPerExtent
+		}
+		for j, e := b.NextClear(0); e; j, e = b.NextClear(j + 1) {
+			extentLength := j - lastIndex
+			// do we want to track it?
+			if extentLength >= targetLength {
+				// create an extent of maximum size
+				newExtent := extent{
+					count:         targetLength,
+					startingBlock: lastIndex,
+				}
+				// save the extent to our newly allocated extents list
+				ext = append(ext, newExtent)
+				// mark them as taken
+				for k := 0; k < targetLength; k++ {
+					bs.Set(k + lastIndex)
+				}
+				// reduce number of free blocks in this cluster
+				fs.groupDescriptors.descriptors[i].freeBlocks -= targetLength
+				updatedBG[i] = true
+				// keep track that we allocated them
+				allocated += targetLength
+				// what if there is more leftover?
+				// easily handle by setting j to the last previous element that was taken
+				lastIndex += targetLength
+				j = lastIndex
+				// new target length
+				targetLength = extraBlockCount - allocated
+				if targetLength > maxBlocksPerExtent {
+					targetLength = maxBlocksPerExtent
+				}
+			}
+		}
+	}
+	// have we allocated everything we need to?
+	if allocated < extraBlockCount {
+		// we have not, so we need to cycle through looking for smaller extents - we could not use the entire size
+	}
+
+	// need to update the total blocks used/free in superblock
+	fs.superblock.freeBlocks -= allocated
+	// update the blockBitmapChecksum for any updated block groups in GDT
+	// write updated superblock and GDT to disk
+	// write backup copies
+
+	return extents, nil
 }

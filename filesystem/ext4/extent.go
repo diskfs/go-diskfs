@@ -3,6 +3,7 @@ package ext4
 import (
 	"encoding/binary"
 	"fmt"
+	"math"
 )
 
 const (
@@ -317,4 +318,130 @@ func parseExtents(b []byte, blocksize, start, count uint32) (extentBlockFinder, 
 	}
 
 	return ret, nil
+}
+
+// extendExtentTree extend extent tree with a slice of new extents
+// if the existing tree is nil, create a new one
+func extendExtentTree(tree extentBlockFinder, blockSize uint64) (extentBlockFinder, error) {
+	// our logic:
+	// 1- create groups of extents, where each group fits into a single block with the header.
+	//    Each group is saved in an extentTreeNode{} struct with the elements in extentTreeNode.extents
+	//    we now have []extentTreeNode
+	// 2- create groups of extentTreeNode, where each group fits into a single block with the header.
+	//    Each group is saved in an extentTreeNode{} struct with the elements in extentTreeNode.children
+	//    we now have []extentTreeNode
+	// 3- repeat 2 with its output until one of the following happens:
+	//      a- we have a group output of 2 whose number of children <= 4, and put that in the inode
+	//      b- we have repeated 2 more than 4 times (i.e. depth >= 5), in which case the file is too large
+
+	maxEntriesPerBlock := (blockSize - extentTreeHeaderLength) / extentTreeEntryLength
+	leafBlocksRequired := entries / maxEntriesPerBlock
+	maxLeafNodes := extentInodeMaxEntries * math.Pow(maxEntriesPerBlock, extentTreeMaxDepth)
+
+	// exts is the new extents to add
+	exts := e.extents
+	entries := len(exts)
+
+	if tree == nil {
+		tree = &extentTreeNode{
+			depth:     0,
+			max:       uint16(extentInodeMaxEntries),
+			fileBlock: 0,
+			entries:   0,
+		}
+	}
+
+	switch {
+	case leafBlocksRequired > maxLeafNodes:
+		// too large for ext4
+		return nil, fmt.Errorf("%d extents requires %d leaf nodes, greater than the maximum of %d", entries, leafBlocksRequired, maxLeafNodes)
+	case tree.depth == 0 && tree.entries+entries <= extentInodeMaxEntries:
+		// existing flat tree (depth 0) with room for new extents
+		tree.extents = append(tree.extents, exts)
+		tree.entries += entries
+	case tree.depth == 0 && tree.entries+entries > extentInodeMaxEntries:
+		// existing flat tree (depth 0) with insufficient room for new extents
+		// so just add ours to that one and make a new tree
+		exts = append(tree.extents, exts)
+		tree = buildExtentTree(exts, maxEntriesPerBlock)
+	case tree.depth > 0:
+		// existing deep tree - just extend it
+		// take the last intermediate entry
+		var lastEntry *extentTreeNode
+		for lastEntry = tree; lastEntry.depth == 0; lastEntry = lastEntry.children[lastEntries.children-1] {
+		}
+		// we now have the 0 depth node, so add the extents to the end
+		assign := entries
+		availableSlots := maxEntriesPerBlock - lastEntry.entries
+		if availableSlots < assign {
+			assign = availableSlots
+		}
+		lastEntry.extents.extents = append(lastEntry.extents.extents, exts[:assign])
+		// do we have any unallocated? If so, walk up the tree to find the next one
+		if entries-assign > 0 {
+
+		}
+	}
+
+	return &tree, nil
+}
+
+func buildExtentTree(exts extentBlockFinder, maxEntriesPerBlock uint64) (extentBlockFinder, error) {
+	// new tree
+	// do not forget to reserve the header
+	// we now know how many leaf blocks we need, now calculate how many branch blocks
+	// each leafBlock takes one entry in a branch block
+	entries := len(exts)
+
+	// 1- create groups of extents, where each group fits into a single block with the header.
+	leafs := make([]*extentTreeNode, 0, maxEntriesPerBlock)
+	for i := 0; i < entries; {
+		end := i + maxEntriesPerBlock
+		if end > entries {
+			end = entries
+		}
+		leafs = append(leafs, &extentTreeNode{
+			depth:       0,
+			entries:     end - i,
+			max:         maxEntriesPerBlock,
+			blockNumber: -1, // we do not know yet what block will store these
+			fileBlock:   exts[i].fileBlock,
+			extents:     exts[i:end],
+		})
+		i = end
+	}
+
+	// 2- create groups of extentTree, where each group fits into a single block with the header.
+	// 3- repeat 2 with its extentTreeNode, until the output of a run has <= 4 (extentInodeMaxEntries) children in the group
+	root := leafs
+	var depth int
+	for depth = 1; len(root) < extentInodeMaxEntries; depth++ {
+		nodes := make([]*extentTreeNode, 0, maxEntriesPerBlock)
+		for i := 0; i < len(root); i++ {
+			end := i + maxEntriesPerBlock
+			if end > len(root) {
+				end = len(root)
+			}
+			nodes = append(nodes, &extentTreeNode{
+				depth:       depth,
+				entries:     end - i,
+				max:         maxEntriesPerBlock,
+				blockNumber: -1, // we do not know yet what block will store these
+				fileBlock:   nodes[i].fileBlock,
+				children:    nodes[i:end],
+			})
+			i = end
+		}
+		root = nodes
+	}
+	// now just make the root node with up to extentInodeMaxEntries (4) entries
+	tree = &extentTreeNode{
+		depth:       depth,
+		entries:     len(root),
+		max:         extentInodeMaxEntries,
+		blockNumber: -1, // we do not know yet what block will store these
+		fileBlock:   nodes[i].fileBlock,
+		children:    nodes[i:end],
+	}
+	return tree
 }
