@@ -6,8 +6,6 @@ import (
 	"os"
 	"sort"
 	"time"
-
-	"github.com/djherbis/times"
 )
 
 const (
@@ -96,58 +94,6 @@ func (r *rockRidgeExtension) GetFilename(de *directoryEntry) (string, error) {
 	}
 	return name, nil
 }
-func (r *rockRidgeExtension) GetFileExtensionsOld(fp string, isSelf, isParent bool) ([]directoryEntrySystemUseExtension, error) {
-	// we always do PX, TF, NM, SL order
-	ret := []directoryEntrySystemUseExtension{}
-	// do not follow symlinks
-	fi, err := os.Lstat(fp)
-	if err != nil {
-		return nil, fmt.Errorf("error reading file %s: %v", fp, err)
-	}
-
-	t, err := times.Lstat(fp)
-	if err != nil {
-		return nil, fmt.Errorf("error reading times %s: %v", fp, err)
-	}
-
-	// PX
-	nlink, uid, gid := statt(fi)
-	mtime := fi.ModTime()
-	atime := t.AccessTime()
-	ctime := t.ChangeTime()
-
-	ret = append(ret, rockRidgePosixAttributes{
-		mode:      fi.Mode(),
-		linkCount: nlink,
-		uid:       uid,
-		gid:       gid,
-		length:    r.pxLength,
-	})
-	// TF
-	tf := rockRidgeTimestamps{longForm: false, stamps: []rockRidgeTimestamp{
-		{timestampType: rockRidgeTimestampModify, time: mtime},
-		{timestampType: rockRidgeTimestampAccess, time: atime},
-		{timestampType: rockRidgeTimestampAttribute, time: ctime},
-	}}
-
-	ret = append(ret, tf)
-	// NM
-	if !isSelf && !isParent {
-		ret = append(ret, rockRidgeName{name: fi.Name()})
-	}
-	// SL
-	if fi.Mode()&os.ModeSymlink == os.ModeSymlink {
-		// need the target if it is a symlink
-		target, err := os.Readlink(fp)
-		if err != nil {
-			return nil, fmt.Errorf("error reading symlink target at %s", fp)
-		}
-		ret = append(ret, rockRidgeSymlink{continued: false, name: target})
-	}
-
-	return ret, nil
-}
-
 func (r *rockRidgeExtension) GetFileExtensions(ffi *finalizeFileInfo, isSelf, isParent bool) ([]directoryEntrySystemUseExtension, error) {
 	// we always do PX, TF, NM, SL order
 	ret := []directoryEntrySystemUseExtension{}
@@ -161,6 +107,7 @@ func (r *rockRidgeExtension) GetFileExtensions(ffi *finalizeFileInfo, isSelf, is
 		uid:       ffi.UID(),
 		gid:       ffi.GID(),
 		length:    r.pxLength,
+		serial:    ffi.serial,
 	})
 	// TF
 	tf := rockRidgeTimestamps{longForm: false, stamps: []rockRidgeTimestamp{
@@ -328,7 +275,7 @@ type rockRidgePosixAttributes struct {
 	linkCount uint32
 	uid       uint32
 	gid       uint32
-	serial    uint32
+	serial    uint64
 }
 
 func (d rockRidgePosixAttributes) Equal(o directoryEntrySystemUseExtension) bool {
@@ -397,8 +344,7 @@ func (d rockRidgePosixAttributes) Data() []byte {
 	binary.LittleEndian.PutUint32(ret[24:28], d.gid)
 	binary.BigEndian.PutUint32(ret[28:32], d.gid)
 	if d.length == 44 {
-		binary.LittleEndian.PutUint32(ret[32:36], d.serial)
-		binary.BigEndian.PutUint32(ret[36:40], d.serial)
+		binary.LittleEndian.PutUint64(ret[32:40], d.serial)
 	}
 	return ret
 }
@@ -462,9 +408,9 @@ func (r *rockRidgeExtension) parsePosixAttributes(b []byte) (directoryEntrySyste
 		m |= uint32(os.ModeNamedPipe)
 	}
 
-	var serial uint32
+	var serial uint64
 	if len(b) == 44 {
-		serial = binary.LittleEndian.Uint32(b[36:40])
+		serial = binary.LittleEndian.Uint64(b[36:44])
 	}
 	return rockRidgePosixAttributes{
 		mode:         os.FileMode(m),
