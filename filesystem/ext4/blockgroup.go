@@ -2,14 +2,16 @@ package ext4
 
 import (
 	"fmt"
+
+	"github.com/diskfs/go-diskfs/util"
 )
 
 // blockGroup is a structure holding the data about a single block group
 //
 //nolint:unused // will be used in the future, not yet
 type blockGroup struct {
-	inodeBitmap    *bitmap
-	blockBitmap    *bitmap
+	inodeBitmap    *util.Bitmap
+	blockBitmap    *util.Bitmap
 	blockSize      int
 	number         int
 	inodeTableSize int
@@ -26,8 +28,8 @@ func blockGroupFromBytes(b []byte, blockSize, groupNumber int) (*blockGroup, err
 	if actualSize != expectedSize {
 		return nil, fmt.Errorf("expected to be passed %d bytes for 2 blocks of size %d, instead received %d", expectedSize, blockSize, actualSize)
 	}
-	inodeBitmap := bitmapFromBytes(b[0:blockSize])
-	blockBitmap := bitmapFromBytes(b[blockSize : 2*blockSize])
+	inodeBitmap := util.BitmapFromBytes(b[0:blockSize])
+	blockBitmap := util.BitmapFromBytes(b[blockSize : 2*blockSize])
 
 	bg := blockGroup{
 		inodeBitmap: inodeBitmap,
@@ -43,8 +45,8 @@ func blockGroupFromBytes(b []byte, blockSize, groupNumber int) (*blockGroup, err
 //nolint:unused // will be used in the future, not yet
 func (bg *blockGroup) toBytes() ([]byte, error) {
 	b := make([]byte, 2*bg.blockSize)
-	inodeBitmapBytes := bg.inodeBitmap.toBytes()
-	blockBitmapBytes := bg.blockBitmap.toBytes()
+	inodeBitmapBytes := bg.inodeBitmap.ToBytes()
+	blockBitmapBytes := bg.blockBitmap.ToBytes()
 
 	b = append(b, inodeBitmapBytes...)
 	b = append(b, blockBitmapBytes...)

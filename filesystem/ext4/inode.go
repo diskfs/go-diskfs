@@ -255,7 +255,7 @@ func inodeFromBytes(b []byte, sb *superblock, number uint32) (*inode, error) {
 	} else {
 		// parse the extent information in the inode to get the root of the extents tree
 		// we do not walk the entire tree, to get a slice of blocks for the file.
-		// If we want to do that, we call the extentBlockFinder.toBlocks() method
+		// If we want to do that, we call the extentBlockFinder.blocks() method
 		allExtents, err = parseExtents(extentInfo, sb.blockSize, 0, uint32(blocks))
 		if err != nil {
 			return nil, fmt.Errorf("error parsing extent tree: %v", err)
