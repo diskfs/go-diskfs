@@ -639,7 +639,16 @@ func Read(file util.File, size, start, sectorsize int64) (*FileSystem, error) {
 	gdtSize := uint64(sb.groupDescriptorSize) * sb.blockGroupCount()
 
 	gdtBytes := make([]byte, gdtSize)
-	n, err = file.ReadAt(gdtBytes, start+int64(BootSectorSize)+int64(SuperblockSize))
+	// where do we find the GDT?
+	// - if blocksize is 1024, then 1024 padding for BootSector is block 0, 1024 for superblock is block 1
+	//   and then the GDT starts at block 2
+	// - if blocksize is larger than 1024, then 1024 padding for BootSector followed by 1024 for superblock
+	//   is block 0, and then the GDT starts at block 1
+	gdtBlock := 1
+	if sb.blockSize == 1024 {
+		gdtBlock = 2
+	}
+	n, err = file.ReadAt(gdtBytes, start+int64(gdtBlock)*int64(sb.blockSize))
 	if err != nil {
 		return nil, fmt.Errorf("could not read Group Descriptor Table bytes from file: %v", err)
 	}
