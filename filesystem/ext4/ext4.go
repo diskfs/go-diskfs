@@ -804,6 +804,14 @@ func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 	}, nil
 }
 
+func (fs *FileSystem) RemoveFile(p string) error {
+	return fmt.Errorf("not implemented")
+}
+
+func (fs *FileSystem) RenameFile(p, newFileName string) error {
+	return fmt.Errorf("not implemented")
+}
+
 // Label read the volume label
 func (fs *FileSystem) Label() string {
 	if fs.superblock == nil {
