@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	uuid "github.com/satori/go.uuid"
+	"github.com/google/uuid"
 )
 
 const (
@@ -180,7 +180,7 @@ var testSuperblockFuncs = map[string]testSuperblockFunc{
 		return nil
 	},
 	"Filesystem UUID": func(sb *superblock, value string) error {
-		uuid, err := uuid.FromString(value)
+		uuid, err := uuid.Parse(value)
 		if err != nil {
 			return err
 		}
@@ -417,11 +417,11 @@ var testSuperblockFuncs = map[string]testSuperblockFunc{
 		return nil
 	},
 	"Directory Hash Seed": func(sb *superblock, value string) error {
-		u, err := uuid.FromString(value)
+		u, err := uuid.Parse(value)
 		if err != nil {
 			return err
 		}
-		hashTreeSeedBytes := u.Bytes()
+		hashTreeSeedBytes := u[:]
 		hashTreeSeed := make([]uint32, 4)
 		for i := 0; i < 4; i++ {
 			hashTreeSeed[i] = binary.LittleEndian.Uint32(hashTreeSeedBytes[i*4 : (i+1)*4])

@@ -13,7 +13,7 @@ import (
 	"github.com/diskfs/go-diskfs/filesystem"
 	"github.com/diskfs/go-diskfs/filesystem/ext4/crc"
 	"github.com/diskfs/go-diskfs/util"
-	uuid "github.com/satori/go.uuid"
+	"github.com/google/uuid"
 )
 
 // SectorSize indicates what the sector size in bytes is
@@ -149,7 +149,7 @@ func Create(f util.File, size, start, sectorsize int64, p *Params) (*FileSystem,
 	// uuid
 	fsuuid := p.UUID
 	if fsuuid == nil {
-		fsuuid2 := uuid.NewV4()
+		fsuuid2, _ := uuid.NewRandom()
 		fsuuid = &fsuuid2
 	}
 
@@ -360,8 +360,8 @@ func Create(f util.File, size, start, sectorsize int64, p *Params) (*FileSystem,
 	mflags := defaultMiscFlags
 
 	// generate hash seed
-	hashSeed := uuid.NewV4()
-	hashSeedBytes := hashSeed.Bytes()
+	hashSeed, _ := uuid.NewRandom()
+	hashSeedBytes := hashSeed[:]
 	htreeSeed := make([]uint32, 0, 4)
 	htreeSeed = append(htreeSeed,
 		binary.LittleEndian.Uint32(hashSeedBytes[:4]),
@@ -371,7 +371,7 @@ func Create(f util.File, size, start, sectorsize int64, p *Params) (*FileSystem,
 	)
 
 	// create a UUID for the journal
-	journalSuperblockUUID := uuid.NewV4()
+	journalSuperblockUUID, _ := uuid.NewRandom()
 
 	// group descriptor size could be 32 or 64, depending on option
 	var gdSize uint16
@@ -514,7 +514,7 @@ func Create(f util.File, size, start, sectorsize int64, p *Params) (*FileSystem,
 		backupSuperblockBlockGroups:  backupSuperblockGroupsSparse,
 		lostFoundInode:               lostFoundInode,
 		overheadBlocks:               0,
-		checksumSeed:                 crc.CRC32c(0, fsuuid.Bytes()), // according to docs, this should be crc32c(~0, $orig_fs_uuid)
+		checksumSeed:                 crc.CRC32c(0, fsuuid[:]), // according to docs, this should be crc32c(~0, $orig_fs_uuid)
 		snapshotInodeNumber:          0,
 		snapshotID:                   0,
 		snapshotReservedBlocks:       0,
