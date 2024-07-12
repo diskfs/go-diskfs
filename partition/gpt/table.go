@@ -31,7 +31,7 @@ func (t *Table) Resize(size uint64) {
 	partSectors := uint64(t.partitionArraySize) * uint64(t.partitionEntrySize) / uint64(t.LogicalSectorSize)
 
 	t.secondaryHeader = diskSectors - 1
-	t.lastDataSector = diskSectors - 1 - partSectors
+	t.lastDataSector = t.secondaryHeader - 1 - partSectors
 }
 
 // gptSize max potential size for partition array reserved 16384
