@@ -12,34 +12,6 @@ import (
 	uuid "github.com/google/uuid"
 )
 
-// TotalSize returns the total size of the GPT in bytes.
-//
-// This is counted from the start of the MBR to the end of the secondary
-// header.
-func (t *Table) TotalSize() uint64 {
-	return (t.secondaryHeader + gptHeaderSector) * uint64(t.LogicalSectorSize)
-}
-
-func (t *Table) LastDataSector() uint64 {
-	return t.lastDataSector
-}
-
-// Resize changes the size of the GPT.
-//
-// The size argument is in bytes and must be a multiple of the logical sector
-// size.
-// Use this function in case a storage device is not the same as the total
-// size of its GPT.
-func (t *Table) Resize(size uint64) {
-	// how many sectors on the disk?
-	diskSectors := size / uint64(t.LogicalSectorSize)
-	// how many sectors used for partition entries?
-	partSectors := uint64(t.partitionArraySize) * uint64(t.partitionEntrySize) / uint64(t.LogicalSectorSize)
-
-	t.secondaryHeader = diskSectors - 1
-	t.lastDataSector = t.secondaryHeader - 1 - partSectors
-}
-
 // gptSize max potential size for partition array reserved 16384
 const (
 	mbrPartitionEntriesStart = 446
@@ -668,4 +640,32 @@ func (t *Table) Repair(diskSize uint64) error {
 	t.lastDataSector = t.secondaryHeader - partSectors - 1
 
 	return nil
+}
+
+// TotalSize returns the total size of the GPT in bytes.
+//
+// This is counted from the start of the MBR to the end of the secondary
+// header.
+func (t *Table) TotalSize() uint64 {
+	return (t.secondaryHeader + gptHeaderSector) * uint64(t.LogicalSectorSize)
+}
+
+func (t *Table) LastDataSector() uint64 {
+	return t.lastDataSector
+}
+
+// Resize changes the size of the GPT.
+//
+// The size argument is in bytes and must be a multiple of the logical sector
+// size.
+// Use this function in case a storage device is not the same as the total
+// size of its GPT.
+func (t *Table) Resize(size uint64) {
+	// how many sectors on the disk?
+	diskSectors := size / uint64(t.LogicalSectorSize)
+	// how many sectors used for partition entries?
+	partSectors := uint64(t.partitionArraySize) * uint64(t.partitionEntrySize) / uint64(t.LogicalSectorSize)
+
+	t.secondaryHeader = diskSectors - 1
+	t.lastDataSector = t.secondaryHeader - 1 - partSectors
 }
