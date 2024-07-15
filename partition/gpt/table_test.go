@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -463,5 +464,77 @@ func TestWritePartitionContents(t *testing.T) {
 		t.Errorf("Bytes mismatch")
 		t.Log(b)
 		t.Log(b2)
+	}
+}
+
+func TestResizeTableAndExpandPartition(t *testing.T) {
+	const newSize = 11 * 1024 * 1024
+
+	blkFile, err := os.Open(gptFile)
+	if err != nil {
+		t.Errorf("cannot open file: %v", err)
+	}
+	defer blkFile.Close()
+	table, err := gpt.Read(blkFile, 512, 512)
+	if err != nil {
+		t.Errorf("cannot read gpt: %v", err)
+	}
+	table.Resize(newSize)
+
+	tmpDir := t.TempDir()
+	tmpImgPath := filepath.Join(tmpDir, "gpt.img")
+	tmpImgFile, err := os.Create(tmpImgPath)
+	if err != nil {
+		t.Errorf("cannot create output image file: %v", err)
+	}
+	err = os.Truncate(tmpImgPath, newSize)
+	if err != nil {
+		t.Errorf("cannot truncate file: %v", err)
+	}
+
+	table.Partitions[0].Expand(100)
+	err = table.Write(tmpImgFile, newSize)
+	if err != nil {
+		t.Errorf("cannot write table back: %v", err)
+	}
+	newTable, err := gpt.Read(tmpImgFile, 512, 512)
+	if err != nil {
+		t.Errorf("cannot read table back: %v", err)
+	}
+	if newTable.Partitions[0].Start != 2048 {
+		t.Fail()
+	}
+	if newTable.Partitions[0].End != 3148 {
+		t.Fail()
+	}
+	if newTable.Partitions[0].Size != 563712 {
+		t.Fail()
+	}
+}
+
+func TestResize(t *testing.T) {
+	const newSize = 1024 * 1024
+	table := gpt.GetValidTable()
+	table.Resize(newSize)
+	resultSize := table.TotalSize()
+	if resultSize != newSize {
+		t.Fail()
+	}
+	resultLastDataSector := table.LastDataSector()
+	expectedLastDataSector := uint64((newSize / 512) - 34)
+	if resultLastDataSector != expectedLastDataSector {
+		t.Fail()
+	}
+}
+
+func TestExpandPartition(t *testing.T) {
+	table := gpt.GetValidTable()
+	part := table.Partitions[0]
+	part.Expand(100)
+	if part.End != 3148 {
+		t.Fail()
+	}
+	if part.Size != (3148-2048+1)*512 {
+		t.Fail()
 	}
 }
