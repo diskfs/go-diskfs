@@ -24,6 +24,12 @@ func (t *Table) LastDataSector() uint64 {
 	return t.lastDataSector
 }
 
+// Resize changes the size of the GPT.
+//
+// The size argument is in bytes and must be a multiple of the logical sector
+// size.
+// Use this function in case a storage device is not the same as the total
+// size of its GPT.
 func (t *Table) Resize(size uint64) {
 	// how many sectors on the disk?
 	diskSectors := size / uint64(t.LogicalSectorSize)
