@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"math"
 	"os"
 	"os/exec"
 	"regexp"
@@ -25,6 +24,7 @@ const (
 	testRootDirFile     = "testdata/dist/root_directory.bin"
 	testSuperblockFile  = "testdata/dist/superblock.bin"
 	testFilesystemStats = "testdata/dist/stats.txt"
+	testKBWrittenFile   = "testdata/dist/lifetime_kb.txt"
 )
 
 // TestMain sets up the test environment and runs the tests
@@ -500,22 +500,6 @@ var testSuperblockFuncs = map[string]testSuperblockFunc{
 		sb.reservedBlocksDefaultGID = uint16(gid)
 		return nil
 	},
-	"Lifetime writes": func(sb *superblock, value string) error {
-		parts := strings.Split(value, " ")
-		if len(parts) < 2 {
-			return fmt.Errorf("invalid lifetime writes string %s", value)
-		}
-		writes, err := strconv.ParseUint(parts[0], 10, 64)
-		if err != nil {
-			return fmt.Errorf("Lifetime writes: %w", err)
-		}
-		// if this is in MB, we need to convert to KB
-		if parts[1] == "MB" {
-			writes *= uint64(KB)
-		}
-		sb.totalKBWritten = writes
-		return nil
-	},
 	"Filesystem flags": func(sb *superblock, value string) error {
 		flags := strings.Split(value, " ")
 		for _, flag := range flags {
@@ -655,6 +639,7 @@ func testGetValidSuperblockAndGDTs() (sb *superblock, gd []groupDescriptor, supe
 			}
 		}
 	}
+
 	// these have been fixed. If they ever change, we will need to modify here.
 	sb.errorFirstTime = time.Unix(0, 0).UTC()
 	sb.errorLastTime = time.Unix(0, 0).UTC()
@@ -665,18 +650,15 @@ func testGetValidSuperblockAndGDTs() (sb *superblock, gd []groupDescriptor, supe
 	sb.journalSuperblockUUID = &juuid
 	sb.clusterSize = 1
 
-	// this is a bit strange, but necessary. The totalKB written given by all tools round, just enough to make our calculations off
-	// so we will adjust the value of sb to match expected if it is within 1%; good enough
-	parsed, err := superblockFromBytes(superblockBytes)
+	// lifetime writes in KB is done separately, because debug -R "stats" and dumpe2fs only
+	// round it out
+	KBWritten, err := os.ReadFile(testKBWrittenFile)
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("Failed to parse superblock bytes: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("failed to read %s: %w", testKBWrittenFile, err)
 	}
-
-	sbKBWritten := float64(sb.totalKBWritten)
-	parsedKBWritten := float64(parsed.totalKBWritten)
-	KBdiff := math.Abs(parsedKBWritten - sbKBWritten)
-	if KBdiff/sbKBWritten < 0.01 {
-		sb.totalKBWritten = parsed.totalKBWritten
+	sb.totalKBWritten, err = strconv.ParseUint(strings.TrimSpace(string(KBWritten)), 10, 64)
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("failed to parse KB written: %w", err)
 	}
 
 	return sb, descs, superblockBytes, gdtBytes[:64*len(descs)], nil
