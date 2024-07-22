@@ -493,9 +493,12 @@ func (fs *FileSystem) ReadDir(p string) ([]os.FileInfo, error) {
 	}
 	// once we have made it here, looping is done. We have found the final entry
 	// we need to return all of the file info
-	count := len(entries)
-	ret := make([]os.FileInfo, count)
-	for i, e := range entries {
+	//nolint:prealloc // because the following loop may omit some entry
+	var ret []os.FileInfo
+	for _, e := range entries {
+		if e.isVolumeLabel {
+			continue
+		}
 		shortName := e.filenameShort
 		if e.lowercaseShortname {
 			shortName = strings.ToLower(shortName)
@@ -507,13 +510,13 @@ func (fs *FileSystem) ReadDir(p string) ([]os.FileInfo, error) {
 		if fileExtension != "" {
 			shortName = fmt.Sprintf("%s.%s", shortName, fileExtension)
 		}
-		ret[i] = FileInfo{
+		ret = append(ret, FileInfo{
 			modTime:   e.modifyTime,
 			name:      e.filenameLong,
 			shortName: shortName,
 			size:      int64(e.fileSize),
 			isDir:     e.isSubdirectory,
-		}
+		})
 	}
 	return ret, nil
 }

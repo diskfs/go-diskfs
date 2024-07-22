@@ -304,13 +304,12 @@ func TestFat32ReadDir(t *testing.T) {
 			isDir bool
 			err   error
 		}{
-			// should have 4 entries
-			//   <LABEL>
+			// should have 4 entries (Volume Label is not returned)
 			//   foo
 			//   TERCER~1
 			//   CORTO1.TXT
 			//   UNARCH~1.DAT
-			{"/", 5, "foo", true, nil},
+			{"/", 4, "foo", true, nil},
 			// should have 80 entries:
 			//  dir0-75 = 76 entries
 			//  dir     =  1 entry
@@ -589,7 +588,7 @@ func TestFat32OpenFile(t *testing.T) {
 			if err != nil {
 				t.Errorf("write many: error reading /: %v", err)
 			}
-			if len(dir) != fileCount+1 {
+			if len(dir) != fileCount {
 				t.Errorf("write many: entry count mismatch on /: expected %d, got %d -- %v", fileCount, len(dir), dir)
 			}
 		}
