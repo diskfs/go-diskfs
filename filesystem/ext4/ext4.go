@@ -4,9 +4,12 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
+	iofs "io/fs"
 	"math"
 	"os"
 	"path"
+	"sort"
 	"strings"
 	"time"
 
@@ -39,7 +42,7 @@ const (
 	maxClusterSize               int        = 65529
 	bytesPerSlot                 int        = 32
 	maxCharsLongFilename         int        = 13
-	maxBlocksPerExtent           int        = 32768
+	maxBlocksPerExtent           uint16     = 32768
 	million                      int        = 1000000
 	billion                      int        = 1000 * million
 	firstNonReservedInode        uint32     = 11 // traditional
@@ -91,8 +94,6 @@ type FileSystem struct {
 	bootSector       []byte
 	superblock       *superblock
 	groupDescriptors *groupDescriptors
-	dataBlockBitmap  bitmap
-	inodeBitmap      bitmap
 	blockGroups      int64
 	size             int64
 	start            int64
@@ -681,7 +682,7 @@ func (fs *FileSystem) Type() filesystem.Type {
 // * It will make the entire tree path if it does not exist
 // * It will not return an error if the path already exists
 func (fs *FileSystem) Mkdir(p string) error {
-	_, _, err := fs.readDirWithMkdir(p, true)
+	_, err := fs.readDirWithMkdir(p, true)
 	// we are not interesting in returning the entries
 	return err
 }
@@ -692,20 +693,20 @@ func (fs *FileSystem) Mkdir(p string) error {
 //
 // Will return an error if the directory does not exist or is a regular file and not a directory
 func (fs *FileSystem) ReadDir(p string) ([]os.FileInfo, error) {
-	_, entries, err := fs.readDirWithMkdir(p, false)
+	dir, err := fs.readDirWithMkdir(p, false)
 	if err != nil {
 		return nil, fmt.Errorf("error reading directory %s: %v", p, err)
 	}
 	// once we have made it here, looping is done. We have found the final entry
 	// we need to return all of the file info
-	count := len(entries)
+	count := len(dir.entries)
 	ret := make([]os.FileInfo, count)
-	for i, e := range entries {
+	for i, e := range dir.entries {
 		in, err := fs.readInode(e.inode)
 		if err != nil {
 			return nil, fmt.Errorf("could not read inode %d at position %d in directory: %v", e.inode, i, err)
 		}
-		ret[i] = FileInfo{
+		ret[i] = &FileInfo{
 			modTime: in.modifyTime,
 			name:    e.filename,
 			size:    int64(in.size),
@@ -723,47 +724,30 @@ func (fs *FileSystem) ReadDir(p string) ([]os.FileInfo, error) {
 //
 // returns an error if the file does not exist
 func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
-	// get the path
-	dir := path.Dir(p)
 	filename := path.Base(p)
-	// if the dir == filename, then it is just /
-	if dir == filename {
-		return nil, fmt.Errorf("cannot open directory %s as file", p)
-	}
-	// get the directory entries
-	parentDir, entries, err := fs.readDirWithMkdir(dir, false)
+	dir := path.Dir(p)
+	parentDir, entry, err := fs.getEntryAndParent(p)
 	if err != nil {
-		return nil, fmt.Errorf("could not read directory entries for %s", dir)
+		return nil, err
 	}
-	// we now know that the directory exists, see if the file exists
-	var targetEntry *directoryEntry
-	for _, e := range entries {
-		if e.filename != filename {
-			continue
-		}
-		// cannot do anything with directories
-		if e.fileType == dirFileTypeDirectory {
-			return nil, fmt.Errorf("cannot open directory %s as file", p)
-		}
-		// if we got this far, we have found the file
-		targetEntry = e
-		break
+	if entry != nil && entry.fileType == dirFileTypeDirectory {
+		return nil, fmt.Errorf("cannot open directory %s as file", p)
 	}
 
 	// see if the file exists
 	// if the file does not exist, and is not opened for os.O_CREATE, return an error
-	if targetEntry == nil {
+	if entry == nil {
 		if flag&os.O_CREATE == 0 {
 			return nil, fmt.Errorf("target file %s does not exist and was not asked to create", p)
 		}
 		// else create it
-		targetEntry, err = fs.mkFile(parentDir, filename)
+		entry, err = fs.mkFile(parentDir, filename)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create file %s: %v", p, err)
 		}
 	}
 	// get the inode
-	inodeNumber := targetEntry.inode
+	inodeNumber := entry.inode
 	inode, err := fs.readInode(inodeNumber)
 	if err != nil {
 		return nil, fmt.Errorf("could not read inode number %d: %v", inodeNumber, err)
@@ -794,7 +778,7 @@ func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 		return nil, fmt.Errorf("could not read extent tree for inode %d: %v", inodeNumber, err)
 	}
 	return &File{
-		directoryEntry: targetEntry,
+		directoryEntry: entry,
 		inode:          inode,
 		isReadWrite:    flag&os.O_RDWR != 0,
 		isAppend:       flag&os.O_APPEND != 0,
@@ -812,12 +796,223 @@ func (fs *FileSystem) Label() string {
 	return fs.superblock.volumeLabel
 }
 
+// Rm remove file or directory at path.
+// If path is directory, it only will remove if it is empty.
+// If path is a file, it will remove the file.
+// Will not remove any parents.
+// Error if the file does not exist or is not an empty directory
+func (fs *FileSystem) Rm(p string) error {
+	parentDir, entry, err := fs.getEntryAndParent(p)
+	if err != nil {
+		return err
+	}
+	if parentDir.root && entry == &parentDir.directoryEntry {
+		return fmt.Errorf("cannot remove root directory")
+	}
+	if entry == nil {
+		return fmt.Errorf("file does not exist: %s", p)
+	}
+	// if it is a directory, it must be empty
+	if entry.fileType == dirFileTypeDirectory {
+		// read the directory
+		entries, err := fs.readDirectory(entry.inode)
+		if err != nil {
+			return fmt.Errorf("could not read directory %s: %v", p, err)
+		}
+		if len(entries) > 2 {
+			return fmt.Errorf("directory not empty: %s", p)
+		}
+	}
+	// at this point, it is either a file or an empty directory, so remove it
+
+	// free up the blocks
+	// read the inode to find the blocks
+	removedInode, err := fs.readInode(entry.inode)
+	if err != nil {
+		return fmt.Errorf("could not read inode %d for %s: %v", entry.inode, p, err)
+	}
+	extents, err := removedInode.extents.blocks(fs)
+	if err != nil {
+		return fmt.Errorf("could not read extents for inode %d for %s: %v", entry.inode, p, err)
+	}
+	// clear the inode from the inode bitmap
+	inodeBG := blockGroupForInode(int(entry.inode), fs.superblock.inodesPerGroup)
+	inodeBitmap, err := fs.readInodeBitmap(inodeBG)
+	if err != nil {
+		return fmt.Errorf("could not read inode bitmap: %v", err)
+	}
+	// clear up the blocks from the block bitmap. We are not clearing the block content, just the bitmap.
+	// keep a cache of bitmaps, so we do not have to read them again and again
+	blockBitmaps := make(map[int]*util.Bitmap)
+	for _, e := range extents {
+		for i := e.startingBlock; i < e.startingBlock+uint64(e.count); i++ {
+			// determine what block group this block is in, and read the bitmap for that blockgroup
+			bg := blockGroupForBlock(int(i), fs.superblock.blocksPerGroup)
+			dataBlockBitmap, ok := blockBitmaps[bg]
+			if !ok {
+				dataBlockBitmap, err = fs.readBlockBitmap(bg)
+				if err != nil {
+					return fmt.Errorf("could not read block bitmap: %v", err)
+				}
+				blockBitmaps[bg] = dataBlockBitmap
+			}
+			// the extent lists the absolute block number, but the bitmap is relative to the block group
+			blockInBG := int(i) - int(fs.superblock.blocksPerGroup)*bg
+			if err := dataBlockBitmap.Clear(blockInBG); err != nil {
+				return fmt.Errorf("could not clear block bitmap for block %d: %v", i, err)
+			}
+		}
+	}
+	for bg, dataBlockBitmap := range blockBitmaps {
+		if err := fs.writeBlockBitmap(dataBlockBitmap, bg); err != nil {
+			return fmt.Errorf("could not write block bitmap back to disk: %v", err)
+		}
+	}
+
+	// remove the directory entry from the parent
+	newEntries := make([]*directoryEntry, 0, len(parentDir.entries)-1)
+	for _, e := range parentDir.entries {
+		if e.inode == entry.inode {
+			continue
+		}
+		newEntries = append(newEntries, e)
+	}
+	parentDir.entries = newEntries
+	// write the parent directory back
+	dirBytes := parentDir.toBytes(fs.superblock.blockSize, directoryChecksumAppender(fs.superblock.checksumSeed, parentDir.inode, 0))
+	parentInode, err := fs.readInode(parentDir.inode)
+	if err != nil {
+		return fmt.Errorf("could not read inode %d for %s: %v", entry.inode, path.Base(p), err)
+	}
+	extents, err = parentInode.extents.blocks(fs)
+	if err != nil {
+		return fmt.Errorf("could not read extents for inode %d for %s: %v", entry.inode, path.Base(p), err)
+	}
+	for _, e := range extents {
+		for i := 0; i < int(e.count); i++ {
+			b := dirBytes[i:fs.superblock.blockSize]
+			if _, err := fs.file.WriteAt(b, (int64(i)+int64(e.startingBlock))*int64(fs.superblock.blockSize)); err != nil {
+				return fmt.Errorf("could not write inode bitmap back to disk: %v", err)
+			}
+		}
+	}
+
+	// remove the inode from the bitmap and write the inode bitmap back
+	// inode is absolute, but bitmap is relative to block group
+	inodeInBG := int(entry.inode) - int(fs.superblock.inodesPerGroup)*inodeBG
+	if err := inodeBitmap.Clear(inodeInBG); err != nil {
+		return fmt.Errorf("could not clear inode bitmap for inode %d: %v", entry.inode, err)
+	}
+
+	// write the inode bitmap back
+	if err := fs.writeInodeBitmap(inodeBitmap, inodeBG); err != nil {
+		return fmt.Errorf("could not write inode bitmap back to disk: %v", err)
+	}
+	// update the group descriptor
+	gd := fs.groupDescriptors.descriptors[inodeBG]
+
+	// update the group descriptor inodes and blocks
+	gd.freeInodes++
+	gd.freeBlocks += uint32(removedInode.blocks)
+	// write the group descriptor back
+	gdBytes := gd.toBytes(fs.superblock.gdtChecksumType(), fs.superblock.uuid.ID())
+	gdtBlock := 1
+	if fs.superblock.blockSize == 1024 {
+		gdtBlock = 2
+	}
+	if _, err := fs.file.WriteAt(gdBytes, fs.start+int64(gdtBlock)*int64(fs.superblock.blockSize)+int64(gd.number)*int64(fs.superblock.groupDescriptorSize)); err != nil {
+		return fmt.Errorf("could not write Group Descriptor bytes to file: %v", err)
+	}
+
+	// we could remove the inode from the inode table in the group descriptor,
+	// but we do not need to do so. Since we are not reusing the inode, we can just leave it there,
+	// the bitmap always is checked before reusing an inode location.
+	fs.superblock.freeInodes++
+	fs.superblock.freeBlocks += removedInode.blocks
+	return fs.writeSuperblock()
+}
+
+func (fs *FileSystem) Truncate(p string, size int64) error {
+	_, entry, err := fs.getEntryAndParent(p)
+	if err != nil {
+		return err
+	}
+	if entry == nil {
+		return fmt.Errorf("file does not exist: %s", p)
+	}
+	if entry.fileType == dirFileTypeDirectory {
+		return fmt.Errorf("cannot truncate directory %s", p)
+	}
+	// it is not a directory, and it exists, so truncate it
+	inode, err := fs.readInode(entry.inode)
+	if err != nil {
+		return fmt.Errorf("could not read inode %d in directory: %v", entry.inode, err)
+	}
+	// change the file size
+	inode.size = uint64(size)
+
+	// free used blocks if shrank, or reserve new blocks if grew
+	// both of which mean updating the superblock, and the extents tree in the inode
+
+	// write the inode back
+	return fs.writeInode(inode)
+}
+
+// getEntryAndParent given a path, get the Directory for the parent and the directory entry for the file.
+// If the directory does not exist, returns an error.
+// If the file does not exist, does not return an error, but rather returns a nil entry.
+func (fs *FileSystem) getEntryAndParent(p string) (parent *Directory, entry *directoryEntry, err error) {
+	dir := path.Dir(p)
+	filename := path.Base(p)
+	// get the directory entries
+	parentDir, err := fs.readDirWithMkdir(dir, false)
+	if err != nil {
+		return nil, nil, fmt.Errorf("could not read directory entries for %s", dir)
+	}
+	// we now know that the directory exists, see if the file exists
+	var targetEntry *directoryEntry
+	if parentDir.root && filename == "/" {
+		// root directory
+		return parentDir, &parentDir.directoryEntry, nil
+	}
+
+	for _, e := range parentDir.entries {
+		if e.filename != filename {
+			continue
+		}
+		// if we got this far, we have found the file
+		targetEntry = e
+		break
+	}
+	return parentDir, targetEntry, nil
+}
+
+// Stat return fs.FileInfo about a specific file path.
+func (fs *FileSystem) Stat(p string) (iofs.FileInfo, error) {
+	_, entry, err := fs.getEntryAndParent(p)
+	if err != nil {
+		return nil, err
+	}
+	if entry == nil {
+		return nil, fmt.Errorf("file does not exist: %s", p)
+	}
+	in, err := fs.readInode(entry.inode)
+	if err != nil {
+		return nil, fmt.Errorf("could not read inode %d in directory: %v", entry.inode, err)
+	}
+	return &FileInfo{
+		modTime: in.modifyTime,
+		name:    entry.filename,
+		size:    int64(in.size),
+		isDir:   entry.fileType == dirFileTypeDirectory,
+	}, nil
+}
+
 // SetLabel changes the label on the writable filesystem. Different file system may hav different
 // length constraints.
-//
-//nolint:revive // will use params when read-write
 func (fs *FileSystem) SetLabel(label string) error {
-	return errors.New("cannot set label, filesystem currently read-only")
+	fs.superblock.volumeLabel = label
+	return fs.writeSuperblock()
 }
 
 // readInode read a single inode from disk
@@ -858,7 +1053,7 @@ func (fs *FileSystem) readInode(inodeNumber uint32) (*inode, error) {
 		if err != nil {
 			return nil, fmt.Errorf("could not read extent tree for symlink inode %d: %v", inodeNumber, err)
 		}
-		b, err := fs.readFileBytes(extents)
+		b, err := fs.readFileBytes(extents, inode.size)
 		if err != nil {
 			return nil, fmt.Errorf("could not read symlink target for inode %d: %v", inodeNumber, err)
 		}
@@ -881,10 +1076,13 @@ func (fs *FileSystem) writeInode(i *inode) error {
 	//   byteStart := inodeTableBlock * sb.blockSize
 	// offsetInode is how many inodes in our inode is
 	offsetInode := (i.number - 1) % inodesPerGroup
+	byteStart := inodeTableBlock * uint64(sb.blockSize)
+	// offsetInode is how many inodes in our inode is
+	// offset is how many bytes in our inode is
 	// offset is how many bytes in our inode is
 	offset := int64(offsetInode) * int64(inodeSize)
 	inodeBytes := i.toBytes(sb)
-	wrote, err := fs.file.WriteAt(inodeBytes, offset)
+	wrote, err := fs.file.WriteAt(inodeBytes, int64(byteStart)+offset)
 	if err != nil {
 		return fmt.Errorf("failed to write inode %d at offset %d of block %d from block group %d: %v", i.number, offset, inodeTableBlock, bg, err)
 	}
@@ -907,7 +1105,7 @@ func (fs *FileSystem) readDirectory(inodeNumber uint32) ([]*directoryEntry, erro
 		return nil, fmt.Errorf("unable to get blocks for inode %d: %w", in.number, err)
 	}
 	// read the contents of the file across all blocks
-	b, err := fs.readFileBytes(extents)
+	b, err := fs.readFileBytes(extents, in.size)
 	if err != nil {
 		return nil, fmt.Errorf("error reading file bytes for inode %d: %v", inodeNumber, err)
 	}
@@ -936,12 +1134,15 @@ func (fs *FileSystem) readDirectory(inodeNumber uint32) ([]*directoryEntry, erro
 
 // readFileBytes read all of the bytes for an individual file pointed at by a given inode
 // normally not very useful, but helpful when reading an entire directory.
-func (fs *FileSystem) readFileBytes(extents extents) ([]byte, error) {
+func (fs *FileSystem) readFileBytes(extents extents, filesize uint64) ([]byte, error) {
 	// walk through each one, gobbling up the bytes
 	b := make([]byte, 0, fs.superblock.blockSize)
 	for i, e := range extents {
 		start := e.startingBlock * uint64(fs.superblock.blockSize)
 		count := uint64(e.count) * uint64(fs.superblock.blockSize)
+		if uint64(len(b))+count > filesize {
+			count = filesize - uint64(len(b))
+		}
 		b2 := make([]byte, count)
 		read, err := fs.file.ReadAt(b2, int64(start))
 		if err != nil {
@@ -951,25 +1152,23 @@ func (fs *FileSystem) readFileBytes(extents extents) ([]byte, error) {
 			return nil, fmt.Errorf("read %d bytes instead of %d for extent %d", read, count, i)
 		}
 		b = append(b, b2...)
+		if uint64(len(b)) >= filesize {
+			break
+		}
 	}
 	return b, nil
 }
 
-//nolint:revive // params are unused because this still is read-only, but it will be read-write at some point
-func (fs *FileSystem) writeDirectoryEntries(dir *Directory) error {
-	return errors.New("unsupported write directory entries, currently read-only")
-}
-
-// make a file
-//
-//nolint:revive // params are unused because this still is read-only, but it will be read-write at some point
+// mkFile make a file with a given name in the given directory.
 func (fs *FileSystem) mkFile(parent *Directory, name string) (*directoryEntry, error) {
-	return nil, errors.New("unsupported to create a file, currently read-only")
+	return fs.mkDirEntry(parent, name, false)
 }
 
-// readDirWithMkdir - walks down a directory tree to the last entry
-// if it does not exist, it may or may not make it
-func (fs *FileSystem) readDirWithMkdir(p string, doMake bool) (*Directory, []*directoryEntry, error) {
+// readDirWithMkdir - walks down a directory tree to the last entry in p.
+// For example, if p is /a/b/c, it will walk down to c.
+// Expects c to be a directory.
+// If each step in the tree does not exist, it will either make it if doMake is true, or return an error.
+func (fs *FileSystem) readDirWithMkdir(p string, doMake bool) (*Directory, error) {
 	paths := splitPath(p)
 
 	// walk down the directory tree until all paths have been walked or we cannot find something
@@ -981,11 +1180,13 @@ func (fs *FileSystem) readDirWithMkdir(p string, doMake bool) (*Directory, []*di
 			filename: "",
 			fileType: dirFileTypeDirectory,
 		},
+		root: true,
 	}
 	entries, err := fs.readDirectory(rootInode)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to read directory %s", "/")
+		return nil, fmt.Errorf("failed to read directory %s", "/")
 	}
+	currentDir.entries = entries
 	for i, subp := range paths {
 		// do we have an entry whose name is the same as this name?
 		found := false
@@ -994,7 +1195,7 @@ func (fs *FileSystem) readDirWithMkdir(p string, doMake bool) (*Directory, []*di
 				continue
 			}
 			if e.fileType != dirFileTypeDirectory {
-				return nil, nil, fmt.Errorf("cannot create directory at %s since it is a file", "/"+strings.Join(paths[0:i+1], "/"))
+				return nil, fmt.Errorf("cannot create directory at %s since it is a file", "/"+strings.Join(paths[0:i+1], "/"))
 			}
 			// the filename matches, and it is a subdirectory, so we can break after saving the directory entry, which contains the inode
 			found = true
@@ -1011,29 +1212,26 @@ func (fs *FileSystem) readDirWithMkdir(p string, doMake bool) (*Directory, []*di
 				var subdirEntry *directoryEntry
 				subdirEntry, err = fs.mkSubdir(currentDir, subp)
 				if err != nil {
-					return nil, nil, fmt.Errorf("failed to create subdirectory %s", "/"+strings.Join(paths[0:i+1], "/"))
-				}
-				// write the directory entries to disk
-				err = fs.writeDirectoryEntries(currentDir)
-				if err != nil {
-					return nil, nil, fmt.Errorf("error writing directory entries to disk: %v", err)
+					return nil, fmt.Errorf("failed to create subdirectory %s", "/"+strings.Join(paths[0:i+1], "/"))
 				}
 				// save where we are to search next
 				currentDir = &Directory{
 					directoryEntry: *subdirEntry,
 				}
 			} else {
-				return nil, nil, fmt.Errorf("path %s not found", "/"+strings.Join(paths[0:i+1], "/"))
+				return nil, fmt.Errorf("path %s not found", "/"+strings.Join(paths[0:i+1], "/"))
 			}
 		}
 		// get all of the entries in this directory
 		entries, err = fs.readDirectory(currentDir.inode)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to read directory %s", "/"+strings.Join(paths[0:i+1], "/"))
+			return nil, fmt.Errorf("failed to read directory %s", "/"+strings.Join(paths[0:i+1], "/"))
 		}
+		currentDir.entries = entries
 	}
 	// once we have made it here, looping is done; we have found the final entry
-	return currentDir, entries, nil
+	currentDir.entries = entries
+	return currentDir, nil
 }
 
 // readBlock read a single block from disk
@@ -1086,8 +1284,465 @@ func recalculateBlocksize(numblocks, size int64) (sectorsPerBlock int, blocksize
 }
 
 // mkSubdir make a subdirectory of a given name inside the parent
-//
-//nolint:revive // params are unused because this still is read-only, but it will be read-write at some point
+// 1- allocate a single data block for the directory
+// 2- create an inode in the inode table pointing to that data block
+// 3- mark the inode in the inode bitmap
+// 4- mark the data block in the data block bitmap
+// 5- create a directory entry in the parent directory data blocks
 func (fs *FileSystem) mkSubdir(parent *Directory, name string) (*directoryEntry, error) {
-	return nil, errors.New("mksubdir not yet supported")
+	return fs.mkDirEntry(parent, name, true)
+}
+
+func (fs *FileSystem) mkDirEntry(parent *Directory, name string, isDir bool) (*directoryEntry, error) {
+	// still to do:
+	//  - write directory entry in parent
+	//  - write inode to disk
+
+	// create an inode
+	inodeNumber, err := fs.allocateInode(parent.inode)
+	if err != nil {
+		return nil, fmt.Errorf("could not allocate inode for file %s: %w", name, err)
+	}
+	// get extents for the file - prefer in the same block group as the inode, if possible
+	newExtents, err := fs.allocateExtents(1, nil)
+	if err != nil {
+		return nil, fmt.Errorf("could not allocate disk space for file %s: %w", name, err)
+	}
+	extentTreeParsed, err := extendExtentTree(nil, newExtents, fs, nil)
+	if err != nil {
+		return nil, fmt.Errorf("could not convert extents into tree: %w", err)
+	}
+	// normally, after getting a tree from extents, you would need to then allocate all of the blocks
+	//    in the extent tree - leafs and intermediate. However, because we are allocating a new directory
+	//    with a single extent, we *know* it can fit in the inode itself (which has a max of 4), so no need
+
+	// create a directory entry for the file
+	deFileType := dirFileTypeRegular
+	fileType := fileTypeRegularFile
+	var contentSize uint64
+	if isDir {
+		deFileType = dirFileTypeDirectory
+		fileType = fileTypeDirectory
+		contentSize = uint64(fs.superblock.blockSize)
+	}
+	de := directoryEntry{
+		inode:    inodeNumber,
+		filename: name,
+		fileType: deFileType,
+	}
+	parent.entries = append(parent.entries, &de)
+	// write the parent out to disk
+	bytesPerBlock := fs.superblock.blockSize
+	parentDirBytes := parent.toBytes(bytesPerBlock, directoryChecksumAppender(fs.superblock.checksumSeed, parent.inode, 0))
+	// check if parent has increased in size beyond allocated blocks
+	parentInode, err := fs.readInode(parent.inode)
+	if err != nil {
+		return nil, fmt.Errorf("could not read inode %d of parent directory: %w", parent.inode, err)
+	}
+
+	// write the directory entry in the parent
+	// figure out which block it goes into, and possibly rebalance the directory entries hash tree
+	parentExtents, err := parentInode.extents.blocks(fs)
+	if err != nil {
+		return nil, fmt.Errorf("could not read parent extents for directory: %w", err)
+	}
+	dirFile := &File{
+		inode: parentInode,
+		directoryEntry: &directoryEntry{
+			inode:    parent.inode,
+			filename: name,
+			fileType: dirFileTypeDirectory,
+		},
+		filesystem:  fs,
+		isReadWrite: true,
+		isAppend:    true,
+		offset:      0,
+		extents:     parentExtents,
+	}
+	wrote, err := dirFile.Write(parentDirBytes)
+	if err != nil && err != io.EOF {
+		return nil, fmt.Errorf("unable to write new directory: %w", err)
+	}
+	if wrote != len(parentDirBytes) {
+		return nil, fmt.Errorf("wrote only %d bytes instead of expected %d for new directory", wrote, len(parentDirBytes))
+	}
+
+	// write the inode for the new entry out
+	now := time.Now()
+	in := inode{
+		number:                 inodeNumber,
+		permissionsGroup:       parentInode.permissionsGroup,
+		permissionsOwner:       parentInode.permissionsOwner,
+		permissionsOther:       parentInode.permissionsOther,
+		fileType:               fileType,
+		owner:                  parentInode.owner,
+		group:                  parentInode.group,
+		size:                   contentSize,
+		hardLinks:              2,
+		blocks:                 newExtents.blockCount(),
+		flags:                  &inodeFlags{},
+		nfsFileVersion:         0,
+		version:                0,
+		inodeSize:              parentInode.inodeSize,
+		deletionTime:           0,
+		accessTime:             now,
+		changeTime:             now,
+		createTime:             now,
+		modifyTime:             now,
+		extendedAttributeBlock: 0,
+		project:                0,
+		extents:                extentTreeParsed,
+	}
+	// write the inode to disk
+	if err := fs.writeInode(&in); err != nil {
+		return nil, fmt.Errorf("could not write inode for new directory: %w", err)
+	}
+	// if a directory, put entries for . and .. in the first block for the new directory
+	if isDir {
+		initialEntries := []*directoryEntry{
+			{
+				inode:    inodeNumber,
+				filename: ".",
+				fileType: dirFileTypeDirectory,
+			},
+			{
+				inode:    parent.inode,
+				filename: "..",
+				fileType: dirFileTypeDirectory,
+			},
+		}
+		newDir := Directory{
+			directoryEntry: de,
+			root:           false,
+			entries:        initialEntries,
+		}
+		dirBytes := newDir.toBytes(fs.superblock.blockSize, directoryChecksumAppender(fs.superblock.checksumSeed, inodeNumber, 0))
+		// write the bytes out to disk
+		dirFile = &File{
+			inode: &in,
+			directoryEntry: &directoryEntry{
+				inode:    inodeNumber,
+				filename: name,
+				fileType: dirFileTypeDirectory,
+			},
+			filesystem:  fs,
+			isReadWrite: true,
+			isAppend:    true,
+			offset:      0,
+			extents:     *newExtents,
+		}
+		wrote, err := dirFile.Write(dirBytes)
+		if err != nil && err != io.EOF {
+			return nil, fmt.Errorf("unable to write new directory: %w", err)
+		}
+		if wrote != len(dirBytes) {
+			return nil, fmt.Errorf("wrote only %d bytes instead of expected %d for new entry", wrote, len(dirBytes))
+		}
+	}
+
+	// return
+	return &de, nil
+}
+
+// allocateInode allocate a single inode
+// passed the parent, so it can know where to allocate it
+// logic:
+//   - parent is  0 : root inode, will allocate at 2
+//   - parent is  2 : child of root, will try to spread out
+//   - else         : try to collocate with parent, if possible
+func (fs *FileSystem) allocateInode(parent uint32) (uint32, error) {
+	var (
+		inodeNumber = -1
+	)
+	if parent == 0 {
+		inodeNumber = 2
+	}
+	// load the inode bitmap
+	var (
+		bg int
+		gd groupDescriptor
+	)
+
+	for _, gd = range fs.groupDescriptors.descriptors {
+		if inodeNumber != -1 {
+			break
+		}
+		bg := int(gd.number)
+		bm, err := fs.readInodeBitmap(bg)
+		if err != nil {
+			return 0, fmt.Errorf("could not read inode bitmap: %w", err)
+		}
+		// get first free inode
+		inodeNumber = bm.FirstFree(0)
+		// if we found a
+		if inodeNumber == -1 {
+			continue
+		}
+		// set it as marked
+		if err := bm.Set(inodeNumber); err != nil {
+			return 0, fmt.Errorf("could not set inode bitmap: %w", err)
+		}
+		// write the inode bitmap bytes
+		if err := fs.writeInodeBitmap(bm, bg); err != nil {
+			return 0, fmt.Errorf("could not write inode bitmap: %w", err)
+		}
+	}
+	if inodeNumber == -1 {
+		return 0, errors.New("no free inodes available")
+	}
+
+	// reduce number of free inodes in that descriptor in the group descriptor table
+	gd.freeInodes--
+
+	// get the group descriptor as bytes
+	gdBytes := gd.toBytes(fs.superblock.gdtChecksumType(), fs.superblock.uuid.ID())
+
+	// write the group descriptor bytes
+	// gdt starts in block 1 of any redundant copies, specifically in BG 0
+	gdtBlock := 1
+	blockByteLocation := gdtBlock * int(fs.superblock.blockSize)
+	gdOffset := fs.start + int64(blockByteLocation) + int64(bg)*int64(fs.superblock.groupDescriptorSize)
+	wrote, err := fs.file.WriteAt(gdBytes, gdOffset)
+	if err != nil {
+		return 0, fmt.Errorf("unable to write group descriptor bytes for blockgroup %d: %v", bg, err)
+	}
+	if wrote != len(gdBytes) {
+		return 0, fmt.Errorf("wrote only %d bytes instead of expected %d for group descriptor of block group %d", wrote, len(gdBytes), bg)
+	}
+
+	return uint32(inodeNumber), nil
+}
+
+// allocateExtents allocate the data blocks in extents that are
+// to be used for a file of a given size
+// arguments are file size in bytes and existing extents
+// if previous is nil, then we are not (re)sizing an existing file but creating a new one
+// returns the extents to be used in order
+func (fs *FileSystem) allocateExtents(size uint64, previous *extents) (*extents, error) {
+	// 1- calculate how many blocks are needed
+	required := size / uint64(fs.superblock.blockSize)
+	remainder := size % uint64(fs.superblock.blockSize)
+	if remainder > 0 {
+		required++
+	}
+	// 2- see how many blocks already are allocated
+	var allocated uint64
+	if previous != nil {
+		allocated = previous.blockCount()
+	}
+	// 3- if needed, allocate new blocks in extents
+	extraBlockCount := required - allocated
+	// if we have enough, do not add anything
+	if extraBlockCount <= 0 {
+		return previous, nil
+	}
+
+	// if there are not enough blocks left on the filesystem, return an error
+	if fs.superblock.freeBlocks < extraBlockCount {
+		return nil, fmt.Errorf("only %d blocks free, requires additional %d", fs.superblock.freeBlocks, extraBlockCount)
+	}
+
+	// now we need to look for as many contiguous blocks as possible
+	// first calculate the minimum number of extents needed
+
+	// if all of the extents, except possibly the last, are maximum size, then we need minExtents extents
+	// we loop through, trying to allocate an extent as large as our remaining blocks or maxBlocksPerExtent,
+	//   whichever is smaller
+	blockGroupCount := fs.blockGroups
+	// TODO: instead of starting with BG 0, should start with BG where the inode for this file/dir is located
+	var (
+		newExtents       []extent
+		datablockBitmaps = map[int]*util.Bitmap{}
+		blocksPerGroup   = fs.superblock.blocksPerGroup
+	)
+
+	var i int64
+	for i = 0; i < blockGroupCount && allocated < extraBlockCount; i++ {
+		// keep track if we allocated anything in this blockgroup
+		// 1- read the GDT for this blockgroup to find the location of the block bitmap
+		//    and total free blocks
+		// 2- read the block bitmap from disk
+		// 3- find the maximum contiguous space available
+		bs, err := fs.readBlockBitmap(int(i))
+		if err != nil {
+			return nil, fmt.Errorf("could not read block bitmap for block group %d: %v", i, err)
+		}
+		// now find our unused blocks and how many there are in a row as potential extents
+		if extraBlockCount > maxUint16 {
+			return nil, fmt.Errorf("cannot allocate more than %d blocks in a single extent", maxUint16)
+		}
+		// get the list of free blocks
+		blockList := bs.FreeList()
+
+		// create possible extents by size
+		// Step 3: Group contiguous blocks into extents
+		var extents []extent
+		for _, freeBlock := range blockList {
+			start, length := freeBlock.Position, freeBlock.Count
+			for length > 0 {
+				extentLength := min(length, int(maxBlocksPerExtent))
+				extents = append(extents, extent{startingBlock: uint64(start) + uint64(i)*uint64(blocksPerGroup), count: uint16(extentLength)})
+				start += extentLength
+				length -= extentLength
+			}
+		}
+
+		// sort in descending order
+		sort.Slice(extents, func(i, j int) bool {
+			return extents[i].count > extents[j].count
+		})
+
+		var allocatedBlocks uint64
+		for _, ext := range extents {
+			if extraBlockCount <= 0 {
+				break
+			}
+			extentToAdd := ext
+			if uint64(ext.count) >= extraBlockCount {
+				extentToAdd = extent{startingBlock: ext.startingBlock, count: uint16(extraBlockCount)}
+			}
+			newExtents = append(newExtents, extentToAdd)
+			allocatedBlocks += uint64(extentToAdd.count)
+			extraBlockCount -= uint64(extentToAdd.count)
+			// set the marked blocks in the bitmap, and save the bitmap
+			for block := extentToAdd.startingBlock; block < extentToAdd.startingBlock+uint64(extentToAdd.count); block++ {
+				// determine what block group this block is in, and read the bitmap for that blockgroup
+				// the extent lists the absolute block number, but the bitmap is relative to the block group
+				blockInGroup := block - uint64(i)*uint64(blocksPerGroup)
+				if err := bs.Set(int(blockInGroup)); err != nil {
+					return nil, fmt.Errorf("could not clear block bitmap for block %d: %v", i, err)
+				}
+			}
+
+			// do *not* write the bitmap back yet, as we do not yet know if we will be able to fulfill the entire request.
+			// instead save it for later
+			datablockBitmaps[int(i)] = bs
+		}
+	}
+	if extraBlockCount > 0 {
+		return nil, fmt.Errorf("could not allocate %d blocks", extraBlockCount)
+	}
+
+	// write the block bitmaps back to disk
+	for bg, bs := range datablockBitmaps {
+		if err := fs.writeBlockBitmap(bs, bg); err != nil {
+			return nil, fmt.Errorf("could not write block bitmap for block group %d: %v", bg, err)
+		}
+	}
+
+	// need to update the total blocks used/free in superblock
+	fs.superblock.freeBlocks -= allocated
+	// update the blockBitmapChecksum for any updated block groups in GDT
+	// write updated superblock and GDT to disk
+	if err := fs.writeSuperblock(); err != nil {
+		return nil, fmt.Errorf("could not write superblock: %w", err)
+	}
+	// write backup copies
+	var exten extents = newExtents
+	return &exten, nil
+}
+
+// readInodeBitmap read the inode bitmap off the disk.
+// This would be more efficient if we just read one group descriptor's bitmap
+// but for now we are about functionality, not efficiency, so it will read the whole thing.
+func (fs *FileSystem) readInodeBitmap(group int) (*util.Bitmap, error) {
+	if group >= len(fs.groupDescriptors.descriptors) {
+		return nil, fmt.Errorf("block group %d does not exist", group)
+	}
+	gd := fs.groupDescriptors.descriptors[group]
+	bitmapLocation := gd.inodeBitmapLocation
+	bitmapByteCount := fs.superblock.inodesPerGroup / 8
+	b := make([]byte, bitmapByteCount)
+	offset := int64(bitmapLocation*uint64(fs.superblock.blockSize) + uint64(fs.start))
+	read, err := fs.file.ReadAt(b, offset)
+	if err != nil {
+		return nil, fmt.Errorf("unable to read inode bitmap for blockgroup %d: %w", gd.number, err)
+	}
+	if read != int(bitmapByteCount) {
+		return nil, fmt.Errorf("Read %d bytes instead of expected %d for inode bitmap of block group %d", read, bitmapByteCount, gd.number)
+	}
+	// only take bytes corresponding to the number of inodes per group
+
+	// create a bitmap
+	bs := util.NewBitmap(int(fs.superblock.blockSize) * len(fs.groupDescriptors.descriptors))
+	bs.FromBytes(b)
+	return bs, nil
+}
+
+// writeInodeBitmap write the inode bitmap to the disk.
+func (fs *FileSystem) writeInodeBitmap(bm *util.Bitmap, group int) error {
+	if group >= len(fs.groupDescriptors.descriptors) {
+		return fmt.Errorf("block group %d does not exist", group)
+	}
+	b := bm.ToBytes()
+	gd := fs.groupDescriptors.descriptors[group]
+	bitmapByteCount := fs.superblock.inodesPerGroup / 8
+	bitmapLocation := gd.inodeBitmapLocation
+	offset := int64(bitmapLocation*uint64(fs.superblock.blockSize) + uint64(fs.start))
+	wrote, err := fs.file.WriteAt(b, offset)
+	if err != nil {
+		return fmt.Errorf("unable to write inode bitmap for blockgroup %d: %w", gd.number, err)
+	}
+	if wrote != int(bitmapByteCount) {
+		return fmt.Errorf("wrote %d bytes instead of expected %d for inode bitmap of block group %d", wrote, bitmapByteCount, gd.number)
+	}
+
+	return nil
+}
+
+func (fs *FileSystem) readBlockBitmap(group int) (*util.Bitmap, error) {
+	if group >= len(fs.groupDescriptors.descriptors) {
+		return nil, fmt.Errorf("block group %d does not exist", group)
+	}
+	gd := fs.groupDescriptors.descriptors[group]
+	bitmapLocation := gd.blockBitmapLocation
+	b := make([]byte, fs.superblock.blockSize)
+	offset := int64(bitmapLocation*uint64(fs.superblock.blockSize) + uint64(fs.start))
+	read, err := fs.file.ReadAt(b, offset)
+	if err != nil {
+		return nil, fmt.Errorf("unable to read block bitmap for blockgroup %d: %w", gd.number, err)
+	}
+	if read != int(fs.superblock.blockSize) {
+		return nil, fmt.Errorf("Read %d bytes instead of expected %d for block bitmap of block group %d", read, fs.superblock.blockSize, gd.number)
+	}
+	// create a bitmap
+	bs := util.NewBitmap(int(fs.superblock.blockSize) * len(fs.groupDescriptors.descriptors))
+	bs.FromBytes(b)
+	return bs, nil
+}
+
+// writeBlockBitmap write the inode bitmap to the disk.
+func (fs *FileSystem) writeBlockBitmap(bm *util.Bitmap, group int) error {
+	if group >= len(fs.groupDescriptors.descriptors) {
+		return fmt.Errorf("block group %d does not exist", group)
+	}
+	b := bm.ToBytes()
+	gd := fs.groupDescriptors.descriptors[group]
+	bitmapLocation := gd.blockBitmapLocation
+	offset := int64(bitmapLocation*uint64(fs.superblock.blockSize) + uint64(fs.start))
+	wrote, err := fs.file.WriteAt(b, offset)
+	if err != nil {
+		return fmt.Errorf("unable to write block bitmap for blockgroup %d: %w", gd.number, err)
+	}
+	if wrote != int(fs.superblock.blockSize) {
+		return fmt.Errorf("wrote %d bytes instead of expected %d for block bitmap of block group %d", wrote, fs.superblock.blockSize, gd.number)
+	}
+
+	return nil
+}
+
+func (fs *FileSystem) writeSuperblock() error {
+	superblockBytes, err := fs.superblock.toBytes()
+	if err != nil {
+		return fmt.Errorf("could not convert superblock to bytes: %v", err)
+	}
+	_, err = fs.file.WriteAt(superblockBytes, fs.start+int64(BootSectorSize))
+	return err
+}
+
+func blockGroupForInode(inodeNumber int, inodesPerGroup uint32) int {
+	return (inodeNumber - 1) / int(inodesPerGroup)
+}
+func blockGroupForBlock(blockNumber int, blocksPerGroup uint32) int {
+	return (blockNumber - 1) / int(blocksPerGroup)
 }

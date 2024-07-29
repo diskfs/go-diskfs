@@ -16,6 +16,8 @@ dd if=/dev/zero of=two-k-file.dat bs=1024 count=2
 dd if=/dev/zero of=six-k-file.dat bs=1024 count=6
 dd if=/dev/zero of=seven-k-file.dat bs=1024 count=7
 dd if=/dev/zero of=ten-meg-file.dat bs=1M count=10
+echo "This is a subdir file" > foo/subdirfile.txt
+# `set +x` and then `set -x` because otherwie the logs are overloaded with creating 10000 directories
 set +x
 i=0; until [ $i -gt 10000 ]; do mkdir foo/dir${i}; i=$(( $i+1 )); done
 set -x

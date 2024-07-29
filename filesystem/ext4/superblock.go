@@ -700,7 +700,12 @@ func (sb *superblock) gdtChecksumType() gdtChecksumType {
 }
 
 func (sb *superblock) blockGroupCount() uint64 {
-	return sb.blockCount / uint64(sb.blocksPerGroup)
+	whole := sb.blockCount / uint64(sb.blocksPerGroup)
+	part := sb.blockCount % uint64(sb.blocksPerGroup)
+	if part > 0 {
+		whole++
+	}
+	return whole
 }
 
 // calculateBackupSuperblocks calculate which block groups should have backup superblocks.
