@@ -379,6 +379,14 @@ func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 	return f, nil
 }
 
+func (fs *FileSystem) RemoveFile(p string) error {
+	return fmt.Errorf("not implemented")
+}
+
+func (fs *FileSystem) RenameFile(p, newFileName string) error {
+	return fmt.Errorf("not implemented")
+}
+
 // readDirectory - read directory entry on squashfs only (not workspace)
 func (fs *FileSystem) readDirectory(p string) ([]*directoryEntry, error) {
 	// use the root inode to find the location of the root direectory in the table

@@ -414,6 +414,14 @@ func (fsm *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 	return f, nil
 }
 
+func (fs *FileSystem) RemoveFile(p string) error {
+	return fmt.Errorf("not implemented")
+}
+
+func (fs *FileSystem) RenameFile(p, newFileName string) error {
+	return fmt.Errorf("not implemented")
+}
+
 // readDirectory - read directory entry on iso only (not workspace)
 func (fsm *FileSystem) readDirectory(p string) ([]*directoryEntry, error) {
 	var (
