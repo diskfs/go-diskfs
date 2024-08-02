@@ -908,27 +908,28 @@ func createPathTable(fi []*finalizeFileInfo) *pathTable {
 }
 
 func walkTree(workspace string) ([]*finalizeFileInfo, map[string]*finalizeFileInfo, error) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return nil, nil, fmt.Errorf("could not get pwd: %v", err)
-	}
-	// make everything relative to the workspace
-	_ = os.Chdir(workspace)
 	var (
 		dirList  = make(map[string]*finalizeFileInfo)
 		fileList = make([]*finalizeFileInfo, 0)
 		entry    *finalizeFileInfo
 		serial   uint64
 	)
-	err = filepath.Walk(".", func(fp string, fi os.FileInfo, err error) error {
+	err := filepath.WalkDir(workspace, func(actualPath string, d fs.DirEntry, err error) error {
 		if err != nil {
-			return fmt.Errorf("error walking path %s: %v", fp, err)
+			return fmt.Errorf("error walking path %s: %v", actualPath, err)
 		}
-		name := fi.Name()
+		fp := strings.TrimPrefix(actualPath, workspace)
+		fp = strings.TrimPrefix(fp, string(filepath.Separator))
+		if fp == "" {
+			fp = "."
+		}
+		name := d.Name()
 		_, extension := calculateShortnameExtension(name)
 
-		actualPath := path.Join(workspace, fp)
-
+		fi, err := d.Info()
+		if err != nil {
+			return fmt.Errorf("could not get file info for %s: %v", fp, err)
+		}
 		entry, err = finalizeFileInfoFromFile(fp, actualPath, fi)
 		if err != nil {
 			return err
@@ -960,8 +961,6 @@ func walkTree(workspace string) ([]*finalizeFileInfo, map[string]*finalizeFileIn
 	if err != nil {
 		return nil, nil, err
 	}
-	// reset the workspace
-	_ = os.Chdir(cwd)
 	return fileList, dirList, nil
 }
 
