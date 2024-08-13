@@ -55,8 +55,8 @@ const (
 	max32Num uint64 = math.MaxUint32
 	max64Num uint64 = math.MaxUint64
 
-	maxFilesystemSize32Bit uint64 = 16*2 ^ 40
-	maxFilesystemSize64Bit uint64 = 1*2 ^ 60
+	maxFilesystemSize32Bit uint64 = 16 << 40
+	maxFilesystemSize64Bit uint64 = 1 << 60
 
 	checksumType uint8 = 1
 
@@ -112,7 +112,12 @@ func (fs *FileSystem) Equal(a *FileSystem) bool {
 //
 // requires the util.File where to create the filesystem, size is the size of the filesystem in bytes,
 // start is how far in bytes from the beginning of the util.File to create the filesystem,
-// and blocksize is is the logical blocksize to use for creating the filesystem
+// and sectorsize is is the logical sector size to use for creating the filesystem
+//
+// blocksize is the size of the ext4 blocks, and is calculated as sectorsPerBlock * sectorsize.
+// By ext4 specification, it must be between 512 and 4096 bytes,
+// where sectorsize is the provided parameter, and sectorsPerBlock is part of `p *Params`.
+// If either sectorsize or p.SectorsPerBlock is 0, it will calculate the optimal size for both.
 //
 // note that you are *not* required to create the filesystem on the entire disk. You could have a disk of size
 // 20GB, and create a small filesystem of size 50MB that begins 2GB into the disk.
@@ -137,6 +142,9 @@ func Create(f util.File, size, start, sectorsize int64, p *Params) (*FileSystem,
 	if sectorsize != int64(SectorSize512) && sectorsize > 0 {
 		return nil, fmt.Errorf("sectorsize for ext4 must be either 512 bytes or 0, not %d", sectorsize)
 	}
+	if sectorsize == 0 {
+		sectorsize = int64(SectorSize512)
+	}
 	var sectorsize32 = uint32(sectorsize)
 	// there almost are no limits on an ext4 fs - theoretically up to 1 YB
 	// but we do have to check the max and min size per the requested parameters
@@ -156,12 +164,16 @@ func Create(f util.File, size, start, sectorsize int64, p *Params) (*FileSystem,
 
 	// blocksize
 	sectorsPerBlock := p.SectorsPerBlock
-	userProvidedBlocksize := false
+	// whether or not the user provided a blocksize
+	// if they did, we will stick with it, as long as it is valid.
+	// if they did not, then we are free to calculate it
+	var userProvidedBlocksize bool
 	switch {
+	case sectorsPerBlock == 0:
+		sectorsPerBlock = 2
+		userProvidedBlocksize = false
 	case sectorsPerBlock > 128 || sectorsPerBlock < 2:
 		return nil, fmt.Errorf("invalid sectors per block %d, must be between %d and %d sectors", sectorsPerBlock, 2, 128)
-	case sectorsPerBlock < 1:
-		sectorsPerBlock = 2
 	default:
 		userProvidedBlocksize = true
 	}
