@@ -1,6 +1,7 @@
 package fat32
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -629,14 +630,36 @@ func (fs *FileSystem) Label() string {
 	return labelEntry.filenameShort + labelEntry.fileExtension
 }
 
-// SetLabel changes the filesystem label
-func (fs *FileSystem) SetLabel(volumeLabel string) error {
+// https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file#naming-conventions
+// https://www.cs.fsu.edu/~cop4610t/assignments/project3/spec/fatspec.pdf
+func validateAndFormatVolumeLabel(volumeLabel string) (string, error) {
 	if volumeLabel == "" {
 		volumeLabel = "NO NAME"
 	}
+	if len(volumeLabel) > 11 {
+		return "", fmt.Errorf("Volume label |%s| must be less than 11 characters, got %d", volumeLabel, len(volumeLabel))
+	}
 
-	// ensure the volumeLabel is proper sized
-	volumeLabel = fmt.Sprintf("%-11.11s", volumeLabel)
+	// The following characters are not legal in any bytes of DIR_Name:
+	// • Values less than 0x20 except for the special case of 0x05 in DIR_Name[0] described above.
+	// TODO
+	// • 0x22, 0x2A, 0x2B, 0x2C, 0x2E, 0x2F, 0x3A, 0x3B, 0x3C, 0x3D, 0x3E, 0x3F, 0x5B, 0x5C, 0x5D,
+	// and 0x7C.
+	invalidBytes := string([]byte{0x22, 0x2A, 0x2B, 0x2C, 0x2E, 0x2F, 0x3A, 0x3B, 0x3C, 0x3D, 0x3E, 0x3F, 0x5B, 0x5C, 0x5D, 0x7C})
+	idx := bytes.IndexAny([]byte(volumeLabel), invalidBytes)
+	if idx != -1 {
+		return "", fmt.Errorf("Volume label cannot have invalid character %c", volumeLabel[idx])
+	}
+
+	return fmt.Sprintf("%-11.11s", volumeLabel), nil
+}
+
+// SetLabel changes the filesystem label
+func (fs *FileSystem) SetLabel(volumeLabel string) error {
+	volumeLabel, err := validateAndFormatVolumeLabel(volumeLabel)
+	if err != nil {
+		return fmt.Errorf("Error validating volume label %w", err)
+	}
 
 	// set the label in the superblock
 	bpb := fs.bootSector.biosParameterBlock
@@ -830,6 +853,9 @@ func (fs *FileSystem) readDirWithMkdir(p string, doMake bool) (*Directory, []*di
 		// do we have an entry whose name is the same as this name?
 		found := false
 		for _, e := range entries {
+			if e.isVolumeLabel {
+				continue
+			}
 			if e.filenameLong != subp && e.filenameShort != subp && (!e.lowercaseShortname || (e.lowercaseShortname && !strings.EqualFold(e.filenameShort, subp))) {
 				continue
 			}

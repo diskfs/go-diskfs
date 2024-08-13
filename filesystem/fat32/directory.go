@@ -1,6 +1,7 @@
 package fat32
 
 import (
+	"fmt"
 	"time"
 )
 
@@ -72,6 +73,10 @@ func (d *Directory) createEntry(name string, cluster uint32, dir bool) (*directo
 
 // createVolumeLabel create a volume label entry in the given directory, and return the handle to it
 func (d *Directory) createVolumeLabel(name string) (*directoryEntry, error) {
+	name, err := validateAndFormatVolumeLabel(name)
+	if err != nil {
+		return nil, fmt.Errorf("Unable to create a volume label entry: %w", err)
+	}
 	// allocate a slot for the new filename in the existing directory
 	entry := directoryEntry{
 		filenameLong:      "",
