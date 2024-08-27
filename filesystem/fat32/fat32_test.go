@@ -946,3 +946,35 @@ func TestFat32Label(t *testing.T) {
 		}
 	})
 }
+
+func TestFat32MkdirCases(t *testing.T) {
+	f, err := tmpFat32(false, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(f.Name())
+	fs, err := fat32.Create(f, 1048576, 0, 512, "")
+	if err != nil {
+		t.Error(err.Error())
+	}
+	err = fs.Mkdir("/EFI/BOOT")
+	if err != nil {
+		t.Error(err.Error())
+	}
+	// Make the same folders but now lowercase ... I expect it not to create anything new,
+	// these folders exist but are named /EFI/BOOT
+	err = fs.Mkdir("/efi/boot")
+	if err != nil {
+		t.Error(err.Error())
+	}
+	files, err := fs.ReadDir("/")
+	if err != nil {
+		t.Error(err.Error())
+	}
+	if len(files) != 1 {
+		for _, file := range files {
+			fmt.Printf("file: %s\n", file.Name())
+		}
+		t.Fatalf("expected 1 file, found %d", len(files))
+	}
+}
