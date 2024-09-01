@@ -11,7 +11,7 @@ import (
 func getValidDos71EBPB() *dos71EBPB {
 	return &dos71EBPB{
 		dos331BPB:             getValidDos331BPB(),
-		sectorsPerFat:         158,
+		sectorsPerFat:         fsInfo.sectorsPerFAT,
 		mirrorFlags:           0,
 		version:               0,
 		rootDirectoryCluster:  2,
@@ -21,8 +21,8 @@ func getValidDos71EBPB() *dos71EBPB {
 		driveNumber:           128,
 		reservedFlags:         0x00,
 		extendedBootSignature: 0x29,
-		volumeSerialNumber:    2712131608,
-		volumeLabel:           "go-diskfs",
+		volumeSerialNumber:    fsInfo.serial,
+		volumeLabel:           fsInfo.label,
 		fileSystemType:        "FAT32",
 	}
 }
@@ -118,8 +118,8 @@ func TestDos71EBPBFromBytes(t *testing.T) {
 		valid.volumeLabel = ""
 		valid.fileSystemType = ""
 		if !bpb.equal(valid) {
-			t.Log(bpb)
-			t.Log(valid)
+			t.Logf("%#v", bpb)
+			t.Logf("%#v", valid)
 			t.Fatalf("Mismatched BPB")
 		}
 	})

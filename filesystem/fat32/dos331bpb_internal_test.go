@@ -11,9 +11,9 @@ import (
 func getValidDos331BPB() *dos331BPB {
 	return &dos331BPB{
 		dos20BPB:        getValidDos20BPB(),
-		sectorsPerTrack: 32,
-		heads:           64,
-		hiddenSectors:   0,
+		sectorsPerTrack: uint16(fsInfo.sectorsPerTrack),
+		heads:           uint16(fsInfo.heads),
+		hiddenSectors:   fsInfo.hiddenSectors,
 		totalSectors:    0,
 	}
 }

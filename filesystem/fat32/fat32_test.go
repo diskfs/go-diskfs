@@ -297,6 +297,17 @@ func TestFat32ReadDir(t *testing.T) {
 		} else {
 			fmt.Println(f.Name())
 		}
+		// determine entries from the actual data
+		rootEntries, _, err := fat32.GetValidDirectoryEntries()
+		if err != nil {
+			t.Fatalf("error getting valid directory entries: %v", err)
+		}
+		// ignore volume entry when public-facing root entries
+		rootEntries = rootEntries[:len(rootEntries)-1]
+		fooEntries, _, err := fat32.GetValidDirectoryEntriesExtended("/foo")
+		if err != nil {
+			t.Fatalf("error getting valid directory entries for /foo: %v", err)
+		}
 		tests := []struct {
 			path  string
 			count int
@@ -304,20 +315,8 @@ func TestFat32ReadDir(t *testing.T) {
 			isDir bool
 			err   error
 		}{
-			// should have 4 entries (Volume Label is not returned)
-			//   foo
-			//   TERCER~1
-			//   CORTO1.TXT
-			//   UNARCH~1.DAT
-			{"/", 4, "foo", true, nil},
-			// should have 80 entries:
-			//  dir0-75 = 76 entries
-			//  dir     =  1 entry
-			//  bar     =  1 entry
-			//    .     =  1 entry
-			//   ..     =  1 entry
-			// total = 80 entries
-			{"/foo", 80, ".", true, nil},
+			{"/", len(rootEntries), "foo", true, nil},
+			{"/foo", len(fooEntries), ".", true, nil},
 			// 0 entries because the directory does not exist
 			{"/a/b/c", 0, "", false, fmt.Errorf("error reading directory /a/b/c")},
 		}

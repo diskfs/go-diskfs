@@ -14,4 +14,7 @@ require (
 	golang.org/x/sys v0.5.0
 )
 
-require github.com/klauspost/compress v1.17.4
+require (
+	github.com/google/go-cmp v0.6.0
+	github.com/klauspost/compress v1.17.4
+)
