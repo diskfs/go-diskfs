@@ -511,7 +511,7 @@ func (fs *FileSystem) ReadDir(p string) ([]os.FileInfo, error) {
 		}
 		fileExtension := e.fileExtension
 		if e.lowercaseExtension {
-			shortName = strings.ToLower(fileExtension)
+			fileExtension = strings.ToLower(fileExtension)
 		}
 		if fileExtension != "" {
 			shortName = fmt.Sprintf("%s.%s", shortName, fileExtension)
@@ -553,7 +553,7 @@ func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 		if e.fileExtension != "" {
 			shortName += "." + e.fileExtension
 		}
-		if e.filenameLong != filename && shortName != filename {
+		if !strings.EqualFold(e.filenameLong, filename) && !strings.EqualFold(shortName, filename) {
 			continue
 		}
 		// cannot do anything with directories
@@ -840,7 +840,7 @@ func (fs *FileSystem) readDirWithMkdir(p string, doMake bool) (*Directory, []*di
 			// match is determined by any one of:
 			// - long filename == provided name
 			// - uppercase(short filename) == uppercase(provided name)
-			if e.filenameLong != subp && !strings.EqualFold(e.filenameShort, subp) {
+			if !strings.EqualFold(e.filenameLong, subp) && !strings.EqualFold(e.filenameShort, subp) {
 				continue
 			}
 			if !e.isSubdirectory {

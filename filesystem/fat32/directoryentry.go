@@ -103,7 +103,7 @@ func (de *directoryEntry) toBytes() ([]byte, error) {
 	}
 
 	if de.lowercaseExtension {
-		dosBytes[12] |= 0x04
+		dosBytes[12] |= 0x10
 	}
 	if de.lowercaseShortname {
 		dosBytes[12] |= 0x08
@@ -161,7 +161,7 @@ byteLoop:
 		isArchiveDirty := b[i+11]&0x20 == 0x20
 		isVolumeLabel := b[i+11]&0x08 == 0x08
 		lowercaseShortname := b[i+12]&0x08 == 0x08
-		lowercaseExtension := b[i+12]&0x04 == 0x04
+		lowercaseExtension := b[i+12]&0x10 == 0x10
 
 		entry := directoryEntry{
 			filenameLong:       lfn,
