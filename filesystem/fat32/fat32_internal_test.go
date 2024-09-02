@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/diskfs/go-diskfs/testhelper"
+	"github.com/google/go-cmp/cmp"
 )
 
 /*
@@ -58,6 +59,7 @@ func getValidFat32FSSmall() *FileSystem {
 		bytesPerCluster: 512,
 		dataStart:       178176,
 		file: &testhelper.FileImpl{
+			//nolint:revive // unused parameter, keeping name makes it easier to use in the future
 			Writer: func(b []byte, offset int64) (int, error) {
 				return len(b), nil
 			},
@@ -122,14 +124,14 @@ func TestFat32ReadDirectory(t *testing.T) {
 	fs := &FileSystem{
 		table:           *getValidFat32Table(),
 		file:            file,
-		bytesPerCluster: 512,
-		dataStart:       178176,
+		bytesPerCluster: int(fsInfo.bytesPerCluster),
+		dataStart:       fsInfo.dataStartBytes,
 	}
-	validDe, _, err := getValidDirectoryEntries()
+	validDe, _, err := GetValidDirectoryEntries()
 	if err != nil {
 		t.Fatalf("unable to read valid directory entries: %v", err)
 	}
-	validDeExtended, _, err := getValidDirectoryEntriesExtended()
+	validDeExtended, _, err := GetValidDirectoryEntriesExtended("/foo")
 	if err != nil {
 		t.Fatalf("unable to read valid directory entries extended: %v", err)
 	}
@@ -159,8 +161,7 @@ func TestFat32ReadDirectory(t *testing.T) {
 			for i, entry := range entries {
 				if !compareDirectoryEntriesIgnoreDates(entry, tt.entries[i]) {
 					t.Errorf("fs.readDirectory(%s) %d: entries do not match, actual then expected", tt.path, i)
-					t.Log(entry)
-					t.Log(tt.entries[i])
+					t.Log(cmp.Diff(*entry, *tt.entries[i], cmp.AllowUnexported(directoryEntry{})))
 				}
 			}
 		}
@@ -274,11 +275,11 @@ func TestFat32ReadDirWithMkdir(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to read data from file %s: %v", Fat32File, err)
 	}
-	validDe, _, err := getValidDirectoryEntries()
+	validDe, _, err := GetValidDirectoryEntries()
 	if err != nil {
 		t.Fatalf("unable to read valid directory entries: %v", err)
 	}
-	validDeLong, _, err := getValidDirectoryEntriesExtended()
+	validDeLong, _, err := GetValidDirectoryEntriesExtended("/foo")
 	if err != nil {
 		t.Fatalf("unable to read valid directory entries extended: %v", err)
 	}
@@ -321,6 +322,7 @@ func TestFat32ReadDirWithMkdir(t *testing.T) {
 
 	for _, tt := range tests {
 		fs.file = &testhelper.FileImpl{
+			//nolint:revive // unused parameter, keeping name makes it easier to use in the future
 			Writer: func(b []byte, offset int64) (int, error) {
 				return len(b), nil
 			},

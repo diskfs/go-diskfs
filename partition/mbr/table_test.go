@@ -99,6 +99,7 @@ func TestTableRead(t *testing.T) {
 	t.Run("error reading file", func(t *testing.T) {
 		expected := "error reading MBR from file"
 		f := &testhelper.FileImpl{
+			//nolint:revive // b is unused, but we keep it here for the consistent io.Reader signatire
 			Reader: func(b []byte, offset int64) (int, error) {
 				return 0, errors.New(expected)
 			},
@@ -118,6 +119,7 @@ func TestTableRead(t *testing.T) {
 		size := 100
 		expected := fmt.Sprintf("read only %d bytes of MBR", size)
 		f := &testhelper.FileImpl{
+			//nolint:revive // b is unused, but we keep it here for the consistent io.Reader signatire
 			Reader: func(b []byte, offset int64) (int, error) {
 				return size, nil
 			},
@@ -157,6 +159,7 @@ func TestTableWrite(t *testing.T) {
 		table := mbr.GetValidTable()
 		expected := "error writing partition table to disk"
 		f := &testhelper.FileImpl{
+			//nolint:revive // b is unused, but we keep it here for the consistent io.Writer signatire
 			Writer: func(b []byte, offset int64) (int, error) {
 				return 0, errors.New(expected)
 			},
@@ -173,6 +176,7 @@ func TestTableWrite(t *testing.T) {
 		table := mbr.GetValidTable()
 		var size int
 		f := &testhelper.FileImpl{
+			//nolint:revive // b is unused, but we keep it here for the consistent io.Writer signatire
 			Writer: func(b []byte, offset int64) (int, error) {
 				size = len(b) - 1
 				return size, nil
@@ -370,6 +374,7 @@ func TestReadPartitionContents(t *testing.T) {
 	b2 := make([]byte, size)
 	_, _ = rand.Read(b2)
 	f := &testhelper.FileImpl{
+		//nolint:revive // b is unused, but we keep it here for the consistent io.Reader signatire
 		Reader: func(b []byte, offset int64) (int, error) {
 			copy(b, b2)
 			return size, io.EOF
@@ -398,6 +403,7 @@ func TestWritePartitionContents(t *testing.T) {
 	reader := bytes.NewReader(b)
 	b2 := make([]byte, 0, size)
 	f := &testhelper.FileImpl{
+		//nolint:revive // b is unused, but we keep it here for the consistent io.Writer signatire
 		Writer: func(b []byte, offset int64) (int, error) {
 			b2 = append(b2, b...)
 			return len(b), nil

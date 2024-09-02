@@ -65,6 +65,12 @@ type FileSystem struct {
 
 // Equal compare if two filesystems are equal
 func (fs *FileSystem) Equal(a *FileSystem) bool {
+	if fs == nil && a == nil {
+		return true
+	}
+	if fs == nil || a == nil {
+		return false
+	}
 	localMatch := fs.file == a.file && fs.dataStart == a.dataStart && fs.bytesPerCluster == a.bytesPerCluster
 	tableMatch := fs.table.equal(&a.table)
 	bsMatch := fs.bootSector.equal(&a.bootSector)

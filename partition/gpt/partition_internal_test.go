@@ -347,6 +347,7 @@ func TestWriteContents(t *testing.T) {
 		reader := bytes.NewReader(b)
 		expected := "error writing to file"
 		f := &testhelper.FileImpl{
+			//nolint:revive // b is unused, but we keep it here for the consistent io.Writer signatire
 			Writer: func(b []byte, offset int64) (int, error) {
 				return 0, errors.New(expected)
 			},
@@ -379,6 +380,7 @@ func TestWriteContents(t *testing.T) {
 		reader := bytes.NewReader(b)
 		expected := "requested to write at least"
 		f := &testhelper.FileImpl{
+			//nolint:revive // b is unused, but we keep it here for the consistent io.Writer signatire
 			Writer: func(b []byte, offset int64) (int, error) {
 				return len(b), nil
 			},
@@ -412,6 +414,7 @@ func TestWriteContents(t *testing.T) {
 		b2 := make([]byte, 0, size)
 		reader := bytes.NewReader(b)
 		f := &testhelper.FileImpl{
+			//nolint:revive // b is unused, but we keep it here for the consistent io.Writer signatire
 			Writer: func(b []byte, offset int64) (int, error) {
 				b2 = append(b2, b...)
 				return len(b), nil
@@ -447,6 +450,7 @@ func TestReadContents(t *testing.T) {
 		writer := bufio.NewWriter(&b)
 		expected := "error reading from file"
 		f := &testhelper.FileImpl{
+			//nolint:revive // b is unused, but we keep it here for the consistent io.Reader signatire
 			Reader: func(b []byte, offset int64) (int, error) {
 				return 0, errors.New(expected)
 			},
@@ -477,6 +481,7 @@ func TestReadContents(t *testing.T) {
 		b2 := make([]byte, size)
 		_, _ = rand.Read(b2)
 		f := &testhelper.FileImpl{
+			//nolint:revive // b is unused, but we keep it here for the consistent io.Reader signatire
 			Reader: func(b []byte, offset int64) (int, error) {
 				copy(b, b2)
 				return size, io.EOF

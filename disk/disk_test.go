@@ -10,6 +10,8 @@ import (
 	"crypto/rand"
 	"fmt"
 	"os"
+	"os/exec"
+	"path"
 	"strings"
 	"testing"
 
@@ -57,11 +59,11 @@ func tmpDisk(source string) (*os.File, error) {
 
 func TestGetPartitionTable(t *testing.T) {
 	// this just calls partition.Read, so no need to do much more than a single test and see that it exercises it
-	path := "../partition/mbr/testdata/mbr.img"
+	imgPath := "../partition/mbr/testdata/mbr.img"
 	tableType := "mbr"
-	f, err := os.Open(path)
+	f, err := os.Open(imgPath)
 	if err != nil {
-		t.Errorf("Failed to open file %s :%v", path, err)
+		t.Errorf("Failed to open file %s :%v", imgPath, err)
 	}
 
 	// be sure to close the file
@@ -577,7 +579,19 @@ func TestGetFilesystem(t *testing.T) {
 		}
 	})
 	t.Run("whole disk", func(t *testing.T) {
-		f, err := tmpDisk("../filesystem/fat32/testdata/fat32.img")
+		tmpDir := t.TempDir()
+		// Run the genartifacts.sh script
+		cmd := exec.Command("sh", "mkfat32.sh", tmpDir)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		cmd.Dir = "../filesystem/fat32/testdata"
+
+		// Execute the command
+		if err := cmd.Run(); err != nil {
+			t.Fatalf("error generating fat32 test artifact for disk test: %v", err)
+		}
+
+		f, err := tmpDisk(path.Join(tmpDir, "dist", "fat32.img"))
 		if err != nil {
 			t.Fatalf("error creating new temporary disk: %v", err)
 		}
