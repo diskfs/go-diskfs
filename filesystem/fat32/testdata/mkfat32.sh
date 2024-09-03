@@ -28,6 +28,10 @@ mcopy -i /data/fat32.img /CORTO1.TXT ::/
 mcopy -i /data/fat32.img '/Un archivo con nombre largo.dat' ::/
 mcopy -i /data/fat32.img '/tercer_archivo' ::/
 mcopy -i /data/fat32.img '/some_long_embedded_nameא' ::/foo/bar
+mmd -i /data/fat32.img ::/lower83
+mcopy -i /data/fat32.img /CORTO1.TXT ::/lower83/lower.low
+mcopy -i /data/fat32.img /CORTO1.TXT ::/lower83/lower.UPP
+mcopy -i /data/fat32.img /CORTO1.TXT ::/lower83/UPPER.low
 
 i=0
 until [ $i -gt 75 ]; do mmd -i /data/fat32.img ::/foo/dir${i}; i=$(( $i+1 )); done

@@ -977,3 +977,84 @@ func TestFat32MkdirCases(t *testing.T) {
 		t.Fatalf("expected 1 file, found %d", len(files))
 	}
 }
+
+func Test83Lowercase(t *testing.T) {
+	// get a temporary working file
+	f, err := tmpFat32(true, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if keepTmpFiles == "" {
+		defer os.Remove(f.Name())
+	} else {
+		fmt.Println(f.Name())
+	}
+	fileInfo, err := f.Stat()
+	if err != nil {
+		t.Fatalf("error getting file info for tmpfile %s: %v", f.Name(), err)
+	}
+	fs, err := fat32.Read(f, fileInfo.Size(), 0, 512)
+	if err != nil {
+		t.Fatalf("error reading fat32 filesystem from %s: %v", f.Name(), err)
+	}
+
+	// Ensure using correct masks for lowercase shortname and extension (bits 3 and 4, zero-based)
+	files, err := fs.ReadDir("/lower83")
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := []string{"lower.low", "lower.UPP", "UPPER.low"}
+	i := 0
+	for _, file := range files {
+		if file.Name() == "." || file.Name() == ".." {
+			continue
+		}
+		if file.Name() != expected[i] {
+			t.Errorf("got %q, expected %q", file.Name(), expected[i])
+		}
+		i++
+	}
+}
+
+func TestOpenFileCaseInsensitive(t *testing.T) {
+	// get a temporary working file
+	f, err := tmpFat32(true, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if keepTmpFiles == "" {
+		defer os.Remove(f.Name())
+	} else {
+		fmt.Println(f.Name())
+	}
+	fileInfo, err := f.Stat()
+	if err != nil {
+		t.Fatalf("error getting file info for tmpfile %s: %v", f.Name(), err)
+	}
+	fs, err := fat32.Read(f, fileInfo.Size(), 0, 512)
+	if err != nil {
+		t.Fatalf("error reading fat32 filesystem from %s: %v", f.Name(), err)
+	}
+
+	// Ensure openfile is case-insensitive for the 8.3 name as well as the long name
+	paths := []string{
+		// The actual name
+		"/lower83/lower.low",
+		// Same name but different extension case
+		"/lower83/lower.LOW",
+		// Same name but different base case
+		"/lower83/LOWER.LOW",
+		// Actual name/case of non-8.3 file
+		"/tercer_archivo",
+		// Same name but uppercase
+		"/TERCER_ARCHIVO",
+	}
+	for _, path := range paths {
+		file, err := fs.OpenFile(path, os.O_RDONLY)
+		if err != nil {
+			t.Errorf("error opening %s: %v\n", path, err)
+		} else {
+			file.Close()
+		}
+	}
+}
