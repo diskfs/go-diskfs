@@ -17,6 +17,15 @@ import (
 	in that case, the dataStart is relative to partition, not to disk, so need to read the offset correctly
 */
 
+func clustersFromMap(m map[uint32]uint32, maxCluster uint32) []uint32 {
+	clusters := make([]uint32, maxCluster+1)
+	for k, v := range m {
+		clusters[k] = v
+	}
+
+	return clusters
+}
+
 func getValidFat32FSFull() *FileSystem {
 	fs := getValidFat32FSSmall()
 	fs.table = *getValidFat32Table()
@@ -25,11 +34,12 @@ func getValidFat32FSFull() *FileSystem {
 
 func getValidFat32FSSmall() *FileSystem {
 	eoc := uint32(0xffffffff)
+	maxCluster := uint32(128)
 	fs := &FileSystem{
 		table: table{
 			rootDirCluster: 2,
 			size:           512,
-			maxCluster:     128,
+			maxCluster:     maxCluster,
 			eocMarker:      eoc,
 			/*
 				 map:
@@ -40,8 +50,9 @@ func getValidFat32FSSmall() *FileSystem {
 					 11
 					 15
 					 16-broken
+					 17-broken
 			*/
-			clusters: map[uint32]uint32{
+			clusters: clustersFromMap(map[uint32]uint32{
 				2:  eoc,
 				3:  4,
 				4:  5,
@@ -53,8 +64,9 @@ func getValidFat32FSSmall() *FileSystem {
 				9:  11,
 				11: eoc,
 				15: eoc,
-				16: 0,
-			},
+				16: 1,
+				17: 999,
+			}, maxCluster),
 		},
 		bytesPerCluster: 512,
 		dataStart:       178176,
@@ -80,6 +92,7 @@ func getValidFat32FSSmall() *FileSystem {
 	}
 	return fs
 }
+
 func TestFat32GetClusterList(t *testing.T) {
 	fs := getValidFat32FSSmall()
 
@@ -178,6 +191,7 @@ func TestFat32AllocateSpace(t *testing.T) {
 				 11
 				 15
 				 16-broken
+				 17-broken
 		// recall that 512 bytes per cluster here
 	*/
 	tests := []struct {
@@ -189,9 +203,11 @@ func TestFat32AllocateSpace(t *testing.T) {
 		{500, 2, []uint32{2}, nil},
 		{600, 2, []uint32{2, 12}, nil},
 		{2000, 2, []uint32{2, 12, 13, 14}, nil},
-		{2000, 0, []uint32{12, 13, 14, 17}, nil},
+		{2000, 0, []uint32{12, 13, 14, 18}, nil},
 		{200000000000, 0, nil, fmt.Errorf("no space left on device")},
 		{200000000000, 2, nil, fmt.Errorf("no space left on device")},
+		{2000, 17, nil, fmt.Errorf("unable to get cluster list: invalid cluster chain at 999")},
+		{2000, 999, nil, fmt.Errorf("invalid cluster chain at 999")},
 	}
 	for _, tt := range tests {
 		// reset for each test

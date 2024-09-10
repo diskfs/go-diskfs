@@ -467,7 +467,7 @@ func testReadFilesystemData() (info *testFSInfo, err error) {
 				rootDirCluster: 2,         // root is at cluster 2
 				size:           sizeInBytes,
 				maxCluster:     numClusters,
-				clusters:       make(map[uint32]uint32),
+				clusters:       make([]uint32, numClusters+1),
 			}
 		case inClusters && len(clusterLineMatch) > 4:
 			start, err := strconv.Atoi(clusterLineMatch[1])

@@ -3,6 +3,7 @@ package fat32
 import (
 	"bytes"
 	"os"
+	"slices"
 	"testing"
 
 	"github.com/diskfs/go-diskfs/util"
@@ -16,13 +17,10 @@ const (
 
 func getValidFat32Table() *table {
 	// make a duplicate, in case someone modifies what we return
-	var t = &table{}
+	t := &table{}
 	*t = *fsInfo.table
 	// and because the clusters are copied by reference
-	t.clusters = make(map[uint32]uint32)
-	for k, v := range fsInfo.table.clusters {
-		t.clusters[k] = v
-	}
+	t.clusters = slices.Clone(t.clusters)
 
 	return t
 }

@@ -228,17 +228,16 @@ func Create(f util.File, size, start, blocksize int64, volumeLabel string) (*Fil
 	fatSecondaryStart := uint64(fatPrimaryStart) + uint64(fatSize)
 	maxCluster := fatSize / 4
 	rootDirCluster := uint32(2)
+	clusters := make([]uint32, maxCluster+1)
+	clusters[rootDirCluster] = eocMarker
 	fat := table{
 		fatID:          fatID,
 		eocMarker:      eocMarker,
 		unusedMarker:   unusedMarker,
 		size:           fatSize,
 		rootDirCluster: rootDirCluster,
-		clusters: map[uint32]uint32{
-			// when we start, there is just one directory with a single cluster
-			rootDirCluster: eocMarker,
-		},
-		maxCluster: maxCluster,
+		clusters:       clusters,
+		maxCluster:     maxCluster,
 	}
 
 	// where does our data start?
@@ -694,10 +693,9 @@ func (fs *FileSystem) getClusterList(firstCluster uint32) ([]uint32, error) {
 	// first, get the chain of clusters
 	complete := false
 	cluster := firstCluster
-	clusters := fs.table.clusters
 
 	// do we even have a valid cluster?
-	if _, ok := clusters[cluster]; !ok {
+	if cluster > fs.table.maxCluster || fs.table.clusters[cluster] == 0 {
 		return nil, fmt.Errorf("invalid start cluster: %d", cluster)
 	}
 
@@ -706,11 +704,13 @@ func (fs *FileSystem) getClusterList(firstCluster uint32) ([]uint32, error) {
 		// save the current cluster
 		clusterList = append(clusterList, cluster)
 		// get the next cluster
-		newCluster := clusters[cluster]
+		newCluster := fs.table.clusters[cluster]
 		// if it is EOC, we are done
 		switch {
 		case fs.table.isEoc(newCluster):
 			complete = true
+		case newCluster > fs.table.maxCluster:
+			return nil, fmt.Errorf("invalid cluster chain at %d", newCluster)
 		case cluster < 2:
 			return nil, fmt.Errorf("invalid cluster chain at %d", cluster)
 		}
@@ -924,6 +924,10 @@ func (fs *FileSystem) readDirWithMkdir(p string, doMake bool) (*Directory, []*di
 // returns the indexes of clusters to be used in order. If the new size is smaller than
 // the original size, will shrink the chain.
 func (fs *FileSystem) allocateSpace(size uint64, previous uint32) ([]uint32, error) {
+	if previous > fs.table.maxCluster {
+		return nil, fmt.Errorf("invalid cluster chain at %d", previous)
+	}
+
 	var (
 		clusters             []uint32
 		err                  error
@@ -961,12 +965,11 @@ func (fs *FileSystem) allocateSpace(size uint64, previous uint32) ([]uint32, err
 	}
 
 	// get a list of allocated clusters, so we can know which ones are unallocated and therefore allocatable
-	allClusters := fs.table.clusters
 	maxCluster := fs.table.maxCluster
 
 	if extraClusterCount > 0 {
 		for i := uint32(2); i < maxCluster && len(allocated) < extraClusterCount; i++ {
-			if _, ok := allClusters[i]; !ok {
+			if fs.table.clusters[i] == 0 {
 				// these become the same at this point
 				allocated = append(allocated, i)
 			}
@@ -982,12 +985,12 @@ func (fs *FileSystem) allocateSpace(size uint64, previous uint32) ([]uint32, err
 
 		// extend the chain and fill them in
 		if previous > 0 {
-			allClusters[previous] = allocated[0]
+			fs.table.clusters[previous] = allocated[0]
 		}
 		for i := 0; i < lastAlloc; i++ {
-			allClusters[allocated[i]] = allocated[i+1]
+			fs.table.clusters[allocated[i]] = allocated[i+1]
 		}
-		allClusters[allocated[lastAlloc]] = fs.table.eocMarker
+		fs.table.clusters[allocated[lastAlloc]] = fs.table.eocMarker
 
 		// update the FSIS
 		lastAllocatedCluster = allocated[len(allocated)-1]
@@ -1003,13 +1006,21 @@ func (fs *FileSystem) allocateSpace(size uint64, previous uint32) ([]uint32, err
 		}
 		deallocated = clusters[lastAlloc+1:]
 
+		if uint32(lastAlloc) > fs.table.maxCluster || clusters[lastAlloc] > fs.table.maxCluster {
+			return nil, fmt.Errorf("invalid cluster chain at %d", lastAlloc)
+		}
+
 		// mark last allocated one as EOC
-		allClusters[clusters[lastAlloc]] = fs.table.eocMarker
+		fs.table.clusters[clusters[lastAlloc]] = fs.table.eocMarker
 
 		// unmark all of the unused ones
 		lastAllocatedCluster = fs.fsis.lastAllocatedCluster
 		for _, cl := range deallocated {
-			allClusters[cl] = fs.table.unusedMarker
+			if cl > fs.table.maxCluster {
+				return nil, fmt.Errorf("invalid cluster chain at %d", cl)
+			}
+
+			fs.table.clusters[cl] = fs.table.unusedMarker
 			if cl == lastAllocatedCluster {
 				lastAllocatedCluster--
 			}
