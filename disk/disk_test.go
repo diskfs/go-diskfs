@@ -210,9 +210,9 @@ func TestWritePartitionContents(t *testing.T) {
 			{"no table, write to partition -1", nil, -1, fmt.Errorf("cannot write contents of a partition on a disk without a partition table")},
 			{"good table, write to partition 1", table, 1, nil},
 		}
-		for _, tt := range tests {
+		for _, t2 := range tests {
 			// so that closures do not cause an issue
-			tt := tt
+			tt := t2
 			t.Run(tt.name, func(t *testing.T) {
 				f, err := tmpDisk("")
 				if err != nil {
@@ -292,9 +292,9 @@ func TestReadPartitionContents(t *testing.T) {
 			{"good table, partition greater than max", table, 5, fmt.Errorf("cannot read contents of partition %d which is greater than max partition %d", 5, 1)},
 			{"good table, good partition 1", table, 1, nil},
 		}
-		for _, tt := range tests {
+		for _, t2 := range tests {
 			// so that closure does not cause issues
-			tt := tt
+			tt := t2
 			t.Run(tt.name, func(t *testing.T) {
 				f, err := tmpDisk("../partition/gpt/testdata/gpt.img")
 				if err != nil {
@@ -366,8 +366,8 @@ func TestReadPartitionContents(t *testing.T) {
 			{"valid table partition 5", table, 5, fmt.Errorf("cannot read contents of partition %d which is greater than max partition %d", 5, 1)},
 			{"valid table partition 1", table, 1, nil},
 		}
-		for _, tt := range tests {
-			tt := tt
+		for _, t2 := range tests {
+			tt := t2
 			t.Run(tt.name, func(t *testing.T) {
 				f, err := tmpDisk("../partition/mbr/testdata/mbr.img")
 				if err != nil {

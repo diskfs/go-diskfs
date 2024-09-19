@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/diskfs/go-diskfs"
+	diskfs "github.com/diskfs/go-diskfs"
 	"github.com/diskfs/go-diskfs/disk"
 	"github.com/diskfs/go-diskfs/filesystem"
 	"github.com/diskfs/go-diskfs/filesystem/iso9660"
@@ -174,8 +174,8 @@ func TestIso9660Create(t *testing.T) {
 		{2048, 10000000, &iso9660.FileSystem{}, nil, testDir},
 		{2048, 10000000, &iso9660.FileSystem{}, nil, ""},
 	}
-	for _, tt := range tests {
-		tt := tt
+	for _, t2 := range tests {
+		tt := t2
 		t.Run(fmt.Sprintf("blocksize %d filesize %d", tt.blocksize, tt.filesize), func(t *testing.T) {
 			// create the filesystem
 			f, err := tmpIso9660File()
@@ -214,8 +214,8 @@ func TestISO9660Read(t *testing.T) {
 		{512, iso9660.MaxBlocks*2048 + 10000, -1, nil, fmt.Errorf("blocksize for ISO9660 must be")},
 		{2048, 10000000, -1, &iso9660.FileSystem{}, nil},
 	}
-	for _, tt := range tests {
-		tt := tt
+	for _, t2 := range tests {
+		tt := t2
 		t.Run(fmt.Sprintf("blocksize %d filesize %d", tt.blocksize, tt.filesize), func(t *testing.T) {
 			// get a temporary working file
 			f, err := os.Open(iso9660.ISO9660File)

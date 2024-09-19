@@ -193,8 +193,8 @@ func TestFat32Create(t *testing.T) {
 	}
 	//nolint:thelper // this is not a helper function
 	runTest := func(t *testing.T, pre, post int64) {
-		for _, tt := range tests {
-			tt := tt
+		for _, t2 := range tests {
+			tt := t2
 			t.Run(fmt.Sprintf("blocksize %d filesize %d", tt.blocksize, tt.filesize), func(t *testing.T) {
 				// get a temporary working file
 				f, err := tmpFat32(false, pre, post)
@@ -245,8 +245,8 @@ func TestFat32Read(t *testing.T) {
 	}
 	//nolint:thelper // this is not a helper function
 	runTest := func(t *testing.T, pre, post int64) {
-		for _, tt := range tests {
-			tt := tt
+		for _, t2 := range tests {
+			tt := t2
 			t.Run(fmt.Sprintf("blocksize %d filesize %d bytechange %d", tt.filesize, tt.blocksize, tt.bytechange), func(t *testing.T) {
 				// get a temporary working file
 				f, err := tmpFat32(true, pre, post)
@@ -455,8 +455,8 @@ func TestFat32OpenFile(t *testing.T) {
 				{"/CORTO1.TXT", os.O_APPEND, true, "More", "", fmt.Errorf("cannot write to file opened read-only")},
 				{"/CORTO1.TXT", os.O_APPEND | os.O_RDWR, true, "More", "Moremos un archivo corto\n", nil},
 			}
-			for _, tt := range tests {
-				tt := tt
+			for _, t2 := range tests {
+				tt := t2
 				t.Run(fmt.Sprintf("path %s mode %v beginning %v", tt.path, tt.mode, tt.beginning), func(t *testing.T) {
 					header := fmt.Sprintf("OpenFile(%s, %s, %t)", tt.path, getOpenMode(tt.mode), tt.beginning)
 					// get a temporary working file
