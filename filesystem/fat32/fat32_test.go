@@ -7,13 +7,16 @@ package fat32_test
 
 import (
 	"bytes"
-	"crypto/rand"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/diskfs/go-diskfs"
+	"github.com/diskfs/go-diskfs/disk"
 	"github.com/diskfs/go-diskfs/filesystem"
 	"github.com/diskfs/go-diskfs/filesystem/fat32"
 	"github.com/diskfs/go-diskfs/testhelper"
@@ -245,6 +248,8 @@ func TestFat32Read(t *testing.T) {
 	}
 	//nolint:thelper // this is not a helper function
 	runTest := func(t *testing.T, pre, post int64) {
+		seed := [32]byte{}
+		chacha := rand.NewChaCha8(seed)
 		for _, t2 := range tests {
 			tt := t2
 			t.Run(fmt.Sprintf("blocksize %d filesize %d bytechange %d", tt.filesize, tt.blocksize, tt.bytechange), func(t *testing.T) {
@@ -258,7 +263,7 @@ func TestFat32Read(t *testing.T) {
 				corrupted := ""
 				if tt.bytechange >= 0 {
 					b := make([]byte, 1)
-					_, _ = rand.Read(b)
+					_, _ = chacha.Read(b)
 					_, _ = f.WriteAt(b, tt.bytechange+pre)
 					corrupted = fmt.Sprintf("corrupted %d", tt.bytechange+pre)
 				}
@@ -629,6 +634,8 @@ func TestFat32OpenFile(t *testing.T) {
 			bWrite := make([]byte, size)
 			header := fmt.Sprintf("OpenFile(%s, %s)", path, getOpenMode(mode))
 			readWriter, err := fs.OpenFile(path, mode)
+			seed := [32]byte{}
+			chacha := rand.NewChaCha8(seed)
 			switch {
 			case err != nil:
 				t.Errorf("%s: unexpected error: %v", header, err)
@@ -636,7 +643,7 @@ func TestFat32OpenFile(t *testing.T) {
 				t.Errorf("%s: Unexpected nil output", header)
 			default:
 				// write and then read
-				_, _ = rand.Read(bWrite)
+				_, _ = chacha.Read(bWrite)
 				written, writeErr := readWriter.Write(bWrite)
 				_, _ = readWriter.Seek(0, 0)
 				bRead, readErr := io.ReadAll(readWriter)
@@ -689,6 +696,8 @@ func TestFat32OpenFile(t *testing.T) {
 		bWrite := make([]byte, size)
 		header := fmt.Sprintf("OpenFile(%s, %s)", path, getOpenMode(mode))
 		readWriter, err := fs.OpenFile(path, mode)
+		seed := [32]byte{}
+		chacha := rand.NewChaCha8(seed)
 		switch {
 		case err != nil:
 			t.Fatalf("%s: unexpected error: %v", header, err)
@@ -696,7 +705,7 @@ func TestFat32OpenFile(t *testing.T) {
 			t.Fatalf("%s: Unexpected nil output", header)
 		default:
 			// write and then read
-			_, _ = rand.Read(bWrite)
+			_, _ = chacha.Read(bWrite)
 			written, writeErr := readWriter.Write(bWrite)
 			_, _ = readWriter.Seek(0, 0)
 
@@ -756,6 +765,7 @@ func TestFat32OpenFile(t *testing.T) {
 			bWrite := make([]byte, size)
 			header := fmt.Sprintf("OpenFile(%s, %s)", path, getOpenMode(mode))
 			readWriter, err := fs.OpenFile(path, mode)
+
 			switch {
 			case err != nil:
 				t.Errorf("%s: unexpected error: %v", header, err)
@@ -765,7 +775,9 @@ func TestFat32OpenFile(t *testing.T) {
 				// success
 			}
 
-			_, _ = rand.Read(bWrite)
+			seed := [32]byte{}
+			chacha := rand.NewChaCha8(seed)
+			_, _ = chacha.Read(bWrite)
 			writeSizes := []int{512, 1024, 256}
 			low := 0
 			for i := 0; low < len(bWrite); i++ {
@@ -1056,5 +1068,135 @@ func TestOpenFileCaseInsensitive(t *testing.T) {
 		} else {
 			file.Close()
 		}
+	}
+}
+
+// small helper function to make a large fat32 filesystem
+func mkfs(name string) (filesystem.FileSystem, error) {
+	size := int64(6 * 1024 * 1024 * 1024)
+	d, err := diskfs.Create(name, size, diskfs.Raw, diskfs.SectorSizeDefault)
+	if err != nil {
+		fmt.Printf("error creating disk: %v", err)
+		os.Exit(1)
+	}
+
+	spec := disk.FilesystemSpec{
+		Partition: 0,
+		FSType:    filesystem.TypeFat32,
+	}
+
+	fs, err := d.CreateFilesystem(spec)
+	return fs, err
+}
+
+func mkdir(fs filesystem.FileSystem, name string) error {
+	err := fs.Mkdir(name)
+	return err
+}
+
+func mkMicroFile(fs filesystem.FileSystem, name string) error {
+	rw, err := fs.OpenFile(name, os.O_CREATE|os.O_RDWR)
+	if err != nil {
+		return err
+	}
+
+	_, err = rw.Write([]byte("hello World"))
+	if err != nil {
+		return err
+	}
+	return nil
+}
+func mkSmallFile(fs filesystem.FileSystem, name string) error {
+	rw, err := fs.OpenFile(name, os.O_CREATE|os.O_RDWR)
+	if err != nil {
+		return err
+	}
+
+	size := 5 * 1024 * 1024
+	smallFile := make([]byte, size)
+	_, err = rw.Write(smallFile)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+func mkRandFile(fs filesystem.FileSystem, name string, rSize int32) error {
+	rw, err := fs.OpenFile(name, os.O_CREATE|os.O_RDWR)
+	if err != nil {
+		return err
+	}
+
+	size := rSize * 1024 * 1024
+	randFile := make([]byte, size)
+	_, err = rw.Write(randFile)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+func mkGigFile(fs filesystem.FileSystem, name string) error {
+	rw, err := fs.OpenFile(name, os.O_CREATE|os.O_RDWR)
+	if err != nil {
+		return err
+	}
+
+	size := 1024 * 1024 * 1024
+	smallFile := make([]byte, size)
+	_, err = rw.Write(smallFile)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+func TestCreateFileTree(t *testing.T) {
+	fileName := "file-tree.img"
+	os.Remove(fileName)
+	f, _ := mkfs(fileName)
+	err := mkdir(f, "/A")
+	if err != nil {
+		t.Errorf("Error making dir /A in root: %v", err)
+	}
+	err = mkdir(f, "/b")
+	if err != nil {
+		t.Errorf("Error making dir /b in root: %v", err)
+	}
+	err = mkMicroFile(f, "/rootfile")
+	if err != nil {
+		t.Errorf("Error making microfile in root: %v", err)
+	}
+	for i := 0; i < 100; i++ {
+		inc := strconv.Itoa(i)
+		err = mkdir(f, "/b/sub"+inc)
+		if err != nil {
+			t.Errorf("Error making directory,"+"/b/sub"+inc+": %v", err)
+		}
+		err = mkdir(f, "/b/sub"+inc+"/blob/")
+		if err != nil {
+			t.Errorf("Error making directory,"+"/b/sub"+inc+"/blob/: %v", err)
+		}
+		err = mkMicroFile(f, "/b/sub"+inc+"/blob/microfile")
+		if err != nil {
+			t.Errorf("Error making directory,"+"/b/sub"+inc+"/blob/microfile: %v", err)
+		}
+		err = mkRandFile(f, "/b/sub"+inc+"/blob/randfile", rand.Int32N(73)) // #nosec G404
+		if err != nil {
+			t.Errorf("Error making directory,"+"/b/sub"+inc+"/blob/randfile: %v", err)
+		}
+		err = mkSmallFile(f, "/b/sub"+inc+"/blob/smallfile")
+		if err != nil {
+			t.Errorf("Error making directory,"+"/b/sub"+inc+"/blob/smallfile: %v", err)
+		}
+	}
+	err = mkGigFile(f, "/b/sub49/blob/gigfile1")
+	if err != nil {
+		t.Errorf("Error making gigfile1 /b/sub49/blob/gigfile1: %v", err)
+	}
+	err = mkGigFile(f, "/b/sub50/blob/gigfile1")
+	if err != nil {
+		t.Errorf("Error making gigfile1 /b/sub50/blob/gigfile1: %v", err)
+	}
+	err = mkGigFile(f, "/b/sub55/blob/gigfile1")
+	if err != nil {
+		t.Errorf("Error making gigfile1 /b/sub55/blob/gigfile1: %v", err)
 	}
 }
