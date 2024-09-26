@@ -78,8 +78,8 @@ func (fl *File) Read(b []byte) (int, error) {
 		if toRead > left {
 			toRead = left
 		}
-		offset := uint32(start) + (clusters[i]-2)*uint32(bytesPerCluster)
-		_, _ = file.ReadAt(b[totalRead:totalRead+toRead], int64(offset)+fs.start)
+		offset := int64(start) + int64(clusters[i]-2)*int64(bytesPerCluster)
+		_, _ = file.ReadAt(b[totalRead:totalRead+toRead], offset+fs.start)
 		totalRead += toRead
 		if totalRead >= maxRead {
 			break
@@ -161,8 +161,8 @@ func (fl *File) Write(p []byte) (int, error) {
 		if toWrite > left {
 			toWrite = left
 		}
-		offset := uint32(start) + (clusters[i]-2)*uint32(bytesPerCluster)
-		_, err := file.WriteAt(p[totalWritten:totalWritten+toWrite], int64(offset)+fs.start)
+		offset := int64(start) + int64(clusters[i]-2)*int64(bytesPerCluster)
+		_, err := file.WriteAt(p[totalWritten:totalWritten+toWrite], offset+fs.start)
 		if err != nil {
 			return totalWritten, fmt.Errorf("unable to write to file: %v", err)
 		}
