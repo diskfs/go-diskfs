@@ -11,6 +11,7 @@ import (
 	"io"
 	"math/rand/v2"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -1150,8 +1151,9 @@ func mkGigFile(fs filesystem.FileSystem, name string) error {
 }
 func TestCreateFileTree(t *testing.T) {
 	fileName := "file-tree.img"
-	os.Remove(fileName)
-	f, _ := mkfs(fileName)
+	tmpDir := t.TempDir()
+	tmpImgPath := filepath.Join(tmpDir, fileName)
+	f, _ := mkfs(tmpImgPath)
 	err := mkdir(f, "/A")
 	if err != nil {
 		t.Errorf("Error making dir /A in root: %v", err)
