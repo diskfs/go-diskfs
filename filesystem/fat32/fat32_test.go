@@ -7,9 +7,10 @@ package fat32_test
 
 import (
 	"bytes"
+	"crypto/rand"
 	"fmt"
 	"io"
-	"math/rand/v2"
+	mathrandv2 "math/rand/v2"
 	"os"
 	"path"
 	"path/filepath"
@@ -249,8 +250,6 @@ func TestFat32Read(t *testing.T) {
 	}
 	//nolint:thelper // this is not a helper function
 	runTest := func(t *testing.T, pre, post int64) {
-		seed := [32]byte{}
-		chacha := rand.NewChaCha8(seed)
 		for _, t2 := range tests {
 			tt := t2
 			t.Run(fmt.Sprintf("blocksize %d filesize %d bytechange %d", tt.filesize, tt.blocksize, tt.bytechange), func(t *testing.T) {
@@ -264,7 +263,7 @@ func TestFat32Read(t *testing.T) {
 				corrupted := ""
 				if tt.bytechange >= 0 {
 					b := make([]byte, 1)
-					_, _ = chacha.Read(b)
+					_, _ = rand.Read(b)
 					_, _ = f.WriteAt(b, tt.bytechange+pre)
 					corrupted = fmt.Sprintf("corrupted %d", tt.bytechange+pre)
 				}
@@ -635,8 +634,6 @@ func TestFat32OpenFile(t *testing.T) {
 			bWrite := make([]byte, size)
 			header := fmt.Sprintf("OpenFile(%s, %s)", path, getOpenMode(mode))
 			readWriter, err := fs.OpenFile(path, mode)
-			seed := [32]byte{}
-			chacha := rand.NewChaCha8(seed)
 			switch {
 			case err != nil:
 				t.Errorf("%s: unexpected error: %v", header, err)
@@ -644,7 +641,7 @@ func TestFat32OpenFile(t *testing.T) {
 				t.Errorf("%s: Unexpected nil output", header)
 			default:
 				// write and then read
-				_, _ = chacha.Read(bWrite)
+				_, _ = rand.Read(bWrite)
 				written, writeErr := readWriter.Write(bWrite)
 				_, _ = readWriter.Seek(0, 0)
 				bRead, readErr := io.ReadAll(readWriter)
@@ -697,8 +694,6 @@ func TestFat32OpenFile(t *testing.T) {
 		bWrite := make([]byte, size)
 		header := fmt.Sprintf("OpenFile(%s, %s)", p, getOpenMode(mode))
 		readWriter, err := fs.OpenFile(p, mode)
-		seed := [32]byte{}
-		chacha := rand.NewChaCha8(seed)
 		switch {
 		case err != nil:
 			t.Fatalf("%s: unexpected error: %v", header, err)
@@ -706,7 +701,7 @@ func TestFat32OpenFile(t *testing.T) {
 			t.Fatalf("%s: Unexpected nil output", header)
 		default:
 			// write and then read
-			_, _ = chacha.Read(bWrite)
+			_, _ = rand.Read(bWrite)
 			written, writeErr := readWriter.Write(bWrite)
 			_, _ = readWriter.Seek(0, 0)
 
@@ -775,9 +770,7 @@ func TestFat32OpenFile(t *testing.T) {
 				// success
 			}
 
-			seed := [32]byte{}
-			chacha := rand.NewChaCha8(seed)
-			_, _ = chacha.Read(bWrite)
+			_, _ = rand.Read(bWrite)
 			writeSizes := []int{512, 1024, 256}
 			low := 0
 			for i := 0; low < len(bWrite); i++ {
@@ -1128,7 +1121,7 @@ func TestCreateFileTree(t *testing.T) {
 			t.Errorf("Error making microfile %s: %v", file, err)
 		}
 		file = path.Join(blobdir, "randfile")
-		size := rand.IntN(73) // #nosec G404
+		size := mathrandv2.IntN(73) // #nosec G404
 		if err := testMkFile(fs, file, size); err != nil {
 			t.Errorf("Error making random file %s: %v", file, err)
 		}
