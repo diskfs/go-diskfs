@@ -1,6 +1,6 @@
 module github.com/diskfs/go-diskfs
 
-go 1.23
+go 1.22
 
 require (
 	github.com/djherbis/times v1.6.0
