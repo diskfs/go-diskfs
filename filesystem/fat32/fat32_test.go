@@ -18,11 +18,12 @@ import (
 	"testing"
 
 	"github.com/diskfs/go-diskfs"
+	"github.com/diskfs/go-diskfs/backend"
+	"github.com/diskfs/go-diskfs/backend/file"
 	"github.com/diskfs/go-diskfs/disk"
 	"github.com/diskfs/go-diskfs/filesystem"
 	"github.com/diskfs/go-diskfs/filesystem/fat32"
 	"github.com/diskfs/go-diskfs/testhelper"
-	"github.com/diskfs/go-diskfs/util"
 )
 
 var (
@@ -116,7 +117,7 @@ func TestFat32Mkdir(t *testing.T) {
 		return
 	}
 	//nolint:thelper // this is not a helper function
-	runTest := func(t *testing.T, post, pre int64, fatFunc func(util.File, int64, int64, int64) (*fat32.FileSystem, error)) {
+	runTest := func(t *testing.T, post, pre int64, fatFunc func(backend.Storage, int64, int64, int64) (*fat32.FileSystem, error)) {
 		// create our directories
 		tests := []string{
 			"/",
@@ -137,7 +138,8 @@ func TestFat32Mkdir(t *testing.T) {
 		if err != nil {
 			t.Fatalf("error getting file info for tmpfile %s: %v", f.Name(), err)
 		}
-		fs, err := fatFunc(f, fileInfo.Size()-pre-post, pre, 512)
+
+		fs, err := fatFunc(file.New(f, false), fileInfo.Size()-pre-post, pre, 512)
 		if err != nil {
 			t.Fatalf("error reading fat32 filesystem from %s: %v", f.Name(), err)
 		}
@@ -161,7 +163,7 @@ func TestFat32Mkdir(t *testing.T) {
 			}
 		}
 	}
-	t.Run("read to Mkdir", func(t *testing.T) {
+	t.Run("fat32.Read to Mkdir", func(t *testing.T) {
 		t.Run("entire image", func(t *testing.T) {
 			runTest(t, 0, 0, fat32.Read)
 		})
@@ -169,9 +171,9 @@ func TestFat32Mkdir(t *testing.T) {
 			runTest(t, 500, 1000, fat32.Read)
 		})
 	})
-	t.Run("Create to Mkdir", func(t *testing.T) {
+	t.Run("fat32.Create to Mkdir", func(t *testing.T) {
 		// This is to enable Create "fit" into the common testing logic
-		createShim := func(file util.File, size int64, start int64, blocksize int64) (*fat32.FileSystem, error) {
+		createShim := func(file backend.Storage, size int64, start int64, blocksize int64) (*fat32.FileSystem, error) {
 			return fat32.Create(file, size, start, blocksize, "")
 		}
 		t.Run("entire image", func(t *testing.T) {
@@ -207,8 +209,10 @@ func TestFat32Create(t *testing.T) {
 					t.Fatal(err)
 				}
 				defer os.Remove(f.Name())
+
+				b := file.New(f, false)
 				// create the filesystem
-				fs, err := fat32.Create(f, tt.filesize-pre-post, pre, tt.blocksize, "")
+				fs, err := fat32.Create(b, tt.filesize-pre-post, pre, tt.blocksize, "")
 				switch {
 				case (err == nil && tt.err != nil) || (err != nil && tt.err == nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
 					t.Errorf("Create(%s, %d, %d, %d): mismatched errors\nactual %v\nexpected %v", f.Name(), tt.filesize, 0, tt.blocksize, err, tt.err)
@@ -267,8 +271,10 @@ func TestFat32Read(t *testing.T) {
 					_, _ = f.WriteAt(b, tt.bytechange+pre)
 					corrupted = fmt.Sprintf("corrupted %d", tt.bytechange+pre)
 				}
+
+				b := file.New(f, true)
 				// create the filesystem
-				fs, err := fat32.Read(f, tt.filesize-pre-post, pre, tt.blocksize)
+				fs, err := fat32.Read(b, tt.filesize-pre-post, pre, tt.blocksize)
 				switch {
 				case (err == nil && tt.err != nil) || (err != nil && tt.err == nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
 					t.Errorf("read(%s, %d, %d, %d) %s: mismatched errors, actual %v expected %v", f.Name(), tt.filesize, 0, tt.blocksize, corrupted, err, tt.err)
@@ -329,7 +335,9 @@ func TestFat32ReadDir(t *testing.T) {
 		if err != nil {
 			t.Fatalf("error getting file info for tmpfile %s: %v", f.Name(), err)
 		}
-		fs, err := fat32.Read(f, fileInfo.Size()-pre-post, pre, 512)
+
+		b := file.New(f, true)
+		fs, err := fat32.Read(b, fileInfo.Size()-pre-post, pre, 512)
 		if err != nil {
 			t.Fatalf("error reading fat32 filesystem from %s: %v", f.Name(), err)
 		}
@@ -398,7 +406,9 @@ func TestFat32OpenFile(t *testing.T) {
 			if err != nil {
 				t.Fatalf("error getting file info for tmpfile %s: %v", f.Name(), err)
 			}
-			fs, err := fat32.Read(f, fileInfo.Size()-pre-post, pre, 512)
+
+			b := file.New(f, true)
+			fs, err := fat32.Read(b, fileInfo.Size()-pre-post, pre, 512)
 			if err != nil {
 				t.Fatalf("error reading fat32 filesystem from %s: %v", f.Name(), err)
 			}
@@ -478,7 +488,7 @@ func TestFat32OpenFile(t *testing.T) {
 					if err != nil {
 						t.Fatalf("error getting file info for tmpfile %s: %v", f.Name(), err)
 					}
-					fs, err := fat32.Read(f, fileInfo.Size()-pre-post, pre, 512)
+					fs, err := fat32.Read(file.New(f, false), fileInfo.Size()-pre-post, pre, 512)
 					if err != nil {
 						t.Fatalf("error reading fat32 filesystem from %s: %v", f.Name(), err)
 					}
@@ -554,7 +564,8 @@ func TestFat32OpenFile(t *testing.T) {
 			if err != nil {
 				t.Fatalf("error getting file info for tmpfile %s: %v", f.Name(), err)
 			}
-			fs, err := fat32.Create(f, fileInfo.Size()-pre-post, pre, 512, " NO NAME")
+			backend := file.New(f, false)
+			fs, err := fat32.Create(backend, fileInfo.Size()-pre-post, pre, 512, " NO NAME")
 			if err != nil {
 				t.Fatalf("error reading fat32 filesystem from %s: %v", f.Name(), err)
 			}
@@ -609,23 +620,25 @@ func TestFat32OpenFile(t *testing.T) {
 	t.Run("Large File", func(t *testing.T) {
 		//nolint:thelper // this is not a helper function
 		runTest := func(t *testing.T, pre, post int64) {
-			// get a temporary working file
-			f, err := tmpFat32(true, pre, post)
+			// get a temporary working testFile
+			testFile, err := tmpFat32(true, pre, post)
 			if err != nil {
 				t.Fatal(err)
 			}
+
+			f := file.New(testFile, false)
 			if keepTmpFiles == "" {
-				defer os.Remove(f.Name())
+				defer os.Remove(testFile.Name())
 			} else {
-				fmt.Println(f.Name())
+				fmt.Println(testFile.Name())
 			}
 			fileInfo, err := f.Stat()
 			if err != nil {
-				t.Fatalf("error getting file info for tmpfile %s: %v", f.Name(), err)
+				t.Fatalf("error getting file info for tmpfile %s: %v", testFile.Name(), err)
 			}
 			fs, err := fat32.Read(f, fileInfo.Size()-pre-post, pre, 512)
 			if err != nil {
-				t.Fatalf("error reading fat32 filesystem from %s: %v", f.Name(), err)
+				t.Fatalf("error reading fat32 filesystem from %s: %v", testFile.Name(), err)
 			}
 			path := "/abcdefghi"
 			mode := os.O_RDWR | os.O_CREATE
@@ -683,7 +696,7 @@ func TestFat32OpenFile(t *testing.T) {
 		if err != nil {
 			t.Fatalf("error getting file info for tmpfile %s: %v", f.Name(), err)
 		}
-		fs, err := fat32.Read(f, fileInfo.Size(), 0, 512)
+		fs, err := fat32.Read(file.New(f, false), fileInfo.Size(), 0, 512)
 		if err != nil {
 			t.Fatalf("error reading fat32 filesystem from %s: %v", f.Name(), err)
 		}
@@ -750,7 +763,7 @@ func TestFat32OpenFile(t *testing.T) {
 			if err != nil {
 				t.Fatalf("error getting file info for tmpfile %s: %v", f.Name(), err)
 			}
-			fs, err := fat32.Read(f, fileInfo.Size()-pre-post, pre, 512)
+			fs, err := fat32.Read(file.New(f, false), fileInfo.Size()-pre-post, pre, 512)
 			if err != nil {
 				t.Fatalf("error reading fat32 filesystem from %s: %v", f.Name(), err)
 			}
@@ -828,7 +841,7 @@ func TestFat32Label(t *testing.T) {
 		}
 
 		// read the filesystem
-		fs, err := fat32.Read(f, fileInfo.Size(), 0, 512)
+		fs, err := fat32.Read(file.New(f, false), fileInfo.Size(), 0, 512)
 		if err != nil {
 			t.Fatalf("error reading fat32 filesystem from %s: %v", f.Name(), err)
 		}
@@ -858,8 +871,9 @@ func TestFat32Label(t *testing.T) {
 			t.Fatalf("error getting file info for tmpfile %s: %v", f.Name(), err)
 		}
 
+		theBackend := file.New(f, false)
 		// create an empty filesystem
-		fs, err := fat32.Create(f, fileInfo.Size(), 0, 512, "go-diskfs")
+		fs, err := fat32.Create(theBackend, fileInfo.Size(), 0, 512, "go-diskfs")
 		if err != nil {
 			t.Fatalf("error creating fat32 filesystem: %v", err)
 		}
@@ -879,8 +893,9 @@ func TestFat32Label(t *testing.T) {
 			t.Fatalf("error re-opening file %s: %v", f.Name(), err)
 		}
 
+		theBackend = file.New(f, false)
 		// read the filesystem
-		fs, err = fat32.Read(f, fileInfo.Size(), 0, 512)
+		fs, err = fat32.Read(theBackend, fileInfo.Size(), 0, 512)
 		if err != nil {
 			t.Fatalf("error reading fat32 filesystem from %s: %v", f.Name(), err)
 		}
@@ -910,8 +925,9 @@ func TestFat32Label(t *testing.T) {
 			t.Fatalf("error getting file info for tmpfile %s: %v", f.Name(), err)
 		}
 
+		theBackend := file.New(f, false)
 		// create an empty filesystem
-		fs, err := fat32.Create(f, fileInfo.Size(), 0, 512, "go-diskfs")
+		fs, err := fat32.Create(theBackend, fileInfo.Size(), 0, 512, "go-diskfs")
 		if err != nil {
 			t.Fatalf("error creating fat32 filesystem: %v", err)
 		}
@@ -937,8 +953,9 @@ func TestFat32Label(t *testing.T) {
 			t.Fatalf("error re-opening file %s: %v", f.Name(), err)
 		}
 
+		theBackend = file.New(f, false)
 		// read the filesystem
-		fs, err = fat32.Read(f, fileInfo.Size(), 0, 512)
+		fs, err = fat32.Read(theBackend, fileInfo.Size(), 0, 512)
 		if err != nil {
 			t.Fatalf("error reading fat32 filesystem from %s: %v", f.Name(), err)
 		}
@@ -957,7 +974,8 @@ func TestFat32MkdirCases(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.Remove(f.Name())
-	fs, err := fat32.Create(f, 1048576, 0, 512, "")
+	theBackend := file.New(f, false)
+	fs, err := fat32.Create(theBackend, 1048576, 0, 512, "")
 	if err != nil {
 		t.Error(err.Error())
 	}
@@ -998,7 +1016,7 @@ func Test83Lowercase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error getting file info for tmpfile %s: %v", f.Name(), err)
 	}
-	fs, err := fat32.Read(f, fileInfo.Size(), 0, 512)
+	fs, err := fat32.Read(file.New(f, false), fileInfo.Size(), 0, 512)
 	if err != nil {
 		t.Fatalf("error reading fat32 filesystem from %s: %v", f.Name(), err)
 	}
@@ -1036,7 +1054,7 @@ func TestOpenFileCaseInsensitive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error getting file info for tmpfile %s: %v", f.Name(), err)
 	}
-	fs, err := fat32.Read(f, fileInfo.Size(), 0, 512)
+	fs, err := fat32.Read(file.New(f, false), fileInfo.Size(), 0, 512)
 	if err != nil {
 		t.Fatalf("error reading fat32 filesystem from %s: %v", f.Name(), err)
 	}
@@ -1055,11 +1073,11 @@ func TestOpenFileCaseInsensitive(t *testing.T) {
 		"/TERCER_ARCHIVO",
 	}
 	for _, path := range paths {
-		file, err := fs.OpenFile(path, os.O_RDONLY)
+		fat32File, err := fs.OpenFile(path, os.O_RDONLY)
 		if err != nil {
 			t.Errorf("error opening %s: %v\n", path, err)
 		} else {
-			file.Close()
+			fat32File.Close()
 		}
 	}
 }
@@ -1084,7 +1102,7 @@ func TestCreateFileTree(t *testing.T) {
 
 	// 6GB to test large disk
 	size := int64(6 * 1024 * 1024 * 1024)
-	d, err := diskfs.Create(tmpImgPath, size, diskfs.Raw, diskfs.SectorSizeDefault)
+	d, err := diskfs.Create(tmpImgPath, size, diskfs.SectorSizeDefault)
 	if err != nil {
 		t.Fatalf("error creating disk: %v", err)
 	}
@@ -1116,32 +1134,32 @@ func TestCreateFileTree(t *testing.T) {
 		if err := fs.Mkdir(blobdir); err != nil {
 			t.Errorf("Error making directory %s: %v", blobdir, err)
 		}
-		file := path.Join(blobdir, "microfile")
-		if err := testMkFile(fs, file, 11); err != nil {
-			t.Errorf("Error making microfile %s: %v", file, err)
+		testFile := path.Join(blobdir, "microfile")
+		if err := testMkFile(fs, testFile, 11); err != nil {
+			t.Errorf("Error making microfile %s: %v", testFile, err)
 		}
-		file = path.Join(blobdir, "randfile")
+		testFile = path.Join(blobdir, "randfile")
 		size := mathrandv2.IntN(73) // #nosec G404
-		if err := testMkFile(fs, file, size); err != nil {
-			t.Errorf("Error making random file %s: %v", file, err)
+		if err := testMkFile(fs, testFile, size); err != nil {
+			t.Errorf("Error making random file %s: %v", testFile, err)
 		}
-		file = path.Join(blobdir, "smallfile")
-		if err := testMkFile(fs, file, 5*1024*1024); err != nil {
-			t.Errorf("Error making small file %s: %v", file, err)
+		testFile = path.Join(blobdir, "smallfile")
+		if err := testMkFile(fs, testFile, 5*1024*1024); err != nil {
+			t.Errorf("Error making small file %s: %v", testFile, err)
 		}
 	}
-	file := "/b/sub49/blob/gigfile1"
+	testFile := "/b/sub49/blob/gigfile1"
 	gb := 1024 * 1024 * 1024
-	if err := testMkFile(fs, file, gb); err != nil {
-		t.Errorf("Error making gigfile1 %s: %v", file, err)
+	if err := testMkFile(fs, testFile, gb); err != nil {
+		t.Errorf("Error making gigfile1 %s: %v", testFile, err)
 	}
-	file = "/b/sub50/blob/gigfile1"
-	if err := testMkFile(fs, file, gb); err != nil {
-		t.Errorf("Error making gigfile1 %s: %v", file, err)
+	testFile = "/b/sub50/blob/gigfile1"
+	if err := testMkFile(fs, testFile, gb); err != nil {
+		t.Errorf("Error making gigfile1 %s: %v", testFile, err)
 	}
-	file = "/b/sub51/blob/gigfile1"
-	if err := testMkFile(fs, file, gb); err != nil {
-		t.Errorf("Error making gigfile1 %s: %v", file, err)
+	testFile = "/b/sub51/blob/gigfile1"
+	if err := testMkFile(fs, testFile, gb); err != nil {
+		t.Errorf("Error making gigfile1 %s: %v", testFile, err)
 	}
 }
 
@@ -1314,8 +1332,9 @@ func Test_Rename(t *testing.T) {
 				t.Fatalf("error getting file info for tmpfile %s: %v", f.Name(), err)
 			}
 
+			b := file.New(f, false)
 			// create an empty filesystem
-			fs, err := fat32.Create(f, fileInfo.Size(), 0, 512, "go-diskfs")
+			fs, err := fat32.Create(b, fileInfo.Size(), 0, 512, "go-diskfs")
 			if err != nil {
 				t.Fatalf("error creating fat32 filesystem: %v", err)
 			}
@@ -1473,8 +1492,9 @@ func Test_Remove(t *testing.T) {
 				t.Fatalf("error getting file info for tmpfile %s: %v", f.Name(), err)
 			}
 
+			b := file.New(f, false)
 			// create an empty filesystem
-			fs, err := fat32.Create(f, fileInfo.Size(), 0, 512, "go-diskfs")
+			fs, err := fat32.Create(b, fileInfo.Size(), 0, 512, "go-diskfs")
 			if err != nil {
 				t.Fatalf("error creating fat32 filesystem: %v", err)
 			}

@@ -8,6 +8,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/diskfs/go-diskfs/backend/file"
 	"github.com/diskfs/go-diskfs/filesystem"
 	"github.com/diskfs/go-diskfs/filesystem/squashfs"
 	"github.com/diskfs/go-diskfs/testhelper"
@@ -27,7 +28,9 @@ func TestFinalizeSquashfs(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create tmpfile: %v", err)
 		}
-		fs, err := squashfs.Create(f, 0, 0, blocksize)
+
+		b := file.New(f, false)
+		fs, err := squashfs.Create(b, 0, 0, blocksize)
 		if err != nil {
 			t.Fatalf("Failed to squashfs.Create: %v", err)
 		}
@@ -61,9 +64,9 @@ func TestFinalizeSquashfs(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to squashfs.OpenFile(%s): %v", "README.MD", err)
 		}
-		b := []byte("readme\n")
-		if _, err = sqsfile.Write(b); err != nil {
-			t.Fatalf("error writing %s to tmpfile %s: %v", string(b), "README.MD", err)
+		dataBytes := []byte("readme\n")
+		if _, err = sqsfile.Write(dataBytes); err != nil {
+			t.Fatalf("error writing %s to tmpfile %s: %v", string(dataBytes), "README.MD", err)
 		}
 
 		fooCount := 75
@@ -94,7 +97,7 @@ func TestFinalizeSquashfs(t *testing.T) {
 		}
 
 		// now check the contents
-		fs, err = squashfs.Read(f, 0, 0, blocksize)
+		fs, err = squashfs.Read(b, 0, 0, blocksize)
 		if err != nil {
 			t.Fatalf("error reading the tmpfile as squashfs: %v", err)
 		}

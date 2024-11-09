@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/diskfs/go-diskfs/backend/file"
 	"github.com/diskfs/go-diskfs/filesystem"
 	"github.com/diskfs/go-diskfs/testhelper"
 )
@@ -130,7 +131,7 @@ func TestReadXAttrsTable(t *testing.T) {
 	indexBody := make([]byte, 8)
 	binary.LittleEndian.PutUint64(indexBody, uint64(xAttrIDStart))
 
-	file := &testhelper.FileImpl{
+	testFile := &testhelper.FileImpl{
 		Reader: func(b []byte, offset int64) (int, error) {
 			var b2 []byte
 			switch offset {
@@ -159,7 +160,7 @@ func TestReadXAttrsTable(t *testing.T) {
 		data: table[2:],
 		list: list,
 	}
-	xtable, err := readXattrsTable(s, file, nil)
+	xtable, err := readXattrsTable(s, testFile, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -182,7 +183,7 @@ func TestReadFragmentTable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to read test file: %v", err)
 	}
-	entries, err := readFragmentTable(fs.superblock, fs.file, fs.compressor)
+	entries, err := readFragmentTable(fs.superblock, fs.backend, fs.compressor)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -239,7 +240,7 @@ func TestReadBlock(t *testing.T) {
 	smallLocation := int64(2000)
 	size := uint32(20)
 	data := []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}
-	file := &testhelper.FileImpl{
+	testFile := &testhelper.FileImpl{
 		Reader: func(b []byte, offset int64) (int, error) {
 			switch {
 			case offset == location:
@@ -273,7 +274,7 @@ func TestReadBlock(t *testing.T) {
 	}
 	for i, tt := range tests {
 		fs := &FileSystem{
-			file:       file,
+			backend:    file.New(testFile, true),
 			compressor: tt.compressor,
 		}
 		b, err := fs.readBlock(tt.location, tt.compressed, size)
@@ -300,7 +301,7 @@ func TestReadFragment(t *testing.T) {
 	data := []byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
 		20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
 		30, 31, 32, 33, 34, 35, 36, 37, 38, 39}
-	file := &testhelper.FileImpl{
+	testFile := &testhelper.FileImpl{
 		Reader: func(b []byte, offset int64) (int, error) {
 			for _, f := range fragments {
 				if uint64(offset) == f.start {
@@ -330,7 +331,7 @@ func TestReadFragment(t *testing.T) {
 	for i, tt := range tests {
 		fs := &FileSystem{
 			fragments:  fragments,
-			file:       file,
+			backend:    file.New(testFile, true),
 			compressor: tt.compressor,
 		}
 		b, err := fs.readFragment(tt.index, tt.offset, tt.size)
@@ -348,7 +349,7 @@ func TestReadFragment(t *testing.T) {
 }
 
 func TestReadUidsGids(t *testing.T) {
-	// func readUidsGids(s *superblock, file util.File, c compressor) ([]uint32, error) {
+	// func readUidsGids(s *superblock, file backend.File, c compressor) ([]uint32, error) {
 	expected := []uint32{
 		0, 10, 100, 1000,
 	}
@@ -367,7 +368,7 @@ func TestReadUidsGids(t *testing.T) {
 		idTableStart: indexStart,
 		idCount:      uint16(len(ids)-2) / 4,
 	}
-	file := &testhelper.FileImpl{
+	testFile := &testhelper.FileImpl{
 		Reader: func(b []byte, offset int64) (int, error) {
 			switch uint64(offset) {
 			case idStart:
@@ -384,7 +385,7 @@ func TestReadUidsGids(t *testing.T) {
 			}
 		},
 	}
-	uidsgids, err := readUidsGids(s, file, nil)
+	uidsgids, err := readUidsGids(s, testFile, nil)
 	switch {
 	case err != nil:
 		t.Errorf("unexpected error: %v", err)

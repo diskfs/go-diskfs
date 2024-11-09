@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"testing"
 
+	"github.com/diskfs/go-diskfs/backend/file"
 	"github.com/diskfs/go-diskfs/filesystem"
 	"github.com/diskfs/go-diskfs/filesystem/iso9660"
 	"github.com/diskfs/go-diskfs/partition/mbr"
@@ -28,7 +29,9 @@ func TestFinalizeElTorito(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create tmpfile: %v", err)
 	}
-	fs, err := iso9660.Create(f, 0, 0, blocksize, "")
+
+	b := file.New(f, false)
+	fs, err := iso9660.Create(b, 0, 0, blocksize, "")
 	if err != nil {
 		t.Fatalf("Failed to iso9660.Create: %v", err)
 	}
@@ -70,7 +73,7 @@ func TestFinalizeElTorito(t *testing.T) {
 	}
 
 	// now check the contents
-	fs, err = iso9660.Read(f, 0, 0, 2048)
+	fs, err = iso9660.Read(b, 0, 0, 2048)
 	if err != nil {
 		t.Fatalf("error reading the tmpfile as iso: %v", err)
 	}
@@ -107,7 +110,9 @@ func TestFinalize9660(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create tmpfile: %v", err)
 		}
-		fs, err := iso9660.Create(f, 0, 0, blocksize, "")
+
+		b := file.New(f, false)
+		fs, err := iso9660.Create(b, 0, 0, blocksize, "")
 		if err != nil {
 			t.Fatalf("Failed to iso9660.Create: %v", err)
 		}
@@ -129,7 +134,9 @@ func TestFinalize9660(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create tmpfile: %v", err)
 		}
-		fs, err := iso9660.Create(f, 0, 0, blocksize, "")
+
+		b := file.New(f, false)
+		fs, err := iso9660.Create(b, 0, 0, blocksize, "")
 		if err != nil {
 			t.Fatalf("Failed to iso9660.Create: %v", err)
 		}
@@ -163,9 +170,9 @@ func TestFinalize9660(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to iso9660.OpenFile(%s): %v", "README.MD", err)
 		}
-		b := []byte("readme\n")
-		if _, err = isofile.Write(b); err != nil {
-			t.Fatalf("error writing %s to tmpfile %s: %v", string(b), "README.MD", err)
+		dataBytes := []byte("readme\n")
+		if _, err = isofile.Write(dataBytes); err != nil {
+			t.Fatalf("error writing %s to tmpfile %s: %v", string(dataBytes), "README.MD", err)
 		}
 
 		fooCount := 75
@@ -196,7 +203,7 @@ func TestFinalize9660(t *testing.T) {
 		}
 
 		// now check the contents
-		fs, err = iso9660.Read(f, 0, 0, 2048)
+		fs, err = iso9660.Read(b, 0, 0, 2048)
 		if err != nil {
 			t.Fatalf("error reading the tmpfile as iso: %v", err)
 		}
@@ -285,7 +292,9 @@ func TestFinalize9660(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create tmpfile: %v", err)
 		}
-		fs, err := iso9660.Create(f, 0, 0, blocksize, dir)
+
+		b := file.New(f, false)
+		fs, err := iso9660.Create(b, 0, 0, blocksize, dir)
 		if err != nil {
 			t.Fatalf("Failed to iso9660.Create: %v", err)
 		}
@@ -295,7 +304,7 @@ func TestFinalize9660(t *testing.T) {
 		}
 
 		// now check the contents
-		fs, err = iso9660.Read(f, 0, 0, 2048)
+		fs, err = iso9660.Read(b, 0, 0, 2048)
 		if err != nil {
 			t.Fatalf("error reading the tmpfile as iso: %v", err)
 		}
@@ -344,7 +353,9 @@ func TestFinalizeRockRidge(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create tmpfile: %v", err)
 		}
-		fs, err := iso9660.Create(f, 0, 0, blocksize, "")
+
+		b := file.New(f, false)
+		fs, err := iso9660.Create(b, 0, 0, blocksize, "")
 		if err != nil {
 			t.Fatalf("Failed to iso9660.Create: %v", err)
 		}
@@ -384,9 +395,9 @@ func TestFinalizeRockRidge(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to iso9660.OpenFile(%s): %v", "README.md", err)
 		}
-		b := []byte("readme\n")
-		if _, err = isofile.Write(b); err != nil {
-			t.Fatalf("error writing %s to tmpfile %s: %v", string(b), "README.md", err)
+		dataBytes := []byte("readme\n")
+		if _, err = isofile.Write(dataBytes); err != nil {
+			t.Fatalf("error writing %s to tmpfile %s: %v", string(dataBytes), "README.md", err)
 		}
 
 		fooCount := 75
@@ -424,7 +435,7 @@ func TestFinalizeRockRidge(t *testing.T) {
 		}
 
 		// now check the contents
-		fs, err = iso9660.Read(f, 0, 0, 2048)
+		fs, err = iso9660.Read(b, 0, 0, 2048)
 		if err != nil {
 			t.Fatalf("error reading the tmpfile as iso: %v", err)
 		}

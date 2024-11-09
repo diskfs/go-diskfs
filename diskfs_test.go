@@ -60,7 +60,7 @@ func checkDiskfsErrs(t *testing.T, msg string, err, tterr error, d, ttd *disk.Di
 		t.Errorf("%s: mismatched errors, actual %v expected %v", msg, err, tterr)
 	case (d == nil && ttd != nil) || (d != nil && ttd == nil):
 		t.Errorf("%s: mismatched disk, actual %v expected %v", msg, d, ttd)
-	case d != nil && (d.LogicalBlocksize != ttd.LogicalBlocksize || d.PhysicalBlocksize != ttd.PhysicalBlocksize || d.Size != ttd.Size || d.Type != ttd.Type):
+	case d != nil && (d.LogicalBlocksize != ttd.LogicalBlocksize || d.PhysicalBlocksize != ttd.PhysicalBlocksize || d.Size != ttd.Size):
 		t.Errorf("%s: mismatched disk, actual then expected", msg)
 		t.Logf("%v", d)
 		t.Logf("%v", ttd)
@@ -103,22 +103,28 @@ func TestGPTOpen(t *testing.T) {
 	}{
 		{"", nil, fmt.Errorf("must pass device name")},
 		{"/tmp/foo/bar/232323/23/2322/disk.img", nil, fmt.Errorf("")},
-		{path, &disk.Disk{Type: disk.File, LogicalBlocksize: 512, PhysicalBlocksize: 512, Size: size}, nil},
-		{filePadded, &disk.Disk{Type: disk.File, LogicalBlocksize: 512, PhysicalBlocksize: 512, Size: filePaddedSize}, nil},
+		{path, &disk.Disk{LogicalBlocksize: 512, PhysicalBlocksize: 512, Size: size}, nil},
+		{filePadded, &disk.Disk{LogicalBlocksize: 512, PhysicalBlocksize: 512, Size: filePaddedSize}, nil},
 	}
 
 	for _, tt := range tests {
 		d, err := diskfs.Open(tt.path)
+
 		msg := fmt.Sprintf("Open(%s)", tt.path)
 		checkDiskfsErrs(t, msg, err, tt.err, d, tt.disk)
+
 		if d != nil {
 			table, err := d.GetPartitionTable()
 			if err != nil {
 				t.Errorf("%s: mismatched errors, actual %v expected %v", msg, err, tt.err)
 			}
 
+			backingFile, err := d.Backend.Writable()
+			if err != nil {
+				t.Fatal(err)
+			}
 			// Verify will compare the GPT table to the disk and attempt to read the secondary header if possible
-			err = table.Verify(d.File, uint64(tt.disk.Size))
+			err = table.Verify(backingFile, uint64(tt.disk.Size))
 			if err != nil {
 				// We log this as it's epected to be an error
 				t.Logf("%s: mismatched errors, actual %v expected %v", msg, err, tt.err)
@@ -131,13 +137,13 @@ func TestGPTOpen(t *testing.T) {
 			}
 
 			// Update both tables on disk
-			err = table.Write(d.File, tt.disk.Size)
+			err = table.Write(backingFile, tt.disk.Size)
 			if err != nil {
 				t.Errorf("%s: mismatched errors, actual %v expected %v", msg, err, tt.err)
 			}
 
 			// Check that things are as expected.
-			err = table.Verify(d.File, uint64(tt.disk.Size))
+			err = table.Verify(backingFile, uint64(tt.disk.Size))
 			if err != nil {
 				t.Errorf("%s: mismatched errors, actual %v expected %v", msg, err, tt.err)
 			}
@@ -172,7 +178,7 @@ func TestMBROpen(t *testing.T) {
 	}{
 		{"", nil, fmt.Errorf("must pass device name")},
 		{"/tmp/foo/bar/232323/23/2322/disk.img", nil, fmt.Errorf("")},
-		{path, &disk.Disk{Type: disk.File, LogicalBlocksize: 512, PhysicalBlocksize: 512, Size: size}, nil},
+		{path, &disk.Disk{LogicalBlocksize: 512, PhysicalBlocksize: 512, Size: size}, nil},
 	}
 
 	// open default
@@ -195,18 +201,17 @@ func TestCreate(t *testing.T) {
 		name       string
 		path       string
 		size       int64
-		format     diskfs.Format
 		sectorSize diskfs.SectorSize
 		disk       *disk.Disk
 		err        error
 	}{
-		{"no file", "", 10 * oneMB, diskfs.Raw, diskfs.SectorSizeDefault, nil, fmt.Errorf("must pass device name")},
-		{"zero size", "disk", 0, diskfs.Raw, diskfs.SectorSizeDefault, nil, fmt.Errorf("must pass valid device size to create")},
-		{"negative size", "disk", -1, diskfs.Raw, diskfs.SectorSizeDefault, nil, fmt.Errorf("must pass valid device size to create")},
-		{"directory does not exist", "foo/bar/232323/23/2322/disk", 10 * oneMB, diskfs.Raw, diskfs.SectorSizeDefault, nil, fmt.Errorf("could not create device")},
-		{"10MB with default sector size", "disk", 10 * oneMB, diskfs.Raw, diskfs.SectorSizeDefault, &disk.Disk{LogicalBlocksize: 512, PhysicalBlocksize: 512, Size: 10 * oneMB, Type: disk.File}, nil},
-		{"10MB with 512 sector size", "disk", 10 * oneMB, diskfs.Raw, diskfs.SectorSize512, &disk.Disk{LogicalBlocksize: 512, PhysicalBlocksize: 512, Size: 10 * oneMB, Type: disk.File}, nil},
-		{"10MB with 2048 sector size", "disk", 10 * oneMB, diskfs.Raw, diskfs.SectorSize4k, &disk.Disk{LogicalBlocksize: 4096, PhysicalBlocksize: 4096, Size: 10 * oneMB, Type: disk.File}, nil},
+		{"no file", "", 10 * oneMB, diskfs.SectorSizeDefault, nil, fmt.Errorf("must pass device name")},
+		{"zero size", "disk", 0, diskfs.SectorSizeDefault, nil, fmt.Errorf("must pass valid device size to create")},
+		{"negative size", "disk", -1, diskfs.SectorSizeDefault, nil, fmt.Errorf("must pass valid device size to create")},
+		{"directory does not exist", "foo/bar/232323/23/2322/disk", 10 * oneMB, diskfs.SectorSizeDefault, nil, fmt.Errorf("could not create device")},
+		{"10MB with default sector size", "disk", 10 * oneMB, diskfs.SectorSizeDefault, &disk.Disk{LogicalBlocksize: 512, PhysicalBlocksize: 512, Size: 10 * oneMB}, nil},
+		{"10MB with 512 sector size", "disk", 10 * oneMB, diskfs.SectorSize512, &disk.Disk{LogicalBlocksize: 512, PhysicalBlocksize: 512, Size: 10 * oneMB}, nil},
+		{"10MB with 2048 sector size", "disk", 10 * oneMB, diskfs.SectorSize4k, &disk.Disk{LogicalBlocksize: 4096, PhysicalBlocksize: 4096, Size: 10 * oneMB}, nil},
 	}
 
 	for i, t2 := range tests {
@@ -216,9 +221,9 @@ func TestCreate(t *testing.T) {
 			if tt.path != "" {
 				filename = testTmpFilename(t, "diskfs_test"+tt.path, ".img")
 			}
-			d, err := diskfs.Create(filename, tt.size, tt.format, tt.sectorSize)
+			d, err := diskfs.Create(filename, tt.size, tt.sectorSize)
 			defer os.RemoveAll(filename)
-			msg := fmt.Sprintf("%d: Create(%s, %d, %v, %d)", i, filename, tt.size, tt.format, tt.sectorSize)
+			msg := fmt.Sprintf("%d: Create(%s, %d, %v, %d)", i, filename, tt.size, 0, tt.sectorSize)
 			checkDiskfsErrs(t, msg, err, tt.err, d, tt.disk)
 		})
 	}

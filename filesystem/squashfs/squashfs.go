@@ -8,8 +8,8 @@ import (
 	"os"
 	"path"
 
+	"github.com/diskfs/go-diskfs/backend"
 	"github.com/diskfs/go-diskfs/filesystem"
-	"github.com/diskfs/go-diskfs/util"
 )
 
 const (
@@ -26,7 +26,7 @@ type FileSystem struct {
 	superblock *superblock
 	size       int64
 	start      int64
-	file       util.File
+	backend    backend.Storage
 	blocksize  int64
 	compressor Compressor
 	fragments  []*fragmentEntry
@@ -38,7 +38,7 @@ type FileSystem struct {
 
 // Equal compare if two filesystems are equal
 func (fs *FileSystem) Equal(a *FileSystem) bool {
-	localMatch := fs.file == a.file && fs.size == a.size
+	localMatch := fs.backend == a.backend && fs.size == a.size
 	superblockMatch := fs.superblock.equal(a.superblock)
 	return localMatch && superblockMatch
 }
@@ -59,8 +59,8 @@ func (fs *FileSystem) Workspace() string {
 
 // Create creates a squashfs filesystem in a given directory
 //
-// requires the util.File where to create the filesystem, size is the size of the filesystem in bytes,
-// start is how far in bytes from the beginning of the util.File to create the filesystem,
+// requires the backend.Storage where to create the filesystem, size is the size of the filesystem in bytes,
+// start is how far in bytes from the beginning of the backend.Storage to create the filesystem,
 // and blocksize is is the logical blocksize to use for creating the filesystem
 //
 // note that you are *not* required to create the filesystem on the entire disk. You could have a disk of size
@@ -72,7 +72,7 @@ func (fs *FileSystem) Workspace() string {
 // where a partition starts and ends.
 //
 // If the provided blocksize is 0, it will use the default of 128 KB.
-func Create(f util.File, size, start, blocksize int64) (*FileSystem, error) {
+func Create(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) {
 	if blocksize == 0 {
 		blocksize = defaultBlockSize
 	}
@@ -94,15 +94,15 @@ func Create(f util.File, size, start, blocksize int64) (*FileSystem, error) {
 		workspace: tmpdir,
 		start:     start,
 		size:      size,
-		file:      f,
+		backend:   b,
 		blocksize: blocksize,
 	}, nil
 }
 
 // Read reads a filesystem from a given disk.
 //
-// requires the util.File where to read the filesystem, size is the size of the filesystem in bytes,
-// start is how far in bytes from the beginning of the util.File the filesystem is expected to begin,
+// requires the backend.Storage where to read the filesystem, size is the size of the filesystem in bytes,
+// start is how far in bytes from the beginning of the backend.Storage the filesystem is expected to begin,
 // and blocksize is is the logical blocksize to use for creating the filesystem
 //
 // note that you are *not* required to read a filesystem on the entire disk. You could have a disk of size
@@ -145,7 +145,7 @@ func Create(f util.File, size, start, blocksize int64) (*FileSystem, error) {
 // uses this library like this:
 //
 //	rclone -P --transfers 16 --checkers 16 copy :archive:/path/to/tensorflow.sqfs /tmp/tensorflow
-func Read(file util.File, size, start, blocksize int64) (*FileSystem, error) {
+func Read(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) {
 	var (
 		read int
 		err  error
@@ -162,8 +162,8 @@ func Read(file util.File, size, start, blocksize int64) (*FileSystem, error) {
 	// load the information from the disk
 
 	// read the superblock
-	b := make([]byte, superblockSize)
-	read, err = file.ReadAt(b, start)
+	superblockBytes := make([]byte, superblockSize)
+	read, err = b.ReadAt(superblockBytes, start)
 	if err != nil {
 		return nil, fmt.Errorf("unable to read bytes for superblock: %v", err)
 	}
@@ -172,7 +172,7 @@ func Read(file util.File, size, start, blocksize int64) (*FileSystem, error) {
 	}
 
 	// parse superblock
-	s, err := parseSuperblock(b)
+	s, err := parseSuperblock(superblockBytes)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing superblock: %v", err)
 	}
@@ -184,7 +184,7 @@ func Read(file util.File, size, start, blocksize int64) (*FileSystem, error) {
 	}
 
 	// load fragments
-	fragments, err := readFragmentTable(s, file, compress)
+	fragments, err := readFragmentTable(s, b, compress)
 	if err != nil {
 		return nil, fmt.Errorf("error reading fragments: %v", err)
 	}
@@ -195,14 +195,14 @@ func Read(file util.File, size, start, blocksize int64) (*FileSystem, error) {
 	)
 	if !s.noXattrs && s.xattrTableStart != 0xffff_ffff_ffff_ffff {
 		// xattr is right to the end of the disk
-		xattrs, err = readXattrsTable(s, file, compress)
+		xattrs, err = readXattrsTable(s, b, compress)
 		if err != nil {
 			return nil, fmt.Errorf("error reading xattr table: %v", err)
 		}
 	}
 
 	// read uidsgids
-	uidsgids, err := readUidsGids(s, file, compress)
+	uidsgids, err := readUidsGids(s, b, compress)
 	if err != nil {
 		return nil, fmt.Errorf("error reading uids/gids: %v", err)
 	}
@@ -211,7 +211,7 @@ func Read(file util.File, size, start, blocksize int64) (*FileSystem, error) {
 		workspace:  "", // no workspace when we do nothing with it
 		start:      start,
 		size:       size,
-		file:       file,
+		backend:    b,
 		superblock: s,
 		blocksize:  int64(s.blocksize), // use the blocksize in the superblock
 		xattrs:     xattrs,
@@ -562,7 +562,7 @@ func (fs *FileSystem) getInode(blockOffset uint32, byteOffset uint16, iType inod
 	// get the block
 	// start by getting the minimum for the proposed type. It very well might be wrong.
 	size := inodeTypeToSize(iType)
-	uncompressed, err := fs.readMetadata(fs.file, fs.compressor, int64(fs.superblock.inodeTableStart), blockOffset, byteOffset, size)
+	uncompressed, err := fs.readMetadata(fs.backend, fs.compressor, int64(fs.superblock.inodeTableStart), blockOffset, byteOffset, size)
 	if err != nil {
 		return nil, fmt.Errorf("error reading block at position %d: %v", blockOffset, err)
 	}
@@ -576,7 +576,7 @@ func (fs *FileSystem) getInode(blockOffset uint32, byteOffset uint16, iType inod
 		size = inodeTypeToSize(iType)
 		// Read more data if necessary (quite rare)
 		if size > len(uncompressed) {
-			uncompressed, err = fs.readMetadata(fs.file, fs.compressor, int64(fs.superblock.inodeTableStart), blockOffset, byteOffset, size)
+			uncompressed, err = fs.readMetadata(fs.backend, fs.compressor, int64(fs.superblock.inodeTableStart), blockOffset, byteOffset, size)
 			if err != nil {
 				return nil, fmt.Errorf("error reading block at position %d: %v", blockOffset, err)
 			}
@@ -590,7 +590,7 @@ func (fs *FileSystem) getInode(blockOffset uint32, byteOffset uint16, iType inod
 	// if it returns extra > 0, then it needs that many more bytes to be read, and to be reparsed
 	if extra > 0 {
 		size += extra
-		uncompressed, err = fs.readMetadata(fs.file, fs.compressor, int64(fs.superblock.inodeTableStart), blockOffset, byteOffset, size)
+		uncompressed, err = fs.readMetadata(fs.backend, fs.compressor, int64(fs.superblock.inodeTableStart), blockOffset, byteOffset, size)
 		if err != nil {
 			return nil, fmt.Errorf("error reading block at position %d: %v", blockOffset, err)
 		}
@@ -610,7 +610,7 @@ func (fs *FileSystem) getInode(blockOffset uint32, byteOffset uint16, iType inod
 // block when uncompressed.
 func (fs *FileSystem) getDirectory(blockOffset uint32, byteOffset uint16, size int) (*directory, error) {
 	// get the block
-	uncompressed, err := fs.readMetadata(fs.file, fs.compressor, int64(fs.superblock.directoryTableStart), blockOffset, byteOffset, size)
+	uncompressed, err := fs.readMetadata(fs.backend, fs.compressor, int64(fs.superblock.directoryTableStart), blockOffset, byteOffset, size)
 	if err != nil {
 		return nil, fmt.Errorf("error reading block at position %d: %v", blockOffset, err)
 	}
@@ -628,7 +628,7 @@ func (fs *FileSystem) readBlock(location int64, compressed bool, size uint32) ([
 		return make([]byte, fs.superblock.blocksize), nil
 	}
 	b := make([]byte, size)
-	read, err := fs.file.ReadAt(b, location)
+	read, err := fs.backend.ReadAt(b, location)
 	if err != nil && err != io.EOF {
 		return nil, fmt.Errorf("error reading block %d: %v", location, err)
 	}
@@ -657,7 +657,7 @@ func (fs *FileSystem) readFragment(index, offset uint32, fragmentSize int64) ([]
 	data, _, err := fs.cache.get(pos, func() (data []byte, size uint16, err error) {
 		// figure out the size of the compressed block and if it is compressed
 		b := make([]byte, fragmentInfo.size)
-		read, err := fs.file.ReadAt(b, pos)
+		read, err := fs.backend.ReadAt(b, pos)
 		if err != nil && err != io.EOF {
 			return nil, 0, fmt.Errorf("unable to read fragment block %d: %v", index, err)
 		}
@@ -698,7 +698,7 @@ func validateBlocksize(blocksize int64) error {
 	return nil
 }
 
-func readFragmentTable(s *superblock, file util.File, c Compressor) ([]*fragmentEntry, error) {
+func readFragmentTable(s *superblock, file backend.File, c Compressor) ([]*fragmentEntry, error) {
 	// get the first level index, which is just the pointers to the fragment table metadata blocks
 	blockCount := s.fragmentCount / 512
 	if s.fragmentCount%512 > 0 {
@@ -755,7 +755,7 @@ To read the xattr table:
 6- Read the id metablocks based on the indexes and uncompress if needed
 7- Read all of the xattr metadata. It starts at the location indicated by the header, and ends at the id table
 */
-func readXattrsTable(s *superblock, file util.File, c Compressor) (*xAttrTable, error) {
+func readXattrsTable(s *superblock, file backend.File, c Compressor) (*xAttrTable, error) {
 	// first read the header
 	b := make([]byte, xAttrHeaderSize)
 	read, err := file.ReadAt(b, int64(s.xattrTableStart))
@@ -858,7 +858,7 @@ To read the uids/gids table:
 4- Read the indexes. They are uncompressed, 8 bytes each (uint64); one index per id metablock
 5- Read the id metablocks based on the indexes and uncompress if needed
 */
-func readUidsGids(s *superblock, file util.File, c Compressor) ([]uint32, error) {
+func readUidsGids(s *superblock, file backend.File, c Compressor) ([]uint32, error) {
 	// find out how many xattr IDs we have and where the metadata starts. The table always starts
 	//   with this information
 	idStart := s.idTableStart

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/diskfs/go-diskfs/backend/file"
 	"github.com/diskfs/go-diskfs/testhelper"
 	"github.com/google/go-cmp/cmp"
 )
@@ -70,12 +71,12 @@ func getValidFat32FSSmall() *FileSystem {
 		},
 		bytesPerCluster: 512,
 		dataStart:       178176,
-		file: &testhelper.FileImpl{
+		backend: file.New(&testhelper.FileImpl{
 			//nolint:revive // unused parameter, keeping name makes it easier to use in the future
 			Writer: func(b []byte, offset int64) (int, error) {
 				return len(b), nil
 			},
-		},
+		}, false),
 		fsis: FSInformationSector{},
 		bootSector: msDosBootSector{
 			biosParameterBlock: &dos71EBPB{
@@ -129,14 +130,14 @@ func TestFat32ReadDirectory(t *testing.T) {
 	// will use the fat32.img fixture to test an actual directory
 	// \ (root directory) should be in one cluster
 	// \foo should be in two clusters
-	file, err := os.Open(Fat32File)
+	testFile, err := os.Open(Fat32File)
 	if err != nil {
 		t.Fatalf("could not open file %s to read: %v", Fat32File, err)
 	}
-	defer file.Close()
+	defer testFile.Close()
 	fs := &FileSystem{
 		table:           *getValidFat32Table(),
-		file:            file,
+		backend:         file.New(testFile, false),
 		bytesPerCluster: int(fsInfo.bytesPerCluster),
 		dataStart:       fsInfo.dataStartBytes,
 	}
@@ -337,7 +338,7 @@ func TestFat32ReadDirWithMkdir(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		fs.file = &testhelper.FileImpl{
+		fs.backend = file.New(&testhelper.FileImpl{
 			//nolint:revive // unused parameter, keeping name makes it easier to use in the future
 			Writer: func(b []byte, offset int64) (int, error) {
 				return len(b), nil
@@ -346,7 +347,8 @@ func TestFat32ReadDirWithMkdir(t *testing.T) {
 				copy(b, datab[offset:])
 				return len(b), nil
 			},
-		}
+		}, false)
+
 		dir, entries, err := fs.readDirWithMkdir(tt.path, tt.doMake)
 		switch {
 		case (err == nil && tt.err != nil) || (err != nil && tt.err == nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):

@@ -35,7 +35,7 @@ func (fl *File) Read(b []byte) (int, error) {
 	size := int(fl.size) - int(fl.offset)
 	location := int(fl.location)
 	maxRead := size
-	file := fs.file
+	file := fs.backend
 
 	// if there is nothing left to read, just return EOF
 	if size <= 0 {

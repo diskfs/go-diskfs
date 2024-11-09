@@ -16,7 +16,7 @@ func CreateIso(diskImg string) {
 		log.Fatal("must have a valid path for diskImg")
 	}
 	var diskSize int64 = 10 * 1024 * 1024 // 10 MB
-	mydisk, err := diskfs.Create(diskImg, diskSize, diskfs.Raw, diskfs.SectorSizeDefault)
+	mydisk, err := diskfs.Create(diskImg, diskSize, diskfs.SectorSizeDefault)
 	check(err)
 
 	// the following line is required for an ISO, which may have logical block sizes

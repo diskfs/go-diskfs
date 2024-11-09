@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	diskfs "github.com/diskfs/go-diskfs"
+	"github.com/diskfs/go-diskfs/backend/file"
 	"github.com/diskfs/go-diskfs/disk"
 	"github.com/diskfs/go-diskfs/filesystem"
 	"github.com/diskfs/go-diskfs/filesystem/iso9660"
@@ -42,7 +43,9 @@ func getValidIso9660FSWorkspace() (*iso9660.FileSystem, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Failed to create iso9660 tmpfile: %v", err)
 	}
-	return iso9660.Create(f, 0, 0, 2048, "")
+
+	b := file.New(f, false)
+	return iso9660.Create(b, 0, 0, 2048, "")
 }
 func getValidIso9660FSUserWorkspace() (*iso9660.FileSystem, error) {
 	f, err := tmpIso9660File()
@@ -53,21 +56,26 @@ func getValidIso9660FSUserWorkspace() (*iso9660.FileSystem, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Failed to create iso9660 tmpfile: %v", err)
 	}
-	return iso9660.Create(f, 0, 0, 2048, dir)
+
+	b := file.New(f, false)
+	return iso9660.Create(b, 0, 0, 2048, dir)
 }
 func getValidIso9660FSReadOnly() (*iso9660.FileSystem, error) {
 	f, err := os.Open(iso9660.ISO9660File)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to read iso9660 testfile %s: %v", iso9660.ISO9660File, err)
 	}
-	return iso9660.Read(f, 0, 0, 2048)
+
+	b := file.New(f, true)
+	return iso9660.Read(b, 0, 0, 2048)
 }
 func getValidRockRidgeFSReadOnly() (*iso9660.FileSystem, error) {
 	f, err := os.Open(iso9660.RockRidgeFile)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to read iso9660 testfile %s: %v", iso9660.RockRidgeFile, err)
 	}
-	return iso9660.Read(f, 0, 0, 2048)
+	b := file.New(f, true)
+	return iso9660.Read(b, 0, 0, 2048)
 }
 
 func tmpIso9660File() (*os.File, error) {
@@ -182,7 +190,9 @@ func TestIso9660Create(t *testing.T) {
 			if err != nil {
 				t.Errorf("Failed to create iso9660 tmpfile: %v", err)
 			}
-			fs, err := iso9660.Create(f, tt.filesize, 0, tt.blocksize, tt.workdir)
+
+			b := file.New(f, false)
+			fs, err := iso9660.Create(b, tt.filesize, 0, tt.blocksize, tt.workdir)
 			defer os.Remove(f.Name())
 			switch {
 			case (err == nil && tt.err != nil) || (err != nil && tt.err == nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
@@ -223,8 +233,10 @@ func TestISO9660Read(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer f.Close()
+
+			b := file.New(f, true)
 			// create the filesystem
-			fs, err := iso9660.Read(f, tt.filesize, 0, tt.blocksize)
+			fs, err := iso9660.Read(b, tt.filesize, 0, tt.blocksize)
 			switch {
 			case (err == nil && tt.err != nil) || (err != nil && tt.err == nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
 				t.Errorf("read(%s, %d, %d, %d): mismatched errors, actual %v expected %v", f.Name(), tt.filesize, 0, tt.blocksize, err, tt.err)
@@ -545,7 +557,7 @@ func TestIso9660Finalize(t *testing.T) {
 
 		// Create the disk image
 		// TODO: Explain why we need to use Raw here
-		mydisk, err := diskfs.Create(outputFileName, 100*1024, diskfs.Raw, LogicalBlocksize)
+		mydisk, err := diskfs.Create(outputFileName, 100*1024, LogicalBlocksize)
 		if err != nil {
 			return err
 		}

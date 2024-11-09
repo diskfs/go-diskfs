@@ -6,6 +6,7 @@ import (
 	"os"
 
 	diskfs "github.com/diskfs/go-diskfs"
+	"github.com/diskfs/go-diskfs/backend/file"
 	"github.com/diskfs/go-diskfs/disk"
 	"github.com/diskfs/go-diskfs/filesystem"
 	"github.com/diskfs/go-diskfs/partition/gpt"
@@ -27,7 +28,7 @@ func ExampleCreate_fat32() {
 
 	diskImg := "/tmp/disk.img"
 	defer os.Remove(diskImg)
-	theDisk, _ := diskfs.Create(diskImg, size, diskfs.Raw, diskfs.SectorSizeDefault)
+	theDisk, _ := diskfs.Create(diskImg, size, diskfs.SectorSizeDefault)
 
 	fs, err := theDisk.CreateFilesystem(disk.FilesystemSpec{
 		Partition: 0,
@@ -44,7 +45,7 @@ func ExampleCreate_mbr() {
 
 	diskImg := "/tmp/disk.img"
 	defer os.Remove(diskImg)
-	theDisk, _ := diskfs.Create(diskImg, size, diskfs.Raw, diskfs.SectorSizeDefault)
+	theDisk, _ := diskfs.Create(diskImg, size, diskfs.SectorSizeDefault)
 
 	table := &mbr.Table{
 		LogicalSectorSize:  512,
@@ -75,7 +76,7 @@ func ExampleCreate_gpt() {
 
 	diskImg := "/tmp/disk.img"
 	defer os.Remove(diskImg)
-	theDisk, _ := diskfs.Create(diskImg, size, diskfs.Raw, diskfs.SectorSizeDefault)
+	theDisk, _ := diskfs.Create(diskImg, size, diskfs.SectorSizeDefault)
 
 	table := &gpt.Table{
 		LogicalSectorSize:  512,
@@ -106,7 +107,7 @@ func ExampleCreate_fat32WithDirsAndFiles() {
 
 	diskImg := "/tmp/disk.img"
 	defer os.Remove(diskImg)
-	theDisk, _ := diskfs.Create(diskImg, size, diskfs.Raw, diskfs.SectorSizeDefault)
+	theDisk, _ := diskfs.Create(diskImg, size, diskfs.SectorSizeDefault)
 
 	table := &mbr.Table{
 		LogicalSectorSize:  512,
@@ -142,4 +143,47 @@ func ExampleCreate_fat32WithDirsAndFiles() {
 	written, err := rw.Write(b)
 	check(err)
 	unused(written)
+}
+
+// Create a disk of size 20MB at provided pathname using backend abstraction.
+// This is a proposed way of usage after factoring out underlying file operations to the backend.
+// diskfs.Create() is slowly deprecating now.
+func ExampleOpenBackend_create() {
+	theBackend, err := file.CreateFromPath("/tmp/my.img", 20*1024*1024)
+	check(err)
+
+	theDisk, err := diskfs.OpenBackend(theBackend)
+	check(err)
+	unused(theDisk)
+}
+
+// Open existing image using backend abstraction
+// This is a proposed way of usage after factoring out underlying file operations to the backend.
+// diskfs.Open() is slowly deprecating now.
+func ExampleOpenBackend_open() {
+	readOnly := true
+	theBackend, err := file.OpenFromPath("/tmp/my.img", readOnly)
+	check(err)
+	defer os.Remove("/tmp/my.img")
+
+	theDisk, err := diskfs.OpenBackend(theBackend)
+	check(err)
+	unused(theDisk)
+}
+
+// Instantiate the backend manually for later use in diskfs.OpenBackend
+func ExampleOpenBackend_backend() {
+	// some exemplary fs.FS
+	dirfs := os.DirFS("/tmp/images")
+	// the fs.File we'll use
+	f, err := dirfs.Open("theImage.raw")
+	check(err)
+
+	theBackend := file.New(f, false)
+
+	// As opposed to File example, theBackend will be used as is (i.e. not wrapped).
+	// This usage scenario is for upcoming support for other backends (qcow2 and such).
+	theDisk, err := diskfs.OpenBackend(theBackend)
+	check(err)
+	unused(theDisk)
 }

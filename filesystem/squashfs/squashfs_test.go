@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/diskfs/go-diskfs/backend/file"
 	"github.com/diskfs/go-diskfs/filesystem"
 	"github.com/diskfs/go-diskfs/filesystem/squashfs"
 )
@@ -48,7 +49,9 @@ func getValidSquashfsFSWorkspace() (*squashfs.FileSystem, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Failed to create squashfs tmpfile: %v", err)
 	}
-	return squashfs.Create(f, 0, 0, 4096)
+
+	b := file.New(f, false)
+	return squashfs.Create(b, 0, 0, 4096)
 }
 
 func getValidSquashfsFSReadOnly() (*squashfs.FileSystem, error) {
@@ -56,7 +59,9 @@ func getValidSquashfsFSReadOnly() (*squashfs.FileSystem, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Failed to read squashfs testfile %s: %v", squashfs.Squashfsfile, err)
 	}
-	return squashfs.Read(f, 0, 0, 4096)
+
+	b := file.New(f, true)
+	return squashfs.Read(b, 0, 0, 4096)
 }
 
 func TestSquashfsType(t *testing.T) {
@@ -358,8 +363,10 @@ func TestSquashfsRead(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer f.Close()
+
+			b := file.New(f, true)
 			// create the filesystem
-			fs, err := squashfs.Read(f, tt.filesize, 0, tt.blocksize)
+			fs, err := squashfs.Read(b, tt.filesize, 0, tt.blocksize)
 			switch {
 			case (err == nil && tt.err != nil) || (err != nil && tt.err == nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
 				t.Errorf("%d: Read(%s, %d, %d, %d): mismatched errors, actual %v expected %v", i, f.Name(), tt.filesize, 0, tt.blocksize, err, tt.err)
@@ -405,8 +412,10 @@ func TestSquashfsCheckListing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	b := file.New(f, true)
 	// create the filesystem
-	fs, err := squashfs.Read(f, fi.Size(), 0, 0)
+	fs, err := squashfs.Read(b, fi.Size(), 0, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -593,8 +602,10 @@ func TestSquashfsReadFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	b := file.New(f, true)
 	// create the filesystem
-	fs, err := squashfs.Read(f, fi.Size(), 0, 0)
+	fs, err := squashfs.Read(b, fi.Size(), 0, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -649,7 +660,9 @@ func TestSquashfsCreate(t *testing.T) {
 			if err != nil {
 				t.Errorf("Failed to create squashfs tmpfile: %v", err)
 			}
-			fs, err := squashfs.Create(f, tt.filesize, 0, tt.blocksize)
+
+			b := file.New(f, false)
+			fs, err := squashfs.Create(b, tt.filesize, 0, tt.blocksize)
 			defer os.Remove(f.Name())
 			switch {
 			case (err == nil && tt.err != nil) || (err != nil && tt.err == nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
@@ -727,8 +740,10 @@ func TestSquashfsReadDirCornerCases(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	b := file.New(f, true)
 	// create the filesystem
-	fs, err := squashfs.Read(f, fi.Size(), 0, 0)
+	fs, err := squashfs.Read(b, fi.Size(), 0, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

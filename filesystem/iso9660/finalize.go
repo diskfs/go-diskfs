@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/diskfs/go-diskfs/backend"
 	"github.com/diskfs/go-diskfs/util"
 	"github.com/djherbis/times"
 )
@@ -463,7 +464,11 @@ func (fsm *FileSystem) Finalize(options FinalizeOptions) error {
 		 10- write volume descriptor set terminator
 	*/
 
-	f := fsm.file
+	f, err := fsm.backend.Writable()
+	if err != nil {
+		return err
+	}
+
 	blocksize := int(fsm.blocksize)
 
 	// 1- blank out sectors 0-15
@@ -816,7 +821,7 @@ func (fsm *FileSystem) Finalize(options FinalizeOptions) error {
 
 // copyFileData copy data from file `from` at offset `fromOffset` to file `to` at offset `toOffset`.
 // Copies `size` bytes. If `size` is 0, copies as many bytes as it can.
-func copyFileData(from, to util.File, fromOffset, toOffset int64, size int) (int, error) {
+func copyFileData(from backend.File, to backend.WritableFile, fromOffset, toOffset int64, size int) (int, error) {
 	buf := make([]byte, 2048)
 	copied := 0
 	for {

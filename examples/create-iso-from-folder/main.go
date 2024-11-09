@@ -45,8 +45,7 @@ func CreateIsoFromFolder(srcFolder string, outputFileName string) {
 	var LogicalBlocksize diskfs.SectorSize = 2048
 
 	// Create the disk image
-	// TODO: Explain why we need to use Raw here
-	mydisk, err := diskfs.Create(outputFileName, folderSize, diskfs.Raw, LogicalBlocksize)
+	mydisk, err := diskfs.Create(outputFileName, folderSize, LogicalBlocksize)
 	check(err)
 
 	// Create the ISO filesystem on the disk image

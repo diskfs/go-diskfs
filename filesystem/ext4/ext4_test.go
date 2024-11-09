@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/diskfs/go-diskfs/backend/file"
 	"github.com/go-test/deep"
 )
 
@@ -48,7 +49,9 @@ func TestReadDirectory(t *testing.T) {
 		t.Fatalf("Error opening test image: %v", err)
 	}
 	defer f.Close()
-	fs, err := Read(f, 100*MB, 0, 512)
+
+	b := file.New(f, true)
+	fs, err := Read(b, 100*MB, 0, 512)
 	if err != nil {
 		t.Fatalf("Error reading filesystem: %v", err)
 	}
@@ -105,7 +108,9 @@ func TestReadFile(t *testing.T) {
 		t.Fatalf("Error opening test image: %v", err)
 	}
 	defer f.Close()
-	fs, err := Read(f, 100*MB, 0, 512)
+
+	b := file.New(f, true)
+	fs, err := Read(b, 100*MB, 0, 512)
 	if err != nil {
 		t.Fatalf("Error reading filesystem: %v", err)
 	}
@@ -211,11 +216,13 @@ func TestWriteFile(t *testing.T) {
 				t.Fatalf("Error opening test image: %v", err)
 			}
 			defer f.Close()
-			fs, err := Read(f, 100*MB, 0, 512)
+
+			b := file.New(f, false)
+			fs, err := Read(b, 100*MB, 0, 512)
 			if err != nil {
 				t.Fatalf("Error reading filesystem: %v", err)
 			}
-			file, err := fs.OpenFile(tt.path, tt.flag)
+			ext4File, err := fs.OpenFile(tt.path, tt.flag)
 			switch {
 			case err != nil && tt.err == nil:
 				t.Fatalf("unexpected error opening file: %v", err)
@@ -224,10 +231,10 @@ func TestWriteFile(t *testing.T) {
 			case err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error()):
 				t.Fatalf("mismatched error opening file, expected '%v' got '%v'", tt.err, err)
 			case err == nil:
-				if _, err := file.Seek(tt.offset, io.SeekStart); err != nil {
+				if _, err := ext4File.Seek(tt.offset, io.SeekStart); err != nil {
 					t.Fatalf("Error seeking file for write: %v", err)
 				}
-				n, err := file.Write(tt.expected)
+				n, err := ext4File.Write(tt.expected)
 				if err != nil && err != io.EOF {
 					t.Fatalf("Error writing file: %v", err)
 				}
@@ -235,11 +242,11 @@ func TestWriteFile(t *testing.T) {
 					t.Fatalf("short write, expected %d bytes got %d", len(tt.expected), n)
 				}
 				// now read from the file and see that it matches what we wrote
-				if _, err := file.Seek(tt.offset, io.SeekStart); err != nil {
+				if _, err := ext4File.Seek(tt.offset, io.SeekStart); err != nil {
 					t.Fatalf("Error seeking file for read: %v", err)
 				}
 				b := make([]byte, len(tt.expected))
-				n, err = file.Read(b)
+				n, err = ext4File.Read(b)
 				if err != nil && err != io.EOF {
 					t.Fatalf("Error reading file: %v", err)
 				}
@@ -276,7 +283,9 @@ func TestRm(t *testing.T) {
 				t.Fatalf("Error opening test image: %v", err)
 			}
 			defer f.Close()
-			fs, err := Read(f, 100*MB, 0, 512)
+
+			b := file.New(f, false)
+			fs, err := Read(b, 100*MB, 0, 512)
 			if err != nil {
 				t.Fatalf("Error reading filesystem: %v", err)
 			}
@@ -319,7 +328,9 @@ func TestTruncateFile(t *testing.T) {
 				t.Fatalf("Error opening test image: %v", err)
 			}
 			defer f.Close()
-			fs, err := Read(f, 100*MB, 0, 512)
+
+			b := file.New(f, false)
+			fs, err := Read(b, 100*MB, 0, 512)
 			if err != nil {
 				t.Fatalf("Error reading filesystem: %v", err)
 			}
@@ -379,7 +390,9 @@ func TestMkdir(t *testing.T) {
 				t.Fatalf("Error opening test image: %v", err)
 			}
 			defer f.Close()
-			fs, err := Read(f, 100*MB, 0, 512)
+
+			b := file.New(f, false)
+			fs, err := Read(b, 100*MB, 0, 512)
 			if err != nil {
 				t.Fatalf("Error reading filesystem: %v", err)
 			}
