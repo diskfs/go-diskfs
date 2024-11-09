@@ -684,6 +684,9 @@ func Read(file util.File, size, start, sectorsize int64) (*FileSystem, error) {
 	}, nil
 }
 
+// interface guard
+var _ filesystem.FileSystem = (*FileSystem)(nil)
+
 // Type returns the type code for the filesystem. Always returns filesystem.TypeExt4
 func (fs *FileSystem) Type() filesystem.Type {
 	return filesystem.TypeExt4
@@ -697,6 +700,44 @@ func (fs *FileSystem) Mkdir(p string) error {
 	_, err := fs.readDirWithMkdir(p, true)
 	// we are not interesting in returning the entries
 	return err
+}
+
+// creates a filesystem node (file, device special file, or named pipe) named pathname,
+// with attributes specified by mode and dev
+//
+//nolint:revive // parameters will be used eventually
+func (fs *FileSystem) Mknod(pathname string, mode uint32, dev int) error {
+	return filesystem.ErrNotImplemented
+}
+
+// creates a new link (also known as a hard link) to an existing file.
+//
+//nolint:revive // parameters will be used eventually
+func (fs *FileSystem) Link(oldpath, newpath string) error {
+	return filesystem.ErrNotImplemented
+}
+
+// creates a symbolic link named linkpath which contains the string target.
+//
+//nolint:revive // parameters will be used eventually
+func (fs *FileSystem) Symlink(oldpath, newpath string) error {
+	return filesystem.ErrNotImplemented
+}
+
+// Chmod changes the mode of the named file to mode. If the file is a symbolic link,
+// it changes the mode of the link's target.
+//
+//nolint:revive // parameters will be used eventually
+func (fs *FileSystem) Chmod(name string, mode os.FileMode) error {
+	return filesystem.ErrNotImplemented
+}
+
+// Chown changes the numeric uid and gid of the named file. If the file is a symbolic link,
+// it changes the uid and gid of the link's target. A uid or gid of -1 means to not change that value
+//
+//nolint:revive // parameters will be used eventually
+func (fs *FileSystem) Chown(name string, uid, gid int) error {
+	return filesystem.ErrNotImplemented
 }
 
 // ReadDir return the contents of a given directory in a given filesystem.
@@ -808,12 +849,24 @@ func (fs *FileSystem) Label() string {
 	return fs.superblock.volumeLabel
 }
 
-// Rm remove file or directory at path.
+// Rename renames (moves) oldpath to newpath. If newpath already exists and is not a directory, Rename replaces it.
+//
+//nolint:revive // parameters will be used eventually
+func (fs *FileSystem) Rename(oldpath, newpath string) error {
+	return filesystem.ErrNotImplemented
+}
+
+// Deprecated: use filesystem.Remove(p string) instead
+func (fs *FileSystem) Rm(p string) error {
+	return fs.Remove(p)
+}
+
+// Removes file or directory at path.
 // If path is directory, it only will remove if it is empty.
 // If path is a file, it will remove the file.
 // Will not remove any parents.
 // Error if the file does not exist or is not an empty directory
-func (fs *FileSystem) Rm(p string) error {
+func (fs *FileSystem) Remove(p string) error {
 	parentDir, entry, err := fs.getEntryAndParent(p)
 	if err != nil {
 		return err

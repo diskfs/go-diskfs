@@ -455,9 +455,9 @@ func TestFat32OpenFile(t *testing.T) {
 				{"/CORTO1.TXT", os.O_RDWR, false, "This is a very long replacement string", "Tenemos un archivo corto\nThis is a very long replacement string", nil},
 				{"/CORTO1.TXT", os.O_RDWR, false, "Two", "Tenemos un archivo corto\nTwo", nil},
 				//  - open for append file that does exist (write contents, check that appended)
-				{"/CORTO1.TXT", os.O_APPEND, false, "More", "", fmt.Errorf("cannot write to file opened read-only")},
+				{"/CORTO1.TXT", os.O_APPEND, false, "More", "", filesystem.ErrReadonlyFilesystem},
 				{"/CORTO1.TXT", os.O_APPEND | os.O_RDWR, false, "More", "Tenemos un archivo corto\nMore", nil},
-				{"/CORTO1.TXT", os.O_APPEND, true, "More", "", fmt.Errorf("cannot write to file opened read-only")},
+				{"/CORTO1.TXT", os.O_APPEND, true, "More", "", filesystem.ErrReadonlyFilesystem},
 				{"/CORTO1.TXT", os.O_APPEND | os.O_RDWR, true, "More", "Moremos un archivo corto\n", nil},
 			}
 			for _, t2 := range tests {

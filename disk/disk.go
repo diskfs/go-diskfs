@@ -189,7 +189,7 @@ func (d *Disk) CreateFilesystem(spec FilesystemSpec) (filesystem.FileSystem, err
 	case filesystem.TypeExt4:
 		return ext4.Create(d.File, size, start, d.LogicalBlocksize, nil)
 	case filesystem.TypeSquashfs:
-		return nil, errors.New("squashfs is a read-only filesystem")
+		return nil, filesystem.ErrReadonlyFilesystem
 	default:
 		return nil, errors.New("unknown filesystem type requested")
 	}

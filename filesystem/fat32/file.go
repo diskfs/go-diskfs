@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+
+	"github.com/diskfs/go-diskfs/filesystem"
 )
 
 // File represents a single file in a FAT32 filesystem
@@ -108,7 +110,7 @@ func (fl *File) Write(p []byte) (int, error) {
 	fs := fl.filesystem
 	// if the file was not opened RDWR, nothing we can do
 	if !fl.isReadWrite {
-		return totalWritten, fmt.Errorf("cannot write to file opened read-only")
+		return totalWritten, filesystem.ErrReadonlyFilesystem
 	}
 	// what is the new file size?
 	writeSize := len(p)

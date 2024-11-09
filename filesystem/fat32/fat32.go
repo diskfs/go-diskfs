@@ -470,6 +470,9 @@ func (fs *FileSystem) writeFat() error {
 	return nil
 }
 
+// interface guard
+var _ filesystem.FileSystem = (*FileSystem)(nil)
+
 // Type returns the type code for the filesystem. Always returns filesystem.TypeFat32
 func (fs *FileSystem) Type() filesystem.Type {
 	return filesystem.TypeFat32
@@ -483,6 +486,34 @@ func (fs *FileSystem) Mkdir(p string) error {
 	_, _, err := fs.readDirWithMkdir(p, true)
 	// we are not interesting in returning the entries
 	return err
+}
+
+// creates a filesystem node (file, device special file, or named pipe) named pathname,
+// with attributes specified by mode and dev
+func (fs *FileSystem) Mknod(_ string, _ uint32, _ int) error {
+	return filesystem.ErrNotSupported
+}
+
+// creates a new link (also known as a hard link) to an existing file.
+func (fs *FileSystem) Link(_, _ string) error {
+	return filesystem.ErrNotSupported
+}
+
+// creates a symbolic link named linkpath which contains the string target.
+func (fs *FileSystem) Symlink(_, _ string) error {
+	return filesystem.ErrNotSupported
+}
+
+// Chmod changes the mode of the named file to mode. If the file is a symbolic link,
+// it changes the mode of the link's target.
+func (fs *FileSystem) Chmod(_ string, _ os.FileMode) error {
+	return filesystem.ErrNotSupported
+}
+
+// Chown changes the numeric uid and gid of the named file. If the file is a symbolic link,
+// it changes the uid and gid of the link's target. A uid or gid of -1 means to not change that value
+func (fs *FileSystem) Chown(_ string, _, _ int) error {
+	return filesystem.ErrNotSupported
 }
 
 // ReadDir return the contents of a given directory in a given filesystem.
@@ -604,6 +635,20 @@ func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 		filesystem:     fs,
 		parent:         parentDir,
 	}, nil
+}
+
+// Rename renames (moves) oldpath to newpath. If newpath already exists and is not a directory, Rename replaces it.
+//
+//nolint:revive // parameters will be used eventually
+func (fs *FileSystem) Rename(oldpath, newpath string) error {
+	return filesystem.ErrNotImplemented
+}
+
+// removes the named file or (empty) directory.
+//
+//nolint:revive // parameters will be used eventually
+func (fs *FileSystem) Remove(pathname string) error {
+	return filesystem.ErrNotImplemented
 }
 
 // Label get the label of the filesystem from the secial file in the root directory.
