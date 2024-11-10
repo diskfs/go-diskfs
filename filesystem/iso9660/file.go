@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+
+	"github.com/diskfs/go-diskfs/filesystem"
 )
 
 // File represents a single file in an iso9660 filesystem
@@ -65,7 +67,7 @@ func (fl *File) Read(b []byte) (int, error) {
 //
 //	you cannot write to an iso, so this returns an error
 func (fl *File) Write(_ []byte) (int, error) {
-	return 0, fmt.Errorf("cannot write to a read-only iso filesystem")
+	return 0, filesystem.ErrReadonlyFilesystem
 }
 
 // Seek set the offset to a particular point in the file

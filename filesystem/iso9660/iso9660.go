@@ -282,6 +282,9 @@ func Read(file util.File, size, start, blocksize int64) (*FileSystem, error) {
 	return fs, nil
 }
 
+// interface guard
+var _ filesystem.FileSystem = (*FileSystem)(nil)
+
 // Type returns the type code for the filesystem. Always returns filesystem.TypeFat32
 func (fsm *FileSystem) Type() filesystem.Type {
 	return filesystem.TypeISO9660
@@ -295,7 +298,7 @@ func (fsm *FileSystem) Type() filesystem.Type {
 // if readonly and not in workspace, will return an error
 func (fsm *FileSystem) Mkdir(p string) error {
 	if fsm.workspace == "" {
-		return fmt.Errorf("cannot write to read-only filesystem")
+		return filesystem.ErrReadonlyFilesystem
 	}
 	err := os.MkdirAll(path.Join(fsm.workspace, p), 0o755)
 	if err != nil {
@@ -303,6 +306,50 @@ func (fsm *FileSystem) Mkdir(p string) error {
 	}
 	// we are not interesting in returning the entries
 	return err
+}
+
+// creates a filesystem node (file, device special file, or named pipe) named pathname,
+// with attributes specified by mode and dev
+//
+//nolint:revive // parameters will be used eventually
+func (fsm *FileSystem) Mknod(pathname string, mode uint32, dev int) error {
+	// Rock Ridge has device files support
+	// https://en.wikipedia.org/wiki/ISO_9660#Rock_Ridge
+	return filesystem.ErrNotImplemented
+}
+
+// creates a new link (also known as a hard link) to an existing file.
+func (fsm *FileSystem) Link(_, _ string) error {
+	return filesystem.ErrNotSupported
+}
+
+// creates a symbolic link named linkpath which contains the string target.
+//
+//nolint:revive // parameters will be used eventually
+func (fsm *FileSystem) Symlink(oldpath, newpath string) error {
+	// Rock Ridge has symlink support
+	// https://en.wikipedia.org/wiki/ISO_9660#Rock_Ridge
+	return filesystem.ErrNotImplemented
+}
+
+// Chmod changes the mode of the named file to mode. If the file is a symbolic link,
+// it changes the mode of the link's target.
+//
+//nolint:revive // parameters will be used eventually
+func (fsm *FileSystem) Chmod(name string, mode os.FileMode) error {
+	// Rock Ridge has UNIX-style file modes support
+	// https://en.wikipedia.org/wiki/ISO_9660#Rock_Ridge
+	return filesystem.ErrNotImplemented
+}
+
+// Chown changes the numeric uid and gid of the named file. If the file is a symbolic link,
+// it changes the uid and gid of the link's target. A uid or gid of -1 means to not change that value
+//
+//nolint:revive // parameters will be used eventually
+func (fsm *FileSystem) Chown(name string, uid, gid int) error {
+	// Rock Ridge has user ids and group ids support
+	// https://en.wikipedia.org/wiki/ISO_9660#Rock_Ridge
+	return filesystem.ErrNotImplemented
 }
 
 // ReadDir return the contents of a given directory in a given filesystem.
@@ -368,7 +415,7 @@ func (fsm *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 	writeMode := flag&os.O_WRONLY != 0 || flag&os.O_RDWR != 0 || flag&os.O_APPEND != 0 || flag&os.O_CREATE != 0 || flag&os.O_TRUNC != 0 || flag&os.O_EXCL != 0
 	if fsm.workspace == "" {
 		if writeMode {
-			return nil, fmt.Errorf("cannot write to read-only filesystem")
+			return nil, filesystem.ErrReadonlyFilesystem
 		}
 
 		// get the directory entries
@@ -412,6 +459,21 @@ func (fsm *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 	}
 
 	return f, nil
+}
+
+// Rename renames (moves) oldpath to newpath. If newpath already exists and is not a directory, Rename replaces it.
+func (fsm *FileSystem) Rename(oldpath, newpath string) error {
+	if fsm.workspace == "" {
+		return filesystem.ErrReadonlyFilesystem
+	}
+	return os.Rename(path.Join(fsm.workspace, oldpath), path.Join(fsm.workspace, newpath))
+}
+
+func (fsm *FileSystem) Remove(p string) error {
+	if fsm.workspace == "" {
+		return filesystem.ErrReadonlyFilesystem
+	}
+	return os.Remove(path.Join(fsm.workspace, p))
 }
 
 // readDirectory - read directory entry on iso only (not workspace)
