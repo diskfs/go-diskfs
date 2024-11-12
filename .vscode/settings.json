@@ -1,0 +1,12 @@
+{
+    "editor.wordWrap": "wordWrapColumn",
+    "editor.wordWrapColumn": 120,
+    "editor.formatOnSave": true,
+    "files.insertFinalNewline": true,
+    "git.confirmSync": false,
+    "git.autofetch": true,
+    "rewrap.reformat": true,
+    "go.testFlags": [
+        "-v"
+    ]
+}
