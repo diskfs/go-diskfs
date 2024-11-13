@@ -3,6 +3,8 @@ package iso9660
 import (
 	"os"
 	"testing"
+
+	"github.com/diskfs/go-diskfs/storage"
 )
 
 func TestIso9660ReadDirectory(t *testing.T) {
@@ -23,7 +25,7 @@ func TestIso9660ReadDirectory(t *testing.T) {
 		workspace: "", // we only ever call readDirectory with no workspace
 		size:      ISO9660Size,
 		start:     0,
-		file:      file,
+		file:      storage.New(file, true),
 		blocksize: 2048,
 		pathTable: pathTable,
 	}
@@ -83,7 +85,7 @@ func TestRockRidgeReadDirectory(t *testing.T) {
 		workspace:      "", // we only ever call readDirectory with no workspace
 		size:           ISO9660Size,
 		start:          0,
-		file:           file,
+		file:           storage.New(file, true),
 		blocksize:      2048,
 		pathTable:      pathTable,
 		suspEnabled:    true,

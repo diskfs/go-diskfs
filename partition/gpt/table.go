@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/diskfs/go-diskfs/partition/part"
-	"github.com/diskfs/go-diskfs/util"
+	"github.com/diskfs/go-diskfs/storage"
 	uuid "github.com/google/uuid"
 )
 
@@ -463,7 +463,7 @@ func (t *Table) Type() string {
 
 // Write writes a GPT to disk
 // Must be passed the util.File to which to write and the size of the disk
-func (t *Table) Write(f util.File, size int64) error {
+func (t *Table) Write(f storage.WritableFile, size int64) error {
 	// it is possible that we are given a basic new table that we need to initialize
 	if !t.initialized {
 		t.initTable(size)
@@ -540,7 +540,7 @@ func (t *Table) Write(f util.File, size int64) error {
 //
 // if successful, returns a gpt.Table struct
 // returns errors if fails at any stage reading the disk or processing the bytes on disk as a GPT
-func Read(f util.File, logicalBlockSize, physicalBlockSize int) (*Table, error) {
+func Read(f storage.File, logicalBlockSize, physicalBlockSize int) (*Table, error) {
 	// read the data off of the disk - first block is the compatibility MBR, ssecond is the GPT table
 	b := make([]byte, logicalBlockSize*2)
 	read, err := f.ReadAt(b, 0)
@@ -595,7 +595,7 @@ func (t *Table) UUID() string {
 }
 
 // Verify will attempt to evaluate the headers
-func (t *Table) Verify(f util.File, diskSize uint64) error {
+func (t *Table) Verify(f storage.File, diskSize uint64) error {
 	if t.LogicalSectorSize == 0 {
 		// Avoid divide by zero panic.
 		return fmt.Errorf("table is not initialized")

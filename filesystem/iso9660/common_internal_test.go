@@ -4,6 +4,8 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/diskfs/go-diskfs/storage"
 )
 
 const (
@@ -29,7 +31,7 @@ func GetTestFile(t *testing.T) (file *File, name string) {
 		workspace: "",
 		size:      ISO9660Size,
 		start:     0,
-		file:      f,
+		file:      storage.New(f, true),
 		blocksize: 2048,
 	}
 	de := &directoryEntry{
@@ -59,7 +61,7 @@ func GetLargeTestFile(t *testing.T) (file *File, size uint32) {
 		workspace: "",
 		size:      ISO9660Size,
 		start:     0,
-		file:      f,
+		file:      storage.New(f, true),
 		blocksize: 2048,
 	}
 	de := &directoryEntry{

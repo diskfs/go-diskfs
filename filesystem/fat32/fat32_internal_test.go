@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/diskfs/go-diskfs/storage"
 	"github.com/diskfs/go-diskfs/testhelper"
 	"github.com/google/go-cmp/cmp"
 )
@@ -70,12 +71,12 @@ func getValidFat32FSSmall() *FileSystem {
 		},
 		bytesPerCluster: 512,
 		dataStart:       178176,
-		file: &testhelper.FileImpl{
+		file: storage.New(&testhelper.FileImpl{
 			//nolint:revive // unused parameter, keeping name makes it easier to use in the future
 			Writer: func(b []byte, offset int64) (int, error) {
 				return len(b), nil
 			},
-		},
+		}, false),
 		fsis: FSInformationSector{},
 		bootSector: msDosBootSector{
 			biosParameterBlock: &dos71EBPB{
@@ -136,7 +137,7 @@ func TestFat32ReadDirectory(t *testing.T) {
 	defer file.Close()
 	fs := &FileSystem{
 		table:           *getValidFat32Table(),
-		file:            file,
+		file:            storage.New(file, false),
 		bytesPerCluster: int(fsInfo.bytesPerCluster),
 		dataStart:       fsInfo.dataStartBytes,
 	}
@@ -337,7 +338,7 @@ func TestFat32ReadDirWithMkdir(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		fs.file = &testhelper.FileImpl{
+		fs.file = storage.New(&testhelper.FileImpl{
 			//nolint:revive // unused parameter, keeping name makes it easier to use in the future
 			Writer: func(b []byte, offset int64) (int, error) {
 				return len(b), nil
@@ -346,7 +347,8 @@ func TestFat32ReadDirWithMkdir(t *testing.T) {
 				copy(b, datab[offset:])
 				return len(b), nil
 			},
-		}
+		}, false)
+
 		dir, entries, err := fs.readDirWithMkdir(tt.path, tt.doMake)
 		switch {
 		case (err == nil && tt.err != nil) || (err != nil && tt.err == nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):

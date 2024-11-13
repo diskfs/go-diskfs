@@ -7,10 +7,11 @@ package squashfs
 // 3. Take the relevant sizes, locations and inodes and use them here.
 
 import (
+	"io/fs"
 	"os"
 	"time"
 
-	"github.com/diskfs/go-diskfs/util"
+	"github.com/diskfs/go-diskfs/storage"
 )
 
 const (
@@ -143,7 +144,7 @@ var (
 	testLargeDirEntryCount = 252
 )
 
-func testGetFilesystem(f util.File) (*FileSystem, []byte, error) {
+func testGetFilesystem(f fs.File) (*FileSystem, []byte, error) {
 	file := f
 	var (
 		err error
@@ -173,7 +174,7 @@ func testGetFilesystem(f util.File) (*FileSystem, []byte, error) {
 		compressor: &CompressorGzip{},
 		size:       5251072,
 		start:      0,
-		file:       file,
+		file:       storage.New(file, true),
 		blocksize:  blocksize,
 		xattrs:     nil,
 		rootDir: &inodeImpl{
@@ -233,7 +234,7 @@ func testGetFilesystemRoot() []*directoryEntry {
 }
 
 // GetTestFileSmall get a *squashfs.File to a usable and known test file
-func GetTestFileSmall(f util.File, c Compressor) (*File, error) {
+func GetTestFileSmall(f fs.File, c Compressor) (*File, error) {
 	fs, _, err := testGetFilesystem(f)
 	if err != nil {
 		return nil, err
@@ -260,7 +261,7 @@ func GetTestFileSmall(f util.File, c Compressor) (*File, error) {
 }
 
 // GetTestFileBig get a *squashfs.File to a usable and known test file
-func GetTestFileBig(f util.File, c Compressor) (*File, error) {
+func GetTestFileBig(f fs.File, c Compressor) (*File, error) {
 	fs, _, err := testGetFilesystem(f)
 	if err != nil {
 		return nil, err

@@ -9,7 +9,7 @@ import (
 	"path"
 
 	"github.com/diskfs/go-diskfs/filesystem"
-	"github.com/diskfs/go-diskfs/util"
+	"github.com/diskfs/go-diskfs/storage"
 )
 
 const (
@@ -26,7 +26,7 @@ type FileSystem struct {
 	superblock *superblock
 	size       int64
 	start      int64
-	file       util.File
+	file       storage.Storage
 	blocksize  int64
 	compressor Compressor
 	fragments  []*fragmentEntry
@@ -72,7 +72,7 @@ func (fs *FileSystem) Workspace() string {
 // where a partition starts and ends.
 //
 // If the provided blocksize is 0, it will use the default of 128 KB.
-func Create(f util.File, size, start, blocksize int64) (*FileSystem, error) {
+func Create(f storage.WritableFile, size, start, blocksize int64) (*FileSystem, error) {
 	if blocksize == 0 {
 		blocksize = defaultBlockSize
 	}
@@ -94,7 +94,7 @@ func Create(f util.File, size, start, blocksize int64) (*FileSystem, error) {
 		workspace: tmpdir,
 		start:     start,
 		size:      size,
-		file:      f,
+		file:      storage.New(f, false),
 		blocksize: blocksize,
 	}, nil
 }
@@ -145,7 +145,7 @@ func Create(f util.File, size, start, blocksize int64) (*FileSystem, error) {
 // uses this library like this:
 //
 //	rclone -P --transfers 16 --checkers 16 copy :archive:/path/to/tensorflow.sqfs /tmp/tensorflow
-func Read(file util.File, size, start, blocksize int64) (*FileSystem, error) {
+func Read(file storage.File, size, start, blocksize int64) (*FileSystem, error) {
 	var (
 		read int
 		err  error
@@ -211,7 +211,7 @@ func Read(file util.File, size, start, blocksize int64) (*FileSystem, error) {
 		workspace:  "", // no workspace when we do nothing with it
 		start:      start,
 		size:       size,
-		file:       file,
+		file:       storage.New(file, false),
 		superblock: s,
 		blocksize:  int64(s.blocksize), // use the blocksize in the superblock
 		xattrs:     xattrs,
@@ -698,7 +698,7 @@ func validateBlocksize(blocksize int64) error {
 	return nil
 }
 
-func readFragmentTable(s *superblock, file util.File, c Compressor) ([]*fragmentEntry, error) {
+func readFragmentTable(s *superblock, file storage.File, c Compressor) ([]*fragmentEntry, error) {
 	// get the first level index, which is just the pointers to the fragment table metadata blocks
 	blockCount := s.fragmentCount / 512
 	if s.fragmentCount%512 > 0 {
@@ -755,7 +755,7 @@ To read the xattr table:
 6- Read the id metablocks based on the indexes and uncompress if needed
 7- Read all of the xattr metadata. It starts at the location indicated by the header, and ends at the id table
 */
-func readXattrsTable(s *superblock, file util.File, c Compressor) (*xAttrTable, error) {
+func readXattrsTable(s *superblock, file storage.File, c Compressor) (*xAttrTable, error) {
 	// first read the header
 	b := make([]byte, xAttrHeaderSize)
 	read, err := file.ReadAt(b, int64(s.xattrTableStart))
@@ -858,7 +858,7 @@ To read the uids/gids table:
 4- Read the indexes. They are uncompressed, 8 bytes each (uint64); one index per id metablock
 5- Read the id metablocks based on the indexes and uncompress if needed
 */
-func readUidsGids(s *superblock, file util.File, c Compressor) ([]uint32, error) {
+func readUidsGids(s *superblock, file storage.File, c Compressor) ([]uint32, error) {
 	// find out how many xattr IDs we have and where the metadata starts. The table always starts
 	//   with this information
 	idStart := s.idTableStart

@@ -105,11 +105,13 @@ package diskfs
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 
 	log "github.com/sirupsen/logrus"
 
 	"github.com/diskfs/go-diskfs/disk"
+	"github.com/diskfs/go-diskfs/storage"
 )
 
 // when we use a disk image with a GPT, we cannot get the logical sector size from the disk via the kernel
@@ -185,7 +187,7 @@ func writableMode(mode OpenModeOption) bool {
 	return false
 }
 
-func initDisk(f *os.File, openMode OpenModeOption, sectorSize SectorSize) (*disk.Disk, error) {
+func initDisk(f fs.File, openMode OpenModeOption, sectorSize SectorSize) (*disk.Disk, error) {
 	var (
 		diskType      disk.Type
 		size          int64
@@ -203,48 +205,51 @@ func initDisk(f *os.File, openMode OpenModeOption, sectorSize SectorSize) (*disk
 	// get device information
 	devInfo, err := f.Stat()
 	if err != nil {
-		return nil, fmt.Errorf("could not get info for device %s: %v", f.Name(), err)
+		return nil, fmt.Errorf("could not get info for device %s: %v", devInfo.Name(), err)
 	}
 	mode := devInfo.Mode()
+	backingFile := storage.New(f, !writableMode(openMode))
 	switch {
 	case mode.IsRegular():
 		log.Debug("initDisk(): regular file")
 		diskType = disk.File
 		size = devInfo.Size()
 		if size <= 0 {
-			return nil, fmt.Errorf("could not get file size for device %s", f.Name())
+			return nil, fmt.Errorf("could not get file size for device %s", devInfo.Name())
 		}
 	case mode&os.ModeDevice != 0:
 		log.Debug("initDisk(): block device")
 		diskType = disk.Device
-		size, err = getBlockDeviceSize(f)
+		osFile, err := backingFile.Sys()
 		if err != nil {
-			return nil, fmt.Errorf("error getting block device %s size: %s", f.Name(), err)
+			return nil, storage.ErrNotSuitable
 		}
-		lblksize, pblksize, err = getSectorSizes(f)
+
+		size, err = getBlockDeviceSize(osFile)
+		if err != nil {
+			return nil, fmt.Errorf("error getting block device %s size: %s", devInfo.Name(), err)
+		}
+		lblksize, pblksize, err = getSectorSizes(osFile)
 		log.Debugf("initDisk(): logical block size %d, physical block size %d", lblksize, pblksize)
 		defaultBlocks = false
 		if err != nil {
-			return nil, fmt.Errorf("unable to get block sizes for device %s: %v", f.Name(), err)
+			return nil, fmt.Errorf("unable to get block sizes for device %s: %v", devInfo.Name(), err)
 		}
 	default:
-		return nil, fmt.Errorf("device %s is neither a block device nor a regular file", f.Name())
+		return nil, fmt.Errorf("device %s is neither a block device nor a regular file", devInfo.Name())
 	}
 
 	// how many good blocks do we have?
 	//    var goodBlocks, orphanedBlocks int
 	//    goodBlocks = size / lblksize
 
-	writable := writableMode(openMode)
-
 	ret := &disk.Disk{
-		File:              f,
+		File:              backingFile,
 		Info:              devInfo,
 		Type:              diskType,
 		Size:              size,
 		LogicalBlocksize:  lblksize,
 		PhysicalBlocksize: pblksize,
-		Writable:          writable,
 		DefaultBlocks:     defaultBlocks,
 	}
 
@@ -330,6 +335,24 @@ func Open(device string, opts ...OpenOpt) (*disk.Disk, error) {
 	}
 	// return our disk
 	return initDisk(f, ReadWriteExclusive, opt.sectorSize)
+}
+
+// Open a Disk using provided fs.File to a device in read-only mode
+// Use OpenOpt to control options, such as sector size or open mode.
+func OpenFile(f fs.File, opts ...OpenOpt) (*disk.Disk, error) {
+
+	opt := &openOpts{
+		mode:       ReadOnly,
+		sectorSize: SectorSizeDefault,
+	}
+
+	for _, o := range opts {
+		if err := o(opt); err != nil {
+			return nil, err
+		}
+	}
+
+	return initDisk(f, opt.mode, opt.sectorSize)
 }
 
 // Create a Disk from a path to a device

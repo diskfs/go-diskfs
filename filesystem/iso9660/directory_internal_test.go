@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/diskfs/go-diskfs/storage"
 	"github.com/diskfs/go-diskfs/testhelper"
 )
 
@@ -29,7 +30,7 @@ func TestDirectoryEntriesFromBytes(t *testing.T) {
 			return 0, fmt.Errorf("unknown area to read %d", offset)
 		},
 	}
-	fs.file = f
+	fs.file = storage.New(f, true)
 
 	d := &Directory{}
 

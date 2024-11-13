@@ -197,6 +197,17 @@ func (b *byteBufferReader) Seek(offset int64, whence int) (int64, error) {
 	}
 	return int64(b.pos), nil
 }
+func (b *byteBufferReader) Stat() (os.FileInfo, error) {
+	return nil, nil
+}
+
+func (b *byteBufferReader) Read(p []byte) (int, error) {
+	return b.ReadAt(p, 0)
+}
+
+func (b *byteBufferReader) Close() error {
+	return nil
+}
 
 func TestRead(t *testing.T) {
 	t.Run("invalid EFI Partition Checksum", func(t *testing.T) {

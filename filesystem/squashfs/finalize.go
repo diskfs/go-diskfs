@@ -86,7 +86,11 @@ func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 
 	*/
 
-	f := fs.file
+	f, err := fs.file.Writable()
+	if err != nil {
+		return err
+	}
+
 	blocksize := int(fs.blocksize)
 	comp := compressionNone
 	if options.Compression != nil {

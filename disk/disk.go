@@ -18,11 +18,12 @@ import (
 	"github.com/diskfs/go-diskfs/filesystem/iso9660"
 	"github.com/diskfs/go-diskfs/filesystem/squashfs"
 	"github.com/diskfs/go-diskfs/partition"
+	"github.com/diskfs/go-diskfs/storage"
 )
 
 // Disk is a reference to a single disk block device or image that has been Create() or Open()
 type Disk struct {
-	File              *os.File
+	File              storage.Storage
 	Info              os.FileInfo
 	Type              Type
 	Size              int64
@@ -41,10 +42,6 @@ const (
 	File Type = iota
 	// Device is an OS-managed block device
 	Device
-)
-
-var (
-	errIncorrectOpenMode = errors.New("disk file or device not open for write")
 )
 
 // GetPartitionTable retrieves a PartitionTable for a Disk
@@ -68,24 +65,20 @@ func (d *Disk) GetPartitionTable() (partition.Table, error) {
 //
 // Actual writing of the table is delegated to the individual implementation
 func (d *Disk) Partition(table partition.Table) error {
-	if !d.Writable {
-		return errIncorrectOpenMode
+
+	rwBackingFile, err := d.File.Writable()
+	if err != nil {
+		return err
 	}
+
 	// fill in the uuid
-	err := table.Write(d.File, d.Size)
+	err = table.Write(rwBackingFile, d.Size)
 	if err != nil {
 		return fmt.Errorf("failed to write partition table: %v", err)
 	}
 	d.Table = table
-	// the partition table needs to be re-read only if
-	// the disk file is an actual block device
-	if d.Type == Device {
-		err = d.ReReadPartitionTable()
-		if err != nil {
-			return fmt.Errorf("unable to re-read the partition table. Kernel still uses old partition table: %v", err)
-		}
-	}
-	return nil
+
+	return d.ReReadPartitionTable()
 }
 
 // WritePartitionContents writes the contents of an io.Reader to a given partition
@@ -95,8 +88,10 @@ func (d *Disk) Partition(table partition.Table) error {
 // returns an error if there was an error writing to the disk, reading from the reader, the table
 // is invalid, or the partition is invalid
 func (d *Disk) WritePartitionContents(part int, reader io.Reader) (int64, error) {
-	if !d.Writable {
-		return -1, errIncorrectOpenMode
+	backingRwFile, err := d.File.Writable()
+
+	if err != nil {
+		return -1, err
 	}
 	if d.Table == nil {
 		return -1, fmt.Errorf("cannot write contents of a partition on a disk without a partition table")
@@ -109,7 +104,7 @@ func (d *Disk) WritePartitionContents(part int, reader io.Reader) (int64, error)
 	if part > len(partitions) {
 		return -1, fmt.Errorf("cannot write contents of partition %d which is greater than max partition %d", part, len(partitions))
 	}
-	written, err := partitions[part-1].WriteContents(d.File, reader)
+	written, err := partitions[part-1].WriteContents(backingRwFile, reader)
 	return int64(written), err
 }
 
@@ -162,9 +157,13 @@ func (d *Disk) CreateFilesystem(spec FilesystemSpec) (filesystem.FileSystem, err
 	var (
 		size, start int64
 	)
+
+	rwBackingFile, err := d.File.Writable()
+	if err != nil {
+		return nil, err
+	}
+
 	switch {
-	case !d.Writable:
-		return nil, errIncorrectOpenMode
 	case spec.Partition == 0:
 		size = d.Size
 		start = 0
@@ -183,11 +182,11 @@ func (d *Disk) CreateFilesystem(spec FilesystemSpec) (filesystem.FileSystem, err
 
 	switch spec.FSType {
 	case filesystem.TypeFat32:
-		return fat32.Create(d.File, size, start, d.LogicalBlocksize, spec.VolumeLabel)
+		return fat32.Create(rwBackingFile, size, start, d.LogicalBlocksize, spec.VolumeLabel)
 	case filesystem.TypeISO9660:
-		return iso9660.Create(d.File, size, start, d.LogicalBlocksize, spec.WorkDir)
+		return iso9660.Create(rwBackingFile, size, start, d.LogicalBlocksize, spec.WorkDir)
 	case filesystem.TypeExt4:
-		return ext4.Create(d.File, size, start, d.LogicalBlocksize, nil)
+		return ext4.Create(rwBackingFile, size, start, d.LogicalBlocksize, nil)
 	case filesystem.TypeSquashfs:
 		return nil, filesystem.ErrReadonlyFilesystem
 	default:

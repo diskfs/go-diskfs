@@ -20,6 +20,7 @@ import (
 	"github.com/diskfs/go-diskfs/partition"
 	"github.com/diskfs/go-diskfs/partition/gpt"
 	"github.com/diskfs/go-diskfs/partition/mbr"
+	"github.com/diskfs/go-diskfs/storage"
 )
 
 var (
@@ -70,7 +71,7 @@ func TestGetPartitionTable(t *testing.T) {
 	defer f.Close()
 
 	d := &disk.Disk{
-		File:              f,
+		File:              storage.New(f, false),
 		LogicalBlocksize:  512,
 		PhysicalBlocksize: 512,
 		Writable:          false,
@@ -109,7 +110,7 @@ func TestPartition(t *testing.T) {
 		}
 
 		d := &disk.Disk{
-			File:              f,
+			File:              storage.New(f, false),
 			LogicalBlocksize:  512,
 			PhysicalBlocksize: 512,
 			Info:              fileInfo,
@@ -152,7 +153,7 @@ func TestPartition(t *testing.T) {
 		}
 
 		d := &disk.Disk{
-			File:              f,
+			File:              storage.New(f, false),
 			LogicalBlocksize:  512,
 			PhysicalBlocksize: 512,
 			Info:              fileInfo,
@@ -232,7 +233,7 @@ func TestWritePartitionContents(t *testing.T) {
 				}
 
 				d := &disk.Disk{
-					File:              f,
+					File:              storage.New(f, false),
 					LogicalBlocksize:  512,
 					PhysicalBlocksize: 512,
 					Info:              fileInfo,
@@ -318,7 +319,7 @@ func TestReadPartitionContents(t *testing.T) {
 				_, _ = f.ReadAt(b2, int64(partitionStart*512))
 
 				d := &disk.Disk{
-					File:              f,
+					File:              storage.New(f, false),
 					LogicalBlocksize:  512,
 					PhysicalBlocksize: 512,
 					Info:              fileInfo,
@@ -391,7 +392,7 @@ func TestReadPartitionContents(t *testing.T) {
 				_, _ = f.ReadAt(b2, int64(partitionStart*512))
 
 				d := &disk.Disk{
-					File:              f,
+					File:              storage.New(f, false),
 					LogicalBlocksize:  512,
 					PhysicalBlocksize: 512,
 					Info:              fileInfo,
@@ -439,7 +440,7 @@ func TestCreateFilesystem(t *testing.T) {
 		}
 
 		d := &disk.Disk{
-			File:              f,
+			File:              storage.New(f, false),
 			LogicalBlocksize:  512,
 			PhysicalBlocksize: 512,
 			Info:              fileInfo,
@@ -473,7 +474,7 @@ func TestCreateFilesystem(t *testing.T) {
 		}
 
 		d := &disk.Disk{
-			File:              f,
+			File:              storage.New(f, false),
 			LogicalBlocksize:  512,
 			PhysicalBlocksize: 512,
 			Info:              fileInfo,
@@ -515,7 +516,7 @@ func TestCreateFilesystem(t *testing.T) {
 			LogicalSectorSize: 512,
 		}
 		d := &disk.Disk{
-			File:              f,
+			File:              storage.New(f, false),
 			LogicalBlocksize:  512,
 			PhysicalBlocksize: 512,
 			Info:              fileInfo,
@@ -563,7 +564,7 @@ func TestGetFilesystem(t *testing.T) {
 		}
 
 		d := &disk.Disk{
-			File:              f,
+			File:              storage.New(f, false),
 			LogicalBlocksize:  512,
 			PhysicalBlocksize: 512,
 			Info:              fileInfo,
@@ -609,7 +610,7 @@ func TestGetFilesystem(t *testing.T) {
 		}
 
 		d := &disk.Disk{
-			File:              f,
+			File:              storage.New(f, false),
 			LogicalBlocksize:  512,
 			PhysicalBlocksize: 512,
 			Info:              fileInfo,
@@ -651,7 +652,7 @@ func TestGetFilesystem(t *testing.T) {
 			LogicalSectorSize: 512,
 		}
 		d := &disk.Disk{
-			File:              f,
+			File:              storage.New(f, false),
 			LogicalBlocksize:  512,
 			PhysicalBlocksize: 512,
 			Info:              fileInfo,

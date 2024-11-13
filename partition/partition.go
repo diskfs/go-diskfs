@@ -7,11 +7,11 @@ import (
 
 	"github.com/diskfs/go-diskfs/partition/gpt"
 	"github.com/diskfs/go-diskfs/partition/mbr"
-	"github.com/diskfs/go-diskfs/util"
+	"github.com/diskfs/go-diskfs/storage"
 )
 
 // Read read a partition table from a disk
-func Read(f util.File, logicalBlocksize, physicalBlocksize int) (Table, error) {
+func Read(f storage.File, logicalBlocksize, physicalBlocksize int) (Table, error) {
 	// just try each type
 	gptTable, err := gpt.Read(f, logicalBlocksize, physicalBlocksize)
 	if err == nil {

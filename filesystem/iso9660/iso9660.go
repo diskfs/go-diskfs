@@ -7,7 +7,7 @@ import (
 	"path"
 
 	"github.com/diskfs/go-diskfs/filesystem"
-	"github.com/diskfs/go-diskfs/util"
+	"github.com/diskfs/go-diskfs/storage"
 )
 
 const (
@@ -23,7 +23,7 @@ type FileSystem struct {
 	workspace      string
 	size           int64
 	start          int64
-	file           util.File
+	file           storage.Storage
 	blocksize      int64
 	volumes        volumeDescriptors
 	pathTable      *pathTable
@@ -60,7 +60,7 @@ func (fsm *FileSystem) Workspace() string {
 // where a partition starts and ends.
 //
 // If the provided blocksize is 0, it will use the default of 2 KB.
-func Create(f util.File, size, start, blocksize int64, workspace string) (*FileSystem, error) {
+func Create(f storage.WritableFile, size, start, blocksize int64, workspace string) (*FileSystem, error) {
 	if blocksize == 0 {
 		blocksize = defaultSectorSize
 	}
@@ -103,7 +103,7 @@ func Create(f util.File, size, start, blocksize int64, workspace string) (*FileS
 		workspace: workdir,
 		start:     start,
 		size:      size,
-		file:      f,
+		file:      storage.New(f, false),
 		volumes:   volumeDescriptors{},
 		blocksize: blocksize,
 	}, nil
@@ -124,7 +124,7 @@ func Create(f util.File, size, start, blocksize int64, workspace string) (*FileS
 // where a partition starts and ends.
 //
 // If the provided blocksize is 0, it will use the default of 2K bytes
-func Read(file util.File, size, start, blocksize int64) (*FileSystem, error) {
+func Read(file storage.File, size, start, blocksize int64) (*FileSystem, error) {
 	var read int
 
 	if blocksize == 0 {
@@ -235,7 +235,7 @@ func Read(file util.File, size, start, blocksize int64) (*FileSystem, error) {
 	// parse it - we do not have any handlers yet
 	de, err := parseDirEntry(b, &FileSystem{
 		suspEnabled: true,
-		file:        file,
+		file:        storage.New(file, true),
 		blocksize:   blocksize,
 	})
 	if err != nil {
@@ -266,7 +266,7 @@ func Read(file util.File, size, start, blocksize int64) (*FileSystem, error) {
 		workspace: "", // no workspace when we do nothing with it
 		start:     start,
 		size:      size,
-		file:      file,
+		file:      storage.New(file, true),
 		volumes: volumeDescriptors{
 			descriptors: vds,
 			primary:     pvd,

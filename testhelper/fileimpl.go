@@ -1,6 +1,9 @@
 package testhelper
 
-import "fmt"
+import (
+	"fmt"
+	"os"
+)
 
 type reader func(b []byte, offset int64) (int, error)
 type writer func(b []byte, offset int64) (int, error)
@@ -10,6 +13,18 @@ type writer func(b []byte, offset int64) (int, error)
 type FileImpl struct {
 	Reader reader
 	Writer writer
+}
+
+func (f *FileImpl) Stat() (os.FileInfo, error) {
+	return nil, nil
+}
+
+func (f *FileImpl) Read(b []byte) (int, error) {
+	return f.Reader(b, 0)
+}
+
+func (f *FileImpl) Close() error {
+	return nil
 }
 
 // ReadAt read at a particular offset

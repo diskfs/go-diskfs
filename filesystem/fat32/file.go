@@ -106,7 +106,13 @@ func (fl *File) Write(p []byte) (int, error) {
 	if fl == nil || fl.filesystem == nil {
 		return 0, os.ErrClosed
 	}
+
 	totalWritten := 0
+	writableFile, err := fl.filesystem.file.Writable()
+	if err != nil {
+		return totalWritten, err
+	}
+
 	fs := fl.filesystem
 	// if the file was not opened RDWR, nothing we can do
 	if !fl.isReadWrite {
@@ -131,7 +137,6 @@ func (fl *File) Write(p []byte) (int, error) {
 	}
 	// write the content for the file
 	bytesPerCluster := fl.filesystem.bytesPerCluster
-	file := fl.filesystem.file
 	start := int(fl.filesystem.dataStart)
 	clusterIndex := 0
 
@@ -148,7 +153,7 @@ func (fl *File) Write(p []byte) (int, error) {
 			if toWrite > int64(len(p)) {
 				toWrite = int64(len(p))
 			}
-			_, err := file.WriteAt(p[0:toWrite], offset+fs.start)
+			_, err := writableFile.WriteAt(p[0:toWrite], offset+fs.start)
 			if err != nil {
 				return totalWritten, fmt.Errorf("unable to write to file: %v", err)
 			}
@@ -164,7 +169,7 @@ func (fl *File) Write(p []byte) (int, error) {
 			toWrite = left
 		}
 		offset := int64(start) + int64(clusters[i]-2)*int64(bytesPerCluster)
-		_, err := file.WriteAt(p[totalWritten:totalWritten+toWrite], offset+fs.start)
+		_, err := writableFile.WriteAt(p[totalWritten:totalWritten+toWrite], offset+fs.start)
 		if err != nil {
 			return totalWritten, fmt.Errorf("unable to write to file: %v", err)
 		}

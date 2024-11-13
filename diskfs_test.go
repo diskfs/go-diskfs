@@ -109,16 +109,22 @@ func TestGPTOpen(t *testing.T) {
 
 	for _, tt := range tests {
 		d, err := diskfs.Open(tt.path)
+
 		msg := fmt.Sprintf("Open(%s)", tt.path)
 		checkDiskfsErrs(t, msg, err, tt.err, d, tt.disk)
+
 		if d != nil {
 			table, err := d.GetPartitionTable()
 			if err != nil {
 				t.Errorf("%s: mismatched errors, actual %v expected %v", msg, err, tt.err)
 			}
 
+			backingFile, err := d.File.Writable()
+			if err != nil {
+				t.Fatal(err)
+			}
 			// Verify will compare the GPT table to the disk and attempt to read the secondary header if possible
-			err = table.Verify(d.File, uint64(tt.disk.Size))
+			err = table.Verify(backingFile, uint64(tt.disk.Size))
 			if err != nil {
 				// We log this as it's epected to be an error
 				t.Logf("%s: mismatched errors, actual %v expected %v", msg, err, tt.err)
@@ -131,13 +137,13 @@ func TestGPTOpen(t *testing.T) {
 			}
 
 			// Update both tables on disk
-			err = table.Write(d.File, tt.disk.Size)
+			err = table.Write(backingFile, tt.disk.Size)
 			if err != nil {
 				t.Errorf("%s: mismatched errors, actual %v expected %v", msg, err, tt.err)
 			}
 
 			// Check that things are as expected.
-			err = table.Verify(d.File, uint64(tt.disk.Size))
+			err = table.Verify(backingFile, uint64(tt.disk.Size))
 			if err != nil {
 				t.Errorf("%s: mismatched errors, actual %v expected %v", msg, err, tt.err)
 			}

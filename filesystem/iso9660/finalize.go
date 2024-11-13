@@ -463,7 +463,11 @@ func (fsm *FileSystem) Finalize(options FinalizeOptions) error {
 		 10- write volume descriptor set terminator
 	*/
 
-	f := fsm.file
+	f, err := fsm.file.Writable()
+	if err != nil {
+		return err
+	}
+
 	blocksize := int(fsm.blocksize)
 
 	// 1- blank out sectors 0-15

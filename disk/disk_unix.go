@@ -18,10 +18,19 @@ const (
 //
 // It is done via an ioctl call with request as BLKRRPART.
 func (d *Disk) ReReadPartitionTable() error {
-	fd := d.File.Fd()
-	_, err := unix.IoctlGetInt(int(fd), blkrrpart)
-	if err != nil {
-		return fmt.Errorf("unable to re-read partition table: %v", err)
+	// the partition table needs to be re-read only if
+	// the disk file is an actual block device
+	if d.Type == Device {
+		osFile, err := d.File.Sys()
+		if err != nil {
+			return err
+		}
+		fd := osFile.Fd()
+		_, err = unix.IoctlGetInt(int(fd), blkrrpart)
+		if err != nil {
+			return fmt.Errorf("unable to re-read the partition table. Kernel still uses old partition table: %v", err)
+		}
 	}
+
 	return nil
 }

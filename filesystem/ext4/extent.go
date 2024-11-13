@@ -680,8 +680,13 @@ func writeNodeToDisk(node extentBlockFinder, fs *FileSystem, parent *extentInter
 		return fmt.Errorf("block number not found for node")
 	}
 
+	writableFile, err := fs.file.Writable()
+	if err != nil {
+		return err
+	}
+
 	data := node.toBytes()
-	_, err := fs.file.WriteAt(data, int64(blockNumber)*int64(fs.superblock.blockSize))
+	_, err = writableFile.WriteAt(data, int64(blockNumber)*int64(fs.superblock.blockSize))
 	return err
 }
 
