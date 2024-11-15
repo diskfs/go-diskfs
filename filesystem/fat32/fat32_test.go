@@ -1261,6 +1261,29 @@ func Test_Rename(t *testing.T) {
 				dstFile = "new.txt"
 			},
 		},
+		{
+			name:     "rename a non empty directory",
+			hasError: false,
+			pre: func(t *testing.T, fs *fat32.FileSystem) {
+				fs.Mkdir(filepath.Join(workingPath, srcFile))
+				// create file in directory which is going to be moved
+				createFile(t, fs, filepath.Join(srcFile, "/test.txt"), "FooBar")
+			},
+			post: func(t *testing.T, fs *fat32.FileSystem) {
+				_, err := fs.ReadDir(filepath.Join(workingPath, srcFile))
+				if err == nil {
+					t.Fatalf("source directory does exist: %+v", err)
+				}
+				_, err = fs.ReadDir(filepath.Join(workingPath, dstFile))
+				if err != nil {
+					t.Fatalf("destination directory does not exist: %+v", err)
+				}
+				content := readFile(t, fs, filepath.Join(dstFile, "/test.txt"))
+				if content != "FooBar" {
+					t.Fatalf("Content should be '%s', but is '%s'", "FooBar", content)
+				}
+			},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

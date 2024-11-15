@@ -734,10 +734,6 @@ func (fs *FileSystem) Rename(oldpath, newpath string) error {
 		if e.filenameLong != filename && shortName != filename {
 			continue
 		}
-		// cannot do anything with directories
-		if e.isSubdirectory {
-			return fmt.Errorf("cannot open directory %s as file", oldpath)
-		}
 		// if we got this far, we have found the file
 		targetEntry = e
 	}
