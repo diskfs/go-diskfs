@@ -58,6 +58,7 @@ func TestLRU(t *testing.T) {
 		assertEmpty(true)
 	})
 
+	//nolint:revive // t is unused, but it should be kept here for the signature
 	t.Run("Unlink", func(t *testing.T) {
 		assertEmpty(true)
 		block := &lruBlock{

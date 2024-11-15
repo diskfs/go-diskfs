@@ -1,7 +1,7 @@
 # ext4
 This file describes the layout on disk of ext4. It is a living document and probably will be deleted rather than committed to git.
 
-The primary reference document is [here](https://ext4.wiki.kernel.org/index.php/Ext4_Disk_Layout#Overview).
+The primary reference document is [here](https://ext4.wiki.kernel.org/index.php/Ext4_Disk_Layout).
 
 Also useful are:
 
@@ -276,8 +276,20 @@ When removing an entry, you only ever need to rebalance the node from which you 
    1. Move the median up to the parent node
    1. If necessary, rebalance the parent node
 
-### Convert Classical Linear to Hash Tree
+### Convert Classical Linear Directory Entries to Hash Tree
 
+The conversion usually happens when a single entry will exceed the capacity of a single block.
+
+1. Switch the flag in the inode to hash-tree
+1. Calculate the hash of each entry
+1. Create 2 new blocks:
+   * 1 for the bottom half of the entries
+   * 1 for the top half of the entries
+1. Move the bottom half of the entries into the bottom block
+1. Move the top half of the entries into the top block
+1. Zero out the current single file block, which previously had the classic linear directory entries
+1. Write the header into the tree block, with the 0-hash-value pointing to the bottom block
+1. Write one entry after the header, for the lowest hash value of the upper block, pointing to the upper block
 
 ### Read File Contents
 
@@ -287,4 +299,37 @@ When removing an entry, you only ever need to rebalance the node from which you 
 
 ### Create File
 
+1. Walk the tree until you find the inode for the parent directory.
+1. Find a free inode using the inode bitmap.
+1. Find a free block using the block bitmap.
+1. Create the inode for the new file in the inode table. Be sure to update all the dependencies:
+   * inode bitmap
+   * inode table
+   * inode count in the block group table
+   * inode count in the superblock
+1. Reserve a data block for the new file in the block group table. Be sure to update all the dependencies:
+   * block bitmap
+   * block count in the block group table
+   * block count in the superblock
+1. Create the file entry in the parent directory. Depends on if this is classic linear directory or hash tree directory. Note that if it is classic linear, calculate the new size before writing the entry. If it is bigger than a single block, convert to hash tree. TODO: is this the right boundary, single block?
+   * Classic linear directory:
+     1. Find the last block in the parent directory "file"
+     1. Add a classical linear directory entry at the end of it
+     1. Update the inode for the parent directory with the new file size
+   * Hash tree directory:
+     1. Calculate the hash of the new directory entry name
+     1. Determine which block in the parent directory "file" the new entry should live, based on the hash table
+     1. Find the block
+     1. Add a classical linear entry at the end of it
+     1. Update the inode for the parent directory with the new file size
+
+
 ### Write File Contents
+
+1. Walk the tree until you find the inode for the file you want.
+1. Find the data blocks for that inode, see [inode to data blocks](#inode-to-data-blocks).
+1. Write the data to the data blocks.
+1. If the data written exceeds the end of the last block, reserve a new block, update the inode extent tree, and write the data to the new block.
+1. Update the inode with the filesize
+1. Update the block group table with the used blocks
+1. Update the superblock with the used blocks

@@ -36,7 +36,7 @@ func (d *Directory) toBytes(bytesPerBlock uint32, checksumFunc checksumAppender)
 		switch {
 		case len(block)+len(b2) > int(bytesPerBlock)-minDirEntryLength:
 			// if adding this one will go past the end of the block, pad out the previous
-			block = b[:len(block)-previousLength]
+			block = block[:len(block)-previousLength]
 			previousB := previousEntry.toBytes(uint16(int(bytesPerBlock) - len(block) - minDirEntryLength))
 			block = append(block, previousB...)
 			// add the checksum

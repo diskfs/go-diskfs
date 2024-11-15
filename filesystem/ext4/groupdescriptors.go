@@ -1,8 +1,10 @@
 package ext4
 
 import (
+	"cmp"
 	"encoding/binary"
 	"fmt"
+	"slices"
 
 	"github.com/diskfs/go-diskfs/filesystem/ext4/crc"
 )
@@ -114,6 +116,21 @@ func (gds *groupDescriptors) toBytes(checksumType gdtChecksumType, hashSeed uint
 	}
 
 	return b
+}
+
+// byFreeBlocks provides a sorted list of groupDescriptors by free blocks, descending.
+// If you want them ascending, sort if.
+func (gds *groupDescriptors) byFreeBlocks() []groupDescriptor {
+	// make a copy of the slice
+	gdSlice := make([]groupDescriptor, len(gds.descriptors))
+	copy(gdSlice, gds.descriptors)
+
+	// sort the slice
+	slices.SortFunc(gdSlice, func(a, b groupDescriptor) int {
+		return cmp.Compare(a.freeBlocks, b.freeBlocks)
+	})
+
+	return gdSlice
 }
 
 // groupDescriptorFromBytes create a groupDescriptor struct from bytes

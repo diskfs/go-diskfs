@@ -49,7 +49,7 @@ func (fs *FileSystem) Label() string {
 }
 
 func (fs *FileSystem) SetLabel(string) error {
-	return fmt.Errorf("SquashFS filesystem is read-only")
+	return filesystem.ErrReadonlyFilesystem
 }
 
 // Workspace get the workspace path
@@ -229,6 +229,9 @@ func Read(file util.File, size, start, blocksize int64) (*FileSystem, error) {
 	return fs, nil
 }
 
+// interface guard
+var _ filesystem.FileSystem = (*FileSystem)(nil)
+
 // Type returns the type code for the filesystem. Always returns filesystem.TypeFat32
 func (fs *FileSystem) Type() filesystem.Type {
 	return filesystem.TypeSquashfs
@@ -266,7 +269,7 @@ func (fs *FileSystem) GetCacheSize() int {
 // if readonly and not in workspace, will return an error
 func (fs *FileSystem) Mkdir(p string) error {
 	if fs.workspace == "" {
-		return fmt.Errorf("cannot write to read-only filesystem")
+		return filesystem.ErrReadonlyFilesystem
 	}
 	err := os.MkdirAll(path.Join(fs.workspace, p), 0o755)
 	if err != nil {
@@ -274,6 +277,50 @@ func (fs *FileSystem) Mkdir(p string) error {
 	}
 	// we are not interesting in returning the entries
 	return err
+}
+
+// creates a filesystem node (file, device special file, or named pipe) named pathname,
+// with attributes specified by mode and dev
+//
+//nolint:revive // parameters will be used eventually
+func (fs *FileSystem) Mknod(pathname string, mode uint32, dev int) error {
+	// https://dr-emann.github.io/squashfs/squashfs.html#_device_special_files
+	// https://dr-emann.github.io/squashfs/squashfs.html#_ipc_inodes_fifo_or_socket
+	return filesystem.ErrNotImplemented
+}
+
+// creates a new link (also known as a hard link) to an existing file.
+//
+//nolint:revive // parameters will be used eventually
+func (fs *FileSystem) Link(oldpath, newpath string) error {
+	// https://dr-emann.github.io/squashfs/squashfs.html#_symbolic_links
+	return filesystem.ErrNotImplemented
+}
+
+// creates a symbolic link named linkpath which contains the string target.
+//
+//nolint:revive // parameters will be used eventually
+func (fs *FileSystem) Symlink(oldpath, newpath string) error {
+	// https://dr-emann.github.io/squashfs/squashfs.html#_symbolic_links
+	return filesystem.ErrNotImplemented
+}
+
+// Chmod changes the mode of the named file to mode. If the file is a symbolic link,
+// it changes the mode of the link's target.
+//
+//nolint:revive // parameters will be used eventually
+func (fs *FileSystem) Chmod(name string, mode os.FileMode) error {
+	// https://dr-emann.github.io/squashfs/squashfs.html#_common_inode_header
+	return filesystem.ErrNotImplemented
+}
+
+// Chown changes the numeric uid and gid of the named file. If the file is a symbolic link,
+// it changes the uid and gid of the link's target. A uid or gid of -1 means to not change that value
+//
+//nolint:revive // parameters will be used eventually
+func (fs *FileSystem) Chown(name string, uid, gid int) error {
+	// https://dr-emann.github.io/squashfs/squashfs.html#_id_table
+	return filesystem.ErrNotImplemented
 }
 
 // ReadDir return the contents of a given directory in a given filesystem.
@@ -336,7 +383,7 @@ func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 	writeMode := flag&os.O_WRONLY != 0 || flag&os.O_RDWR != 0 || flag&os.O_APPEND != 0 || flag&os.O_CREATE != 0 || flag&os.O_TRUNC != 0 || flag&os.O_EXCL != 0
 	if fs.workspace == "" {
 		if writeMode {
-			return nil, fmt.Errorf("cannot write to read-only filesystem")
+			return nil, filesystem.ErrReadonlyFilesystem
 		}
 
 		// get the directory entries
@@ -377,6 +424,21 @@ func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 	}
 
 	return f, nil
+}
+
+// Rename renames (moves) oldpath to newpath. If newpath already exists and is not a directory, Rename replaces it.
+func (fs *FileSystem) Rename(oldpath, newpath string) error {
+	if fs.workspace == "" {
+		return filesystem.ErrReadonlyFilesystem
+	}
+	return os.Rename(path.Join(fs.workspace, oldpath), path.Join(fs.workspace, newpath))
+}
+
+func (fs *FileSystem) Remove(p string) error {
+	if fs.workspace == "" {
+		return filesystem.ErrReadonlyFilesystem
+	}
+	return os.Remove(path.Join(fs.workspace, p))
 }
 
 func (fs *FileSystem) RemoveFile(p string) error {

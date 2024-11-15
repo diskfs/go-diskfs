@@ -16,6 +16,8 @@ dd if=/dev/zero of=two-k-file.dat bs=1024 count=2
 dd if=/dev/zero of=six-k-file.dat bs=1024 count=6
 dd if=/dev/zero of=seven-k-file.dat bs=1024 count=7
 dd if=/dev/zero of=ten-meg-file.dat bs=1M count=10
+echo "This is a subdir file" > foo/subdirfile.txt
+# `set +x` and then `set -x` because otherwie the logs are overloaded with creating 10000 directories
 set +x
 i=0; until [ $i -gt 10000 ]; do mkdir foo/dir${i}; i=$(( $i+1 )); done
 set -x
@@ -41,4 +43,5 @@ dd if=ext4.img of=gdt.bin bs=1024 count=1 skip=2
 dd if=ext4.img of=superblock.bin bs=1024 count=1 skip=1
 dd if=superblock.bin bs=1 skip=208 count=16 2>/dev/null | hexdump -e '16/1 "%02x" "\n"' > journaluuid.txt
 dd if=superblock.bin   bs=1 skip=$((0x10c)) count=$((15 * 4)) | hexdump -e '15/4 "0x%08x, " "\n"' > journalinodex.txt
+dd if=superblock.bin count=2 skip=376 bs=1 2>/dev/null| hexdump -e '1/2 "%u"' > lifetime_kb.txt
 EOF

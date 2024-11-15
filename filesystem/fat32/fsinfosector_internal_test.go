@@ -10,8 +10,8 @@ import (
 
 func getValidFSInfoSector() *FSInformationSector {
 	return &FSInformationSector{
-		freeDataClustersCount: 20007,
-		lastAllocatedCluster:  126,
+		freeDataClustersCount: fsInfo.freeSectorCount,
+		lastAllocatedCluster:  fsInfo.nextFreeSector,
 	}
 }
 

@@ -10,7 +10,7 @@ import (
 
 	"github.com/diskfs/go-diskfs/filesystem/ext4/crc"
 	"github.com/diskfs/go-diskfs/util"
-	uuid "github.com/satori/go.uuid"
+	"github.com/google/uuid"
 )
 
 type filesystemState uint16
@@ -430,7 +430,7 @@ func superblockFromBytes(b []byte) (*superblock, error) {
 	sb.checksumSeed = binary.LittleEndian.Uint32(b[0x270:0x274])
 	// what if the seed is missing? It can be.
 	if sb.features.metadataChecksums && sb.checksumSeed == 0 {
-		sb.checksumSeed = crc.CRC32c(0xffffffff, sb.uuid.Bytes())
+		sb.checksumSeed = crc.CRC32c(0xffffffff, sb.uuid[:])
 	}
 
 	sb.filenameCharsetEncoding = binary.LittleEndian.Uint16(b[0x27c:0x27e])
@@ -546,7 +546,7 @@ func (sb *superblock) toBytes() ([]byte, error) {
 	binary.LittleEndian.PutUint16(b[0x5a:0x5c], sb.blockGroup)
 
 	if sb.uuid != nil {
-		copy(b[0x68:0x78], sb.uuid.Bytes())
+		copy(b[0x68:0x78], sb.uuid[:])
 	}
 
 	ab, err := stringToASCIIBytes(sb.volumeLabel, 16)
@@ -567,7 +567,7 @@ func (sb *superblock) toBytes() ([]byte, error) {
 	binary.LittleEndian.PutUint16(b[0xce:0xd0], sb.reservedGDTBlocks)
 
 	if sb.journalSuperblockUUID != nil {
-		copy(b[0xd0:0xe0], sb.journalSuperblockUUID.Bytes())
+		copy(b[0xd0:0xe0], sb.journalSuperblockUUID[:])
 	}
 
 	binary.LittleEndian.PutUint32(b[0xe0:0xe4], sb.journalInode)
@@ -700,7 +700,12 @@ func (sb *superblock) gdtChecksumType() gdtChecksumType {
 }
 
 func (sb *superblock) blockGroupCount() uint64 {
-	return sb.blockCount / uint64(sb.blocksPerGroup)
+	whole := sb.blockCount / uint64(sb.blocksPerGroup)
+	part := sb.blockCount % uint64(sb.blocksPerGroup)
+	if part > 0 {
+		whole++
+	}
+	return whole
 }
 
 // calculateBackupSuperblocks calculate which block groups should have backup superblocks.

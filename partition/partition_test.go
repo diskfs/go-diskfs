@@ -24,8 +24,8 @@ func TestRead(t *testing.T) {
 		{"./gpt/testdata/gpt.img", "gpt", nil},
 		{"", "", fmt.Errorf("unknown disk partition type")},
 	}
-	for _, tt := range tests {
-		tt := tt
+	for _, t2 := range tests {
+		tt := t2
 		t.Run(tt.tableType, func(t *testing.T) {
 			// create a blank file if we did not provide a path to a test file
 			var f *os.File

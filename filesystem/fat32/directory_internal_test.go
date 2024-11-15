@@ -5,19 +5,17 @@ import (
 	"fmt"
 	"testing"
 	"time"
+
+	"github.com/diskfs/go-diskfs/util"
+	"github.com/google/go-cmp/cmp"
 )
 
 // TestDirectoryEntriesFromBytes largely a duplicate of TestdirectoryEntryParseDirEntries
 // it just loads it into the Directory structure
 func TestDirectoryEntriesFromBytes(t *testing.T) {
-	validDe, validBytes, err := getValidDirectoryEntries()
+	validDe, b, err := GetValidDirectoryEntries()
 	if err != nil {
 		t.Fatal(err)
-	}
-	// validBytes is ordered [][]byte - just string them all together
-	b := make([]byte, 0)
-	for _, b2 := range validBytes {
-		b = append(b, b2...)
 	}
 
 	d := &Directory{}
@@ -34,23 +32,17 @@ func TestDirectoryEntriesFromBytes(t *testing.T) {
 		for i, de := range d.entries {
 			if *de != *validDe[i] {
 				t.Errorf("%d: directoryEntry mismatch, actual then valid:", i)
-				t.Logf("%#v", *de)
-				t.Logf("%#v", *validDe[i])
+				t.Log(cmp.Diff(*de, *validDe[i], cmp.AllowUnexported(directoryEntry{})))
 			}
 		}
 	}
 }
 
 func TestDirectoryEntriesToBytes(t *testing.T) {
-	validDe, validBytes, err := getValidDirectoryEntries()
-	bytesPerCluster := 2048
+	validDe, b, err := GetValidDirectoryEntries()
+	bytesPerCluster := 512
 	if err != nil {
 		t.Fatal(err)
-	}
-	// validBytes is ordered [][]byte - just string them all together
-	b := make([]byte, 0)
-	for _, b2 := range validBytes {
-		b = append(b, b2...)
 	}
 	d := &Directory{
 		entries: validDe,
@@ -71,9 +63,10 @@ func TestDirectoryEntriesToBytes(t *testing.T) {
 	case len(output) != len(b):
 		t.Errorf("mismatched byte slice length actual %d, expected %d", len(output), len(b))
 	case !bytes.Equal(output, b):
-		t.Errorf("Mismatched output of bytes. Actual then expected:")
-		t.Logf("%v", output)
-		t.Logf("%v", b)
+		diff, diffString := util.DumpByteSlicesWithDiffs(output, b, 32, false, true, true)
+		if diff {
+			t.Errorf("directory.toBytes() mismatched, actual then expected\n%s", diffString)
+		}
 	}
 }
 

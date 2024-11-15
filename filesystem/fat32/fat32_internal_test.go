@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/diskfs/go-diskfs/testhelper"
+	"github.com/google/go-cmp/cmp"
 )
 
 /*
@@ -15,6 +16,15 @@ import (
   test when fat32 is inside a partition
 	in that case, the dataStart is relative to partition, not to disk, so need to read the offset correctly
 */
+
+func clustersFromMap(m map[uint32]uint32, maxCluster uint32) []uint32 {
+	clusters := make([]uint32, maxCluster+1)
+	for k, v := range m {
+		clusters[k] = v
+	}
+
+	return clusters
+}
 
 func getValidFat32FSFull() *FileSystem {
 	fs := getValidFat32FSSmall()
@@ -24,11 +34,12 @@ func getValidFat32FSFull() *FileSystem {
 
 func getValidFat32FSSmall() *FileSystem {
 	eoc := uint32(0xffffffff)
+	maxCluster := uint32(128)
 	fs := &FileSystem{
 		table: table{
 			rootDirCluster: 2,
 			size:           512,
-			maxCluster:     128,
+			maxCluster:     maxCluster,
 			eocMarker:      eoc,
 			/*
 				 map:
@@ -39,8 +50,9 @@ func getValidFat32FSSmall() *FileSystem {
 					 11
 					 15
 					 16-broken
+					 17-broken
 			*/
-			clusters: map[uint32]uint32{
+			clusters: clustersFromMap(map[uint32]uint32{
 				2:  eoc,
 				3:  4,
 				4:  5,
@@ -52,12 +64,14 @@ func getValidFat32FSSmall() *FileSystem {
 				9:  11,
 				11: eoc,
 				15: eoc,
-				16: 0,
-			},
+				16: 1,
+				17: 999,
+			}, maxCluster),
 		},
 		bytesPerCluster: 512,
 		dataStart:       178176,
 		file: &testhelper.FileImpl{
+			//nolint:revive // unused parameter, keeping name makes it easier to use in the future
 			Writer: func(b []byte, offset int64) (int, error) {
 				return len(b), nil
 			},
@@ -78,6 +92,7 @@ func getValidFat32FSSmall() *FileSystem {
 	}
 	return fs
 }
+
 func TestFat32GetClusterList(t *testing.T) {
 	fs := getValidFat32FSSmall()
 
@@ -122,14 +137,14 @@ func TestFat32ReadDirectory(t *testing.T) {
 	fs := &FileSystem{
 		table:           *getValidFat32Table(),
 		file:            file,
-		bytesPerCluster: 512,
-		dataStart:       178176,
+		bytesPerCluster: int(fsInfo.bytesPerCluster),
+		dataStart:       fsInfo.dataStartBytes,
 	}
-	validDe, _, err := getValidDirectoryEntries()
+	validDe, _, err := GetValidDirectoryEntries()
 	if err != nil {
 		t.Fatalf("unable to read valid directory entries: %v", err)
 	}
-	validDeExtended, _, err := getValidDirectoryEntriesExtended()
+	validDeExtended, _, err := GetValidDirectoryEntriesExtended("/foo")
 	if err != nil {
 		t.Fatalf("unable to read valid directory entries extended: %v", err)
 	}
@@ -159,8 +174,7 @@ func TestFat32ReadDirectory(t *testing.T) {
 			for i, entry := range entries {
 				if !compareDirectoryEntriesIgnoreDates(entry, tt.entries[i]) {
 					t.Errorf("fs.readDirectory(%s) %d: entries do not match, actual then expected", tt.path, i)
-					t.Log(entry)
-					t.Log(tt.entries[i])
+					t.Log(cmp.Diff(*entry, *tt.entries[i], cmp.AllowUnexported(directoryEntry{})))
 				}
 			}
 		}
@@ -177,6 +191,7 @@ func TestFat32AllocateSpace(t *testing.T) {
 				 11
 				 15
 				 16-broken
+				 17-broken
 		// recall that 512 bytes per cluster here
 	*/
 	tests := []struct {
@@ -188,9 +203,11 @@ func TestFat32AllocateSpace(t *testing.T) {
 		{500, 2, []uint32{2}, nil},
 		{600, 2, []uint32{2, 12}, nil},
 		{2000, 2, []uint32{2, 12, 13, 14}, nil},
-		{2000, 0, []uint32{12, 13, 14, 17}, nil},
+		{2000, 0, []uint32{12, 13, 14, 18}, nil},
 		{200000000000, 0, nil, fmt.Errorf("no space left on device")},
 		{200000000000, 2, nil, fmt.Errorf("no space left on device")},
+		{2000, 17, nil, fmt.Errorf("unable to get cluster list: invalid cluster chain at 999")},
+		{2000, 999, nil, fmt.Errorf("invalid cluster chain at 999")},
 	}
 	for _, tt := range tests {
 		// reset for each test
@@ -274,11 +291,11 @@ func TestFat32ReadDirWithMkdir(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to read data from file %s: %v", Fat32File, err)
 	}
-	validDe, _, err := getValidDirectoryEntries()
+	validDe, _, err := GetValidDirectoryEntries()
 	if err != nil {
 		t.Fatalf("unable to read valid directory entries: %v", err)
 	}
-	validDeLong, _, err := getValidDirectoryEntriesExtended()
+	validDeLong, _, err := GetValidDirectoryEntriesExtended("/foo")
 	if err != nil {
 		t.Fatalf("unable to read valid directory entries extended: %v", err)
 	}
@@ -321,6 +338,7 @@ func TestFat32ReadDirWithMkdir(t *testing.T) {
 
 	for _, tt := range tests {
 		fs.file = &testhelper.FileImpl{
+			//nolint:revive // unused parameter, keeping name makes it easier to use in the future
 			Writer: func(b []byte, offset int64) (int, error) {
 				return len(b), nil
 			},

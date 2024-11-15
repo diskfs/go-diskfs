@@ -209,8 +209,8 @@ func TestCreate(t *testing.T) {
 		{"10MB with 2048 sector size", "disk", 10 * oneMB, diskfs.Raw, diskfs.SectorSize4k, &disk.Disk{LogicalBlocksize: 4096, PhysicalBlocksize: 4096, Size: 10 * oneMB, Type: disk.File}, nil},
 	}
 
-	for i, tt := range tests {
-		tt := tt
+	for i, t2 := range tests {
+		tt := t2
 		t.Run(tt.name, func(t *testing.T) {
 			var filename string
 			if tt.path != "" {

@@ -10,6 +10,8 @@ import (
 	"crypto/rand"
 	"fmt"
 	"os"
+	"os/exec"
+	"path"
 	"strings"
 	"testing"
 
@@ -57,11 +59,11 @@ func tmpDisk(source string) (*os.File, error) {
 
 func TestGetPartitionTable(t *testing.T) {
 	// this just calls partition.Read, so no need to do much more than a single test and see that it exercises it
-	path := "../partition/mbr/testdata/mbr.img"
+	imgPath := "../partition/mbr/testdata/mbr.img"
 	tableType := "mbr"
-	f, err := os.Open(path)
+	f, err := os.Open(imgPath)
 	if err != nil {
-		t.Errorf("Failed to open file %s :%v", path, err)
+		t.Errorf("Failed to open file %s :%v", imgPath, err)
 	}
 
 	// be sure to close the file
@@ -208,9 +210,9 @@ func TestWritePartitionContents(t *testing.T) {
 			{"no table, write to partition -1", nil, -1, fmt.Errorf("cannot write contents of a partition on a disk without a partition table")},
 			{"good table, write to partition 1", table, 1, nil},
 		}
-		for _, tt := range tests {
+		for _, t2 := range tests {
 			// so that closures do not cause an issue
-			tt := tt
+			tt := t2
 			t.Run(tt.name, func(t *testing.T) {
 				f, err := tmpDisk("")
 				if err != nil {
@@ -290,9 +292,9 @@ func TestReadPartitionContents(t *testing.T) {
 			{"good table, partition greater than max", table, 5, fmt.Errorf("cannot read contents of partition %d which is greater than max partition %d", 5, 1)},
 			{"good table, good partition 1", table, 1, nil},
 		}
-		for _, tt := range tests {
+		for _, t2 := range tests {
 			// so that closure does not cause issues
-			tt := tt
+			tt := t2
 			t.Run(tt.name, func(t *testing.T) {
 				f, err := tmpDisk("../partition/gpt/testdata/gpt.img")
 				if err != nil {
@@ -364,8 +366,8 @@ func TestReadPartitionContents(t *testing.T) {
 			{"valid table partition 5", table, 5, fmt.Errorf("cannot read contents of partition %d which is greater than max partition %d", 5, 1)},
 			{"valid table partition 1", table, 1, nil},
 		}
-		for _, tt := range tests {
-			tt := tt
+		for _, t2 := range tests {
+			tt := t2
 			t.Run(tt.name, func(t *testing.T) {
 				f, err := tmpDisk("../partition/mbr/testdata/mbr.img")
 				if err != nil {
@@ -577,7 +579,19 @@ func TestGetFilesystem(t *testing.T) {
 		}
 	})
 	t.Run("whole disk", func(t *testing.T) {
-		f, err := tmpDisk("../filesystem/fat32/testdata/fat32.img")
+		tmpDir := t.TempDir()
+		// Run the genartifacts.sh script
+		cmd := exec.Command("sh", "mkfat32.sh", tmpDir)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		cmd.Dir = "../filesystem/fat32/testdata"
+
+		// Execute the command
+		if err := cmd.Run(); err != nil {
+			t.Fatalf("error generating fat32 test artifact for disk test: %v", err)
+		}
+
+		f, err := tmpDisk(path.Join(tmpDir, "dist", "fat32.img"))
 		if err != nil {
 			t.Fatalf("error creating new temporary disk: %v", err)
 		}

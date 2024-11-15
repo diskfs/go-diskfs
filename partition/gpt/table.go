@@ -20,6 +20,7 @@ const (
 	// just defaults
 	physicalSectorSize = 512
 	logicalSectorSize  = 512
+	gptHeaderSector    = 1
 )
 
 // Table represents a partition table to be applied to a disk or read from a disk
@@ -294,7 +295,7 @@ func (t *Table) toGPTBytes(primary bool) ([]byte, error) {
 	copy(b[56:72], bytesToUUIDBytes(guid[0:16]))
 
 	// starting LBA of array of partition entries
-	binary.LittleEndian.PutUint64(b[72:80], t.partitionArraySector(true))
+	binary.LittleEndian.PutUint64(b[72:80], t.partitionArraySector(primary))
 
 	// how many entries?
 	binary.LittleEndian.PutUint32(b[80:84], uint32(t.partitionArraySize))
@@ -639,4 +640,32 @@ func (t *Table) Repair(diskSize uint64) error {
 	t.lastDataSector = t.secondaryHeader - partSectors - 1
 
 	return nil
+}
+
+// TotalSize returns the total size of the GPT in bytes.
+//
+// This is counted from the start of the MBR to the end of the secondary
+// header.
+func (t *Table) TotalSize() uint64 {
+	return (t.secondaryHeader + gptHeaderSector) * uint64(t.LogicalSectorSize)
+}
+
+func (t *Table) LastDataSector() uint64 {
+	return t.lastDataSector
+}
+
+// Resize changes the size of the GPT.
+//
+// The size argument is in bytes and must be a multiple of the logical sector
+// size.
+// Use this function in case a storage device is not the same as the total
+// size of its GPT.
+func (t *Table) Resize(size uint64) {
+	// how many sectors on the disk?
+	diskSectors := size / uint64(t.LogicalSectorSize)
+	// how many sectors used for partition entries?
+	partSectors := uint64(t.partitionArraySize) * uint64(t.partitionEntrySize) / uint64(t.LogicalSectorSize)
+
+	t.secondaryHeader = diskSectors - 1
+	t.lastDataSector = t.secondaryHeader - 1 - partSectors
 }

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path"
-	"sort"
 	"strings"
 	"time"
 
@@ -65,6 +64,12 @@ type FileSystem struct {
 
 // Equal compare if two filesystems are equal
 func (fs *FileSystem) Equal(a *FileSystem) bool {
+	if fs == nil && a == nil {
+		return true
+	}
+	if fs == nil || a == nil {
+		return false
+	}
 	localMatch := fs.file == a.file && fs.dataStart == a.dataStart && fs.bytesPerCluster == a.bytesPerCluster
 	tableMatch := fs.table.equal(&a.table)
 	bsMatch := fs.bootSector.equal(&a.bootSector)
@@ -223,17 +228,16 @@ func Create(f util.File, size, start, blocksize int64, volumeLabel string) (*Fil
 	fatSecondaryStart := uint64(fatPrimaryStart) + uint64(fatSize)
 	maxCluster := fatSize / 4
 	rootDirCluster := uint32(2)
+	clusters := make([]uint32, maxCluster+1)
+	clusters[rootDirCluster] = eocMarker
 	fat := table{
 		fatID:          fatID,
 		eocMarker:      eocMarker,
 		unusedMarker:   unusedMarker,
 		size:           fatSize,
 		rootDirCluster: rootDirCluster,
-		clusters: map[uint32]uint32{
-			// when we start, there is just one directory with a single cluster
-			rootDirCluster: eocMarker,
-		},
-		maxCluster: maxCluster,
+		clusters:       clusters,
+		maxCluster:     maxCluster,
 	}
 
 	// where does our data start?
@@ -253,17 +257,17 @@ func Create(f util.File, size, start, blocksize int64, volumeLabel string) (*Fil
 
 	// write the boot sector
 	if err := fs.writeBootSector(); err != nil {
-		return nil, fmt.Errorf("failed to write the boot sector: %v", err)
+		return nil, fmt.Errorf("failed to write the boot sector: %w", err)
 	}
 
 	// write the fsis
 	if err := fs.writeFsis(); err != nil {
-		return nil, fmt.Errorf("failed to write the file system information sector: %v", err)
+		return nil, fmt.Errorf("failed to write the file system information sector: %w", err)
 	}
 
 	// write the FAT tables
 	if err := fs.writeFat(); err != nil {
-		return nil, fmt.Errorf("failed to write the file allocation table: %v", err)
+		return nil, fmt.Errorf("failed to write the file allocation table: %w", err)
 	}
 
 	// create root directory
@@ -275,7 +279,7 @@ func Create(f util.File, size, start, blocksize int64, volumeLabel string) (*Fil
 	// zero out the root directory cluster
 	written, err := f.WriteAt(tmpb, clusterStart)
 	if err != nil {
-		return nil, fmt.Errorf("failed to zero out root directory: %v", err)
+		return nil, fmt.Errorf("failed to zero out root directory: %w", err)
 	}
 	if written != len(tmpb) || written != fs.bytesPerCluster {
 		return nil, fmt.Errorf("incomplete zero out of root directory, wrote %d bytes instead of expected %d for cluster size %d", written, len(tmpb), fs.bytesPerCluster)
@@ -292,13 +296,13 @@ func Create(f util.File, size, start, blocksize int64, volumeLabel string) (*Fil
 	// write the root directory entries to disk
 	err = fs.writeDirectoryEntries(rootDir)
 	if err != nil {
-		return nil, fmt.Errorf("error writing root directory to disk: %v", err)
+		return nil, fmt.Errorf("error writing root directory to disk: %w", err)
 	}
 
 	// set the volume label
 	err = fs.SetLabel(volumeLabel)
 	if err != nil {
-		return nil, fmt.Errorf("failed to set volume label to '%s': %v", volumeLabel, err)
+		return nil, fmt.Errorf("failed to set volume label to '%s': %w", volumeLabel, err)
 	}
 
 	return fs, nil
@@ -337,7 +341,7 @@ func Read(file util.File, size, start, blocksize int64) (*FileSystem, error) {
 	bsb := make([]byte, SectorSize512)
 	n, err := file.ReadAt(bsb, start)
 	if err != nil {
-		return nil, fmt.Errorf("could not read bytes from file: %v", err)
+		return nil, fmt.Errorf("could not read bytes from file: %w", err)
 	}
 	if uint16(n) < uint16(SectorSize512) {
 		return nil, fmt.Errorf("only could read %d bytes from file", n)
@@ -345,7 +349,7 @@ func Read(file util.File, size, start, blocksize int64) (*FileSystem, error) {
 	bs, err := msDosBootSectorFromBytes(bsb)
 
 	if err != nil {
-		return nil, fmt.Errorf("error reading MS-DOS Boot Sector: %v", err)
+		return nil, fmt.Errorf("error reading MS-DOS Boot Sector: %w", err)
 	}
 
 	sectorsPerFat := bs.biosParameterBlock.sectorsPerFat
@@ -358,14 +362,14 @@ func Read(file util.File, size, start, blocksize int64) (*FileSystem, error) {
 	fsisBytes := make([]byte, 512)
 	read, err := file.ReadAt(fsisBytes, int64(bs.biosParameterBlock.fsInformationSector)*blocksize+start)
 	if err != nil {
-		return nil, fmt.Errorf("unable to read bytes for FSInformationSector: %v", err)
+		return nil, fmt.Errorf("unable to read bytes for FSInformationSector: %w", err)
 	}
 	if read != 512 {
 		return nil, fmt.Errorf("read %d bytes instead of expected %d for FS Information Sector", read, 512)
 	}
 	fsis, err := fsInformationSectorFromBytes(fsisBytes)
 	if err != nil {
-		return nil, fmt.Errorf("error reading FileSystem Information Sector: %v", err)
+		return nil, fmt.Errorf("error reading FileSystem Information Sector: %w", err)
 	}
 
 	b := make([]byte, fatSize)
@@ -402,13 +406,13 @@ func (fs *FileSystem) writeBootSector() error {
 
 	b, err := fs.bootSector.toBytes()
 	if err != nil {
-		return fmt.Errorf("error converting MS-DOS Boot Sector to bytes: %v", err)
+		return fmt.Errorf("error converting MS-DOS Boot Sector to bytes: %w", err)
 	}
 
 	// write main boot sector
 	count, err := fs.file.WriteAt(b, 0+fs.start)
 	if err != nil {
-		return fmt.Errorf("error writing MS-DOS Boot Sector to disk: %v", err)
+		return fmt.Errorf("error writing MS-DOS Boot Sector to disk: %w", err)
 	}
 	if count != int(SectorSize512) {
 		return fmt.Errorf("wrote %d bytes of MS-DOS Boot Sector to disk instead of expected %d", count, SectorSize512)
@@ -418,7 +422,7 @@ func (fs *FileSystem) writeBootSector() error {
 	if fs.bootSector.biosParameterBlock.backupBootSector > 0 {
 		count, err = fs.file.WriteAt(b, int64(fs.bootSector.biosParameterBlock.backupBootSector)*int64(SectorSize512)+fs.start)
 		if err != nil {
-			return fmt.Errorf("error writing MS-DOS Boot Sector to disk: %v", err)
+			return fmt.Errorf("error writing MS-DOS Boot Sector to disk: %w", err)
 		}
 		if count != int(SectorSize512) {
 			return fmt.Errorf("wrote %d bytes of MS-DOS Boot Sector to disk instead of expected %d", count, SectorSize512)
@@ -436,12 +440,12 @@ func (fs *FileSystem) writeFsis() error {
 	fsisBytes := fs.fsis.toBytes()
 
 	if _, err := fs.file.WriteAt(fsisBytes, fsisPrimary+fs.start); err != nil {
-		return fmt.Errorf("unable to write primary Fsis: %v", err)
+		return fmt.Errorf("unable to write primary Fsis: %w", err)
 	}
 
 	if backupBootSector > 0 {
 		if _, err := fs.file.WriteAt(fsisBytes, int64(backupBootSector+1)*int64(SectorSize512)+fs.start); err != nil {
-			return fmt.Errorf("unable to write backup Fsis: %v", err)
+			return fmt.Errorf("unable to write backup Fsis: %w", err)
 		}
 	}
 
@@ -456,15 +460,18 @@ func (fs *FileSystem) writeFat() error {
 	fatBytes := fs.table.bytes()
 
 	if _, err := fs.file.WriteAt(fatBytes, int64(fatPrimaryStart)+fs.start); err != nil {
-		return fmt.Errorf("unable to write primary FAT table: %v", err)
+		return fmt.Errorf("unable to write primary FAT table: %w", err)
 	}
 
 	if _, err := fs.file.WriteAt(fatBytes, int64(fatSecondaryStart)+fs.start); err != nil {
-		return fmt.Errorf("unable to write backup FAT table: %v", err)
+		return fmt.Errorf("unable to write backup FAT table: %w", err)
 	}
 
 	return nil
 }
+
+// interface guard
+var _ filesystem.FileSystem = (*FileSystem)(nil)
 
 // Type returns the type code for the filesystem. Always returns filesystem.TypeFat32
 func (fs *FileSystem) Type() filesystem.Type {
@@ -481,6 +488,34 @@ func (fs *FileSystem) Mkdir(p string) error {
 	return err
 }
 
+// creates a filesystem node (file, device special file, or named pipe) named pathname,
+// with attributes specified by mode and dev
+func (fs *FileSystem) Mknod(_ string, _ uint32, _ int) error {
+	return filesystem.ErrNotSupported
+}
+
+// creates a new link (also known as a hard link) to an existing file.
+func (fs *FileSystem) Link(_, _ string) error {
+	return filesystem.ErrNotSupported
+}
+
+// creates a symbolic link named linkpath which contains the string target.
+func (fs *FileSystem) Symlink(_, _ string) error {
+	return filesystem.ErrNotSupported
+}
+
+// Chmod changes the mode of the named file to mode. If the file is a symbolic link,
+// it changes the mode of the link's target.
+func (fs *FileSystem) Chmod(_ string, _ os.FileMode) error {
+	return filesystem.ErrNotSupported
+}
+
+// Chown changes the numeric uid and gid of the named file. If the file is a symbolic link,
+// it changes the uid and gid of the link's target. A uid or gid of -1 means to not change that value
+func (fs *FileSystem) Chown(_ string, _, _ int) error {
+	return filesystem.ErrNotSupported
+}
+
 // ReadDir return the contents of a given directory in a given filesystem.
 //
 // Returns a slice of os.FileInfo with all of the entries in the directory.
@@ -489,31 +524,34 @@ func (fs *FileSystem) Mkdir(p string) error {
 func (fs *FileSystem) ReadDir(p string) ([]os.FileInfo, error) {
 	_, entries, err := fs.readDirWithMkdir(p, false)
 	if err != nil {
-		return nil, fmt.Errorf("error reading directory %s: %v", p, err)
+		return nil, fmt.Errorf("error reading directory %s: %w", p, err)
 	}
 	// once we have made it here, looping is done. We have found the final entry
 	// we need to return all of the file info
-	count := len(entries)
-	ret := make([]os.FileInfo, count)
-	for i, e := range entries {
+	//nolint:prealloc // because the following loop may omit some entry
+	var ret []os.FileInfo
+	for _, e := range entries {
+		if e.isVolumeLabel {
+			continue
+		}
 		shortName := e.filenameShort
 		if e.lowercaseShortname {
 			shortName = strings.ToLower(shortName)
 		}
 		fileExtension := e.fileExtension
 		if e.lowercaseExtension {
-			shortName = strings.ToLower(fileExtension)
+			fileExtension = strings.ToLower(fileExtension)
 		}
 		if fileExtension != "" {
 			shortName = fmt.Sprintf("%s.%s", shortName, fileExtension)
 		}
-		ret[i] = FileInfo{
+		ret = append(ret, FileInfo{
 			modTime:   e.modifyTime,
 			name:      e.filenameLong,
 			shortName: shortName,
 			size:      int64(e.fileSize),
 			isDir:     e.isSubdirectory,
-		}
+		})
 	}
 	return ret, nil
 }
@@ -535,7 +573,7 @@ func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 	// get the directory entries
 	parentDir, entries, err := fs.readDirWithMkdir(dir, false)
 	if err != nil {
-		return nil, fmt.Errorf("could not read directory entries for %s", dir)
+		return nil, fmt.Errorf("could not read directory entries for %s: %w", dir, err)
 	}
 	// we now know that the directory exists, see if the file exists
 	var targetEntry *directoryEntry
@@ -544,7 +582,7 @@ func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 		if e.fileExtension != "" {
 			shortName += "." + e.fileExtension
 		}
-		if e.filenameLong != filename && shortName != filename {
+		if !strings.EqualFold(e.filenameLong, filename) && !strings.EqualFold(shortName, filename) {
 			continue
 		}
 		// cannot do anything with directories
@@ -564,12 +602,12 @@ func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 		// else create it
 		targetEntry, err = fs.mkFile(parentDir, filename)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create file %s: %v", p, err)
+			return nil, fmt.Errorf("failed to create file %s: %w", p, err)
 		}
 		// write the directory entries to disk
 		err = fs.writeDirectoryEntries(parentDir)
 		if err != nil {
-			return nil, fmt.Errorf("error writing directory file %s to disk: %v", p, err)
+			return nil, fmt.Errorf("error writing directory file %s to disk: %w", p, err)
 		}
 	}
 	offset := int64(0)
@@ -580,10 +618,10 @@ func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 		targetEntry.fileSize = 0
 		// we should not need to change the parent, because it is all pointers
 		if err := fs.writeDirectoryEntries(parentDir); err != nil {
-			return nil, fmt.Errorf("error writing directory file %s to disk: %v", p, err)
+			return nil, fmt.Errorf("error writing directory file %s to disk: %w", p, err)
 		}
 		if _, err := fs.allocateSpace(1, targetEntry.clusterLocation); err != nil {
-			return nil, fmt.Errorf("unable to resize cluster list: %v", err)
+			return nil, fmt.Errorf("unable to resize cluster list: %w", err)
 		}
 	}
 	if flag&os.O_APPEND == os.O_APPEND {
@@ -597,6 +635,20 @@ func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 		filesystem:     fs,
 		parent:         parentDir,
 	}, nil
+}
+
+// Rename renames (moves) oldpath to newpath. If newpath already exists and is not a directory, Rename replaces it.
+//
+//nolint:revive // parameters will be used eventually
+func (fs *FileSystem) Rename(oldpath, newpath string) error {
+	return filesystem.ErrNotImplemented
+}
+
+// removes the named file or (empty) directory.
+//
+//nolint:revive // parameters will be used eventually
+func (fs *FileSystem) Remove(pathname string) error {
+	return filesystem.ErrNotImplemented
 }
 
 // RemoveFile removes a file from the filesystem
@@ -762,13 +814,13 @@ func (fs *FileSystem) SetLabel(volumeLabel string) error {
 
 	// write the boot sector
 	if err := fs.writeBootSector(); err != nil {
-		return fmt.Errorf("failed to write the boot sector")
+		return fmt.Errorf("failed to write the boot sector: %w", err)
 	}
 
 	// locate the filesystem root directory or create it
 	rootDir, dirEntries, err := fs.readDirWithMkdir("/", false)
 	if err != nil {
-		return fmt.Errorf("failed to locate root directory: %v", err)
+		return fmt.Errorf("failed to locate root directory: %w", err)
 	}
 
 	// locate the label entry, it may not exist
@@ -786,14 +838,14 @@ func (fs *FileSystem) SetLabel(volumeLabel string) error {
 	} else {
 		_, err = fs.mkLabel(rootDir, volumeLabel)
 		if err != nil {
-			return fmt.Errorf("failed to create volume label root directory entry '%s': %v", volumeLabel, err)
+			return fmt.Errorf("failed to create volume label root directory entry '%s': %w", volumeLabel, err)
 		}
 	}
 
 	// write the root directory entries to disk
 	err = fs.writeDirectoryEntries(rootDir)
 	if err != nil {
-		return fmt.Errorf("failed to save the root directory to disk: %v", err)
+		return fmt.Errorf("failed to save the root directory to disk: %w", err)
 	}
 
 	return nil
@@ -804,10 +856,9 @@ func (fs *FileSystem) getClusterList(firstCluster uint32) ([]uint32, error) {
 	// first, get the chain of clusters
 	complete := false
 	cluster := firstCluster
-	clusters := fs.table.clusters
 
 	// do we even have a valid cluster?
-	if _, ok := clusters[cluster]; !ok {
+	if cluster > fs.table.maxCluster || fs.table.clusters[cluster] == 0 {
 		return nil, fmt.Errorf("invalid start cluster: %d", cluster)
 	}
 
@@ -816,11 +867,13 @@ func (fs *FileSystem) getClusterList(firstCluster uint32) ([]uint32, error) {
 		// save the current cluster
 		clusterList = append(clusterList, cluster)
 		// get the next cluster
-		newCluster := clusters[cluster]
+		newCluster := fs.table.clusters[cluster]
 		// if it is EOC, we are done
 		switch {
 		case fs.table.isEoc(newCluster):
 			complete = true
+		case newCluster > fs.table.maxCluster:
+			return nil, fmt.Errorf("invalid cluster chain at %d", newCluster)
 		case cluster < 2:
 			return nil, fmt.Errorf("invalid cluster chain at %d", cluster)
 		}
@@ -833,7 +886,7 @@ func (fs *FileSystem) getClusterList(firstCluster uint32) ([]uint32, error) {
 func (fs *FileSystem) readDirectory(dir *Directory) ([]*directoryEntry, error) {
 	clusterList, err := fs.getClusterList(dir.clusterLocation)
 	if err != nil {
-		return nil, fmt.Errorf("could not read cluster list: %v", err)
+		return nil, fmt.Errorf("could not read cluster list: %w", err)
 	}
 	// read the data from all of the cluster entries in the list
 	byteCount := len(clusterList) * fs.bytesPerCluster
@@ -859,7 +912,7 @@ func (fs *FileSystem) mkSubdir(parent *Directory, name string) (*directoryEntry,
 	// get a cluster chain for the file
 	clusters, err := fs.allocateSpace(1, 0)
 	if err != nil {
-		return nil, fmt.Errorf("could not allocate disk space for file %s: %v", name, err)
+		return nil, fmt.Errorf("could not allocate disk space for file %s: %w", name, err)
 	}
 	// create a directory entry for the file
 	return parent.createEntry(name, clusters[0], true)
@@ -869,19 +922,19 @@ func (fs *FileSystem) writeDirectoryEntries(dir *Directory) error {
 	// we need to save the entries of the parent
 	b, err := dir.entriesToBytes(fs.bytesPerCluster)
 	if err != nil {
-		return fmt.Errorf("could not create a valid byte stream for a FAT32 Entries: %v", err)
+		return fmt.Errorf("could not create a valid byte stream for a FAT32 Entries: %w", err)
 	}
 	// now have to expand with zeros to the a multiple of cluster lengths
 	// how many clusters do we need, how many do we have?
 	clusterList, err := fs.getClusterList(dir.clusterLocation)
 	if err != nil {
-		return fmt.Errorf("unable to get clusters for directory: %v", err)
+		return fmt.Errorf("unable to get clusters for directory: %w", err)
 	}
 
 	if len(b) > len(clusterList)*fs.bytesPerCluster {
 		clusters, err := fs.allocateSpace(uint64(len(b)), clusterList[0])
 		if err != nil {
-			return fmt.Errorf("unable to allocate space for directory entries: %v", err)
+			return fmt.Errorf("unable to allocate space for directory entries: %w", err)
 		}
 		clusterList = clusters
 	}
@@ -893,7 +946,7 @@ func (fs *FileSystem) writeDirectoryEntries(dir *Directory) error {
 		bStart := i * fs.bytesPerCluster
 		written, err := fs.file.WriteAt(b[bStart:bStart+fs.bytesPerCluster], clusterStart)
 		if err != nil {
-			return fmt.Errorf("error writing directory entries: %v", err)
+			return fmt.Errorf("error writing directory entries: %w", err)
 		}
 		if written != fs.bytesPerCluster {
 			return fmt.Errorf("wrote %d bytes to cluster %d instead of expected %d", written, cluster, fs.bytesPerCluster)
@@ -907,7 +960,7 @@ func (fs *FileSystem) mkFile(parent *Directory, name string) (*directoryEntry, e
 	// get a cluster chain for the file
 	clusters, err := fs.allocateSpace(1, 0)
 	if err != nil {
-		return nil, fmt.Errorf("could not allocate disk space for directory %s: %v", name, err)
+		return nil, fmt.Errorf("could not allocate disk space for directory %s: %w", name, err)
 	}
 	// create a directory entry for the file
 	return parent.createEntry(name, clusters[0], false)
@@ -939,13 +992,17 @@ func (fs *FileSystem) readDirWithMkdir(p string, doMake bool) (*Directory, []*di
 	}
 	entries, err = fs.readDirectory(currentDir)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to read directory %s", "/")
+		return nil, nil, fmt.Errorf("failed to read directory %s: %w", "/", err)
 	}
 	for i, subp := range paths {
 		// do we have an entry whose name is the same as this name?
 		found := false
 		for _, e := range entries {
-			if e.filenameLong != subp && e.filenameShort != subp && (!e.lowercaseShortname || (e.lowercaseShortname && !strings.EqualFold(e.filenameShort, subp))) {
+			// if the filename does not match, continue
+			// match is determined by any one of:
+			// - long filename == provided name
+			// - uppercase(short filename) == uppercase(provided name)
+			if !strings.EqualFold(e.filenameLong, subp) && !strings.EqualFold(e.filenameShort, subp) {
 				continue
 			}
 			if !e.isSubdirectory {
@@ -966,7 +1023,7 @@ func (fs *FileSystem) readDirWithMkdir(p string, doMake bool) (*Directory, []*di
 				var subdirEntry *directoryEntry
 				subdirEntry, err = fs.mkSubdir(currentDir, subp)
 				if err != nil {
-					return nil, nil, fmt.Errorf("failed to create subdirectory %s", "/"+strings.Join(paths[0:i+1], "/"))
+					return nil, nil, fmt.Errorf("failed to create subdirectory %s: %w", "/"+strings.Join(paths[0:i+1], "/"), err)
 				}
 				currentDir.modifyTime = subdirEntry.createTime
 				// make a basic entry for the new subdir
@@ -999,12 +1056,12 @@ func (fs *FileSystem) readDirWithMkdir(p string, doMake bool) (*Directory, []*di
 				// write the new directory entries to disk
 				err = fs.writeDirectoryEntries(dir)
 				if err != nil {
-					return nil, nil, fmt.Errorf("error writing new directory entries to disk: %v", err)
+					return nil, nil, fmt.Errorf("error writing new directory entries to disk: %w", err)
 				}
 				// write the parent directory entries to disk
 				err = fs.writeDirectoryEntries(currentDir)
 				if err != nil {
-					return nil, nil, fmt.Errorf("error writing directory entries to disk: %v", err)
+					return nil, nil, fmt.Errorf("error writing directory entries to disk: %w", err)
 				}
 				// save where we are to search next
 				currentDir = &Directory{
@@ -1017,7 +1074,7 @@ func (fs *FileSystem) readDirWithMkdir(p string, doMake bool) (*Directory, []*di
 		// get all of the entries in this directory
 		entries, err = fs.readDirectory(currentDir)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to read directory %s", "/"+strings.Join(paths[0:i+1], "/"))
+			return nil, nil, fmt.Errorf("failed to read directory %s: %w", "/"+strings.Join(paths[0:i+1], "/"), err)
 		}
 	}
 	// once we have made it here, looping is done; we have found the final entry
@@ -1030,6 +1087,10 @@ func (fs *FileSystem) readDirWithMkdir(p string, doMake bool) (*Directory, []*di
 // returns the indexes of clusters to be used in order. If the new size is smaller than
 // the original size, will shrink the chain.
 func (fs *FileSystem) allocateSpace(size uint64, previous uint32) ([]uint32, error) {
+	if previous > fs.table.maxCluster {
+		return nil, fmt.Errorf("invalid cluster chain at %d", previous)
+	}
+
 	var (
 		clusters             []uint32
 		err                  error
@@ -1038,7 +1099,6 @@ func (fs *FileSystem) allocateSpace(size uint64, previous uint32) ([]uint32, err
 	// 1- calculate how many clusters needed
 	// 2- see how many clusters already are allocated
 	// 3- if needed, allocate new clusters and extend the chain in the FAT table
-	keys := make([]uint32, 0, 20)
 	allocated := make([]uint32, 0, 20)
 
 	// what is the total count of clusters needed?
@@ -1054,7 +1114,7 @@ func (fs *FileSystem) allocateSpace(size uint64, previous uint32) ([]uint32, err
 	if previous >= 2 {
 		clusters, err = fs.getClusterList(previous)
 		if err != nil {
-			return nil, fmt.Errorf("unable to get cluster list: %v", err)
+			return nil, fmt.Errorf("unable to get cluster list: %w", err)
 		}
 		originalClusterCount := len(clusters)
 		extraClusterCount = count - originalClusterCount
@@ -1068,16 +1128,11 @@ func (fs *FileSystem) allocateSpace(size uint64, previous uint32) ([]uint32, err
 	}
 
 	// get a list of allocated clusters, so we can know which ones are unallocated and therefore allocatable
-	allClusters := fs.table.clusters
 	maxCluster := fs.table.maxCluster
-	for k := range allClusters {
-		keys = append(keys, k)
-	}
-	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
 
 	if extraClusterCount > 0 {
 		for i := uint32(2); i < maxCluster && len(allocated) < extraClusterCount; i++ {
-			if _, ok := allClusters[i]; !ok {
+			if fs.table.clusters[i] == 0 {
 				// these become the same at this point
 				allocated = append(allocated, i)
 			}
@@ -1093,12 +1148,12 @@ func (fs *FileSystem) allocateSpace(size uint64, previous uint32) ([]uint32, err
 
 		// extend the chain and fill them in
 		if previous > 0 {
-			allClusters[previous] = allocated[0]
+			fs.table.clusters[previous] = allocated[0]
 		}
 		for i := 0; i < lastAlloc; i++ {
-			allClusters[allocated[i]] = allocated[i+1]
+			fs.table.clusters[allocated[i]] = allocated[i+1]
 		}
-		allClusters[allocated[lastAlloc]] = fs.table.eocMarker
+		fs.table.clusters[allocated[lastAlloc]] = fs.table.eocMarker
 
 		// update the FSIS
 		lastAllocatedCluster = allocated[len(allocated)-1]
@@ -1114,13 +1169,21 @@ func (fs *FileSystem) allocateSpace(size uint64, previous uint32) ([]uint32, err
 		}
 		deallocated = clusters[lastAlloc+1:]
 
+		if uint32(lastAlloc) > fs.table.maxCluster || clusters[lastAlloc] > fs.table.maxCluster {
+			return nil, fmt.Errorf("invalid cluster chain at %d", lastAlloc)
+		}
+
 		// mark last allocated one as EOC
-		allClusters[clusters[lastAlloc]] = fs.table.eocMarker
+		fs.table.clusters[clusters[lastAlloc]] = fs.table.eocMarker
 
 		// unmark all of the unused ones
 		lastAllocatedCluster = fs.fsis.lastAllocatedCluster
 		for _, cl := range deallocated {
-			allClusters[cl] = fs.table.unusedMarker
+			if cl > fs.table.maxCluster {
+				return nil, fmt.Errorf("invalid cluster chain at %d", cl)
+			}
+
+			fs.table.clusters[cl] = fs.table.unusedMarker
 			if cl == lastAllocatedCluster {
 				lastAllocatedCluster--
 			}
@@ -1130,12 +1193,12 @@ func (fs *FileSystem) allocateSpace(size uint64, previous uint32) ([]uint32, err
 	// update the FSIS
 	fs.fsis.lastAllocatedCluster = lastAllocatedCluster
 	if err := fs.writeFsis(); err != nil {
-		return nil, fmt.Errorf("failed to write the file system information sector: %v", err)
+		return nil, fmt.Errorf("failed to write the file system information sector: %w", err)
 	}
 
 	// write the FAT tables
 	if err := fs.writeFat(); err != nil {
-		return nil, fmt.Errorf("failed to write the file allocation table: %v", err)
+		return nil, fmt.Errorf("failed to write the file allocation table: %w", err)
 	}
 
 	// return all of the clusters

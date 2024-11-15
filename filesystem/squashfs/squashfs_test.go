@@ -349,8 +349,8 @@ func TestSquashfsRead(t *testing.T) {
 		{4097, squashfs.GB * squashfs.GB, -1, nil, fmt.Errorf("blocksize %d is not a power of 2", 4097)},
 		{4096, 10000000, -1, &squashfs.FileSystem{}, nil},
 	}
-	for i, tt := range tests {
-		tt := tt
+	for i, t2 := range tests {
+		tt := t2
 		t.Run(fmt.Sprintf("blocksize %d filesize %d bytechange %d", tt.blocksize, tt.filesize, tt.bytechange), func(t *testing.T) {
 			// get a temporary working file
 			f, err := os.Open(squashfs.Squashfsfile)
@@ -641,8 +641,8 @@ func TestSquashfsCreate(t *testing.T) {
 		{4097, squashfs.GB * squashfs.GB, nil, fmt.Errorf("blocksize %d is not a power of 2", 4097)},
 		{4096, 10000000, &squashfs.FileSystem{}, nil},
 	}
-	for _, tt := range tests {
-		tt := tt
+	for _, t2 := range tests {
+		tt := t2
 		t.Run(fmt.Sprintf("blocksize %d filesize %d", tt.blocksize, tt.filesize), func(t *testing.T) {
 			// create the filesystem
 			f, err := tmpSquashfsFile()

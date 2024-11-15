@@ -115,7 +115,7 @@ func partitionFromBytes(b []byte, logicalSectorSize, physicalSectorSize int) (*P
 		EndSector:          b[6],
 		EndCylinder:        b[7],
 		Start:              binary.LittleEndian.Uint32(b[8:12]),
-		Size:               binary.LittleEndian.Uint32(b[12:16]),
+		Size:               binary.LittleEndian.Uint32(b[12:16]), //nolint:gosec // we already checked the length above
 		logicalSectorSize:  logicalSectorSize,
 		physicalSectorSize: physicalSectorSize,
 	}, nil

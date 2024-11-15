@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+
+	"github.com/diskfs/go-diskfs/filesystem"
 )
 
 // File represents a single file in a FAT32 filesystem
@@ -78,8 +80,8 @@ func (fl *File) Read(b []byte) (int, error) {
 		if toRead > left {
 			toRead = left
 		}
-		offset := uint32(start) + (clusters[i]-2)*uint32(bytesPerCluster)
-		_, _ = file.ReadAt(b[totalRead:totalRead+toRead], int64(offset)+fs.start)
+		offset := int64(start) + int64(clusters[i]-2)*int64(bytesPerCluster)
+		_, _ = file.ReadAt(b[totalRead:totalRead+toRead], offset+fs.start)
 		totalRead += toRead
 		if totalRead >= maxRead {
 			break
@@ -108,7 +110,7 @@ func (fl *File) Write(p []byte) (int, error) {
 	fs := fl.filesystem
 	// if the file was not opened RDWR, nothing we can do
 	if !fl.isReadWrite {
-		return totalWritten, fmt.Errorf("cannot write to file opened read-only")
+		return totalWritten, filesystem.ErrReadonlyFilesystem
 	}
 	// what is the new file size?
 	writeSize := len(p)
@@ -161,8 +163,8 @@ func (fl *File) Write(p []byte) (int, error) {
 		if toWrite > left {
 			toWrite = left
 		}
-		offset := uint32(start) + (clusters[i]-2)*uint32(bytesPerCluster)
-		_, err := file.WriteAt(p[totalWritten:totalWritten+toWrite], int64(offset)+fs.start)
+		offset := int64(start) + int64(clusters[i]-2)*int64(bytesPerCluster)
+		_, err := file.WriteAt(p[totalWritten:totalWritten+toWrite], offset+fs.start)
 		if err != nil {
 			return totalWritten, fmt.Errorf("unable to write to file: %v", err)
 		}
