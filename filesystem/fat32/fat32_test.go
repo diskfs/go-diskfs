@@ -1307,7 +1307,7 @@ func Test_RenameFile(t *testing.T) {
 	}
 }
 
-func Test_RemoveFile(t *testing.T) {
+func Test_Remove(t *testing.T) {
 	workingPath := "/"
 	fileToRemove := "fileToRemove.txt"
 	createFile := func(t *testing.T, fs *fat32.FileSystem, name, content string) {
@@ -1373,10 +1373,42 @@ func Test_RemoveFile(t *testing.T) {
 			},
 			post: func(t *testing.T, fs *fat32.FileSystem) {
 				for i := 0; i < 100; i++ {
-					err := fs.RemoveFile(fmt.Sprintf("/file%d.txt", i))
+					err := fs.Remove(fmt.Sprintf("/file%d.txt", i))
 					if err != nil {
 						t.Fatalf("expected no error, but got %v", err)
 					}
+				}
+			},
+		},
+		{
+			name:     "removing empty dir",
+			hasError: false,
+			pre: func(t *testing.T, fs *fat32.FileSystem) {
+				if err := fs.Mkdir(filepath.Join(workingPath, fileToRemove)); err != nil {
+					t.Fatalf("could not create test directory: %+v", err)
+				}
+			},
+			post: func(t *testing.T, fs *fat32.FileSystem) {
+				_, err := fs.ReadDir(filepath.Join(workingPath, fileToRemove))
+				if err == nil {
+					t.Fatalf("Expected that dir cannot be read, but is still there")
+				}
+			},
+		},
+		{
+			name:     "cannot delete dir with content",
+			hasError: true,
+			pre: func(t *testing.T, fs *fat32.FileSystem) {
+				if err := fs.Mkdir(filepath.Join(workingPath, fileToRemove)); err != nil {
+					t.Fatalf("could not create test directory: %+v", err)
+				}
+				// file within dir to remove
+				createFile(t, fs, filepath.Join(workingPath, fileToRemove, "test"), "foo")
+			},
+			post: func(t *testing.T, fs *fat32.FileSystem) {
+				_, err := fs.ReadDir(filepath.Join(workingPath, fileToRemove))
+				if err != nil {
+					t.Fatalf("Expected that dir can be read, but has error: %+v", err)
 				}
 			},
 		},
@@ -1408,7 +1440,7 @@ func Test_RemoveFile(t *testing.T) {
 
 			test.pre(t, fs)
 
-			err = fs.RemoveFile(filepath.Join(workingPath, fileToRemove))
+			err = fs.Remove(filepath.Join(workingPath, fileToRemove))
 
 			if test.hasError {
 				if err == nil {
@@ -1418,7 +1450,7 @@ func Test_RemoveFile(t *testing.T) {
 				}
 			} else {
 				if err != nil {
-					t.Fatal("Error renaming file", err)
+					t.Fatal("Error removing file", err)
 				}
 			}
 

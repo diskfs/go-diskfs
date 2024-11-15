@@ -476,10 +476,6 @@ func (fsm *FileSystem) Remove(p string) error {
 	return os.Remove(path.Join(fsm.workspace, p))
 }
 
-func (fs *FileSystem) RemoveFile(p string) error {
-	return fmt.Errorf("not implemented")
-}
-
 func (fs *FileSystem) RenameFile(p, newFileName string) error {
 	return fmt.Errorf("not implemented")
 }

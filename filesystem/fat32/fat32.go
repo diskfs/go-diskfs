@@ -648,19 +648,12 @@ func (fs *FileSystem) Rename(oldpath, newpath string) error {
 //
 //nolint:revive // parameters will be used eventually
 func (fs *FileSystem) Remove(pathname string) error {
-	return filesystem.ErrNotImplemented
-}
-
-// RemoveFile removes a file from the filesystem
-//
-// returns an error if the file does not exist or cannot be removed
-func (fs *FileSystem) RemoveFile(p string) error {
 	// get the path
-	dir := path.Dir(p)
-	filename := path.Base(p)
+	dir := path.Dir(pathname)
+	filename := path.Base(pathname)
 	// if the dir == filename, then it is just /
 	if dir == filename {
-		return fmt.Errorf("cannot remove directory %s as file", p)
+		return fmt.Errorf("cannot remove directory %s as file", pathname)
 	}
 	// get the directory entries
 	parentDir, entries, err := fs.readDirWithMkdir(dir, false)
@@ -679,7 +672,14 @@ func (fs *FileSystem) RemoveFile(p string) error {
 		}
 		// cannot do anything with directories
 		if e.isSubdirectory {
-			return fmt.Errorf("cannot open directory %s as file", p)
+			content, err := fs.ReadDir(pathname)
+			if err != nil {
+				return fmt.Errorf("error while checking if file to delete is empty: %+v", err)
+			}
+			// '.' & '..' are always present in directory
+			if len(content) > 2 {
+				return fmt.Errorf("cannot remove non-empty directory %s", pathname)
+			}
 		}
 		// if we got this far, we have found the file
 		targetEntry = e
@@ -688,11 +688,11 @@ func (fs *FileSystem) RemoveFile(p string) error {
 	// see if the file exists
 	// if the file does not exist, and is not opened for os.O_CREATE, return an error
 	if targetEntry == nil {
-		return fmt.Errorf("target file %s does not exist", p)
+		return fmt.Errorf("target file %s does not exist", pathname)
 	}
 	err = parentDir.removeEntry(filename)
 	if err != nil {
-		return fmt.Errorf("failed to remove file %s: %v", p, err)
+		return fmt.Errorf("failed to remove file %s: %v", pathname, err)
 	}
 
 	// we need to make sure that clusters are removed which may not be used anymore
@@ -704,7 +704,7 @@ func (fs *FileSystem) RemoveFile(p string) error {
 	// write the directory entries to disk
 	err = fs.writeDirectoryEntries(parentDir)
 	if err != nil {
-		return fmt.Errorf("error writing directory file %s to disk: %v", p, err)
+		return fmt.Errorf("error writing directory file %s to disk: %v", pathname, err)
 	}
 
 	return nil
