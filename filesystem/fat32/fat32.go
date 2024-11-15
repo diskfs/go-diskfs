@@ -637,13 +637,6 @@ func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 	}, nil
 }
 
-// Rename renames (moves) oldpath to newpath. If newpath already exists and is not a directory, Rename replaces it.
-//
-//nolint:revive // parameters will be used eventually
-func (fs *FileSystem) Rename(oldpath, newpath string) error {
-	return filesystem.ErrNotImplemented
-}
-
 // removes the named file or (empty) directory.
 //
 //nolint:revive // parameters will be used eventually
@@ -710,16 +703,21 @@ func (fs *FileSystem) Remove(pathname string) error {
 	return nil
 }
 
-// RenameFile removes a file from the filesystem
-//
-// returns an error if the file does not exist or cannot be renamed
-func (fs *FileSystem) RenameFile(p, newFileName string) error {
+// Rename renames (moves) oldpath to newpath. If newpath already exists and is not a directory, Rename replaces it.
+func (fs *FileSystem) Rename(oldpath, newpath string) error {
 	// get the path
-	dir := path.Dir(p)
-	filename := path.Base(p)
+	dir := path.Dir(oldpath)
+	filename := path.Base(oldpath)
+
+	newDir := path.Dir(newpath)
+	newname := path.Base(newpath)
+	if dir != newDir {
+		return errors.New("can only rename files within the same directory")
+	}
+
 	// if the dir == filename, then it is just /
 	if dir == filename {
-		return fmt.Errorf("cannot rename directory %s as file", p)
+		return fmt.Errorf("cannot rename directory %s as file", oldpath)
 	}
 	// get the directory entries
 	parentDir, entries, err := fs.readDirWithMkdir(dir, false)
@@ -738,7 +736,7 @@ func (fs *FileSystem) RenameFile(p, newFileName string) error {
 		}
 		// cannot do anything with directories
 		if e.isSubdirectory {
-			return fmt.Errorf("cannot open directory %s as file", p)
+			return fmt.Errorf("cannot open directory %s as file", oldpath)
 		}
 		// if we got this far, we have found the file
 		targetEntry = e
@@ -747,11 +745,11 @@ func (fs *FileSystem) RenameFile(p, newFileName string) error {
 	// see if the file exists
 	// if the file does not exist, and is not opened for os.O_CREATE, return an error
 	if targetEntry == nil {
-		return fmt.Errorf("target file %s does not exist", p)
+		return fmt.Errorf("target file %s does not exist", oldpath)
 	}
-	err = parentDir.renameEntry(filename, newFileName)
+	err = parentDir.renameEntry(filename, newname)
 	if err != nil {
-		return fmt.Errorf("failed to rename file %s: %v", p, err)
+		return fmt.Errorf("failed to rename file %s: %v", oldpath, err)
 	}
 
 	// we need to make sure that clusters are removed which may not be used anymore
@@ -763,7 +761,7 @@ func (fs *FileSystem) RenameFile(p, newFileName string) error {
 	// write the directory entries to disk
 	err = fs.writeDirectoryEntries(parentDir)
 	if err != nil {
-		return fmt.Errorf("error writing directory file %s to disk: %v", p, err)
+		return fmt.Errorf("error writing directory file %s to disk: %v", oldpath, err)
 	}
 
 	return nil

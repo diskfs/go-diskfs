@@ -476,10 +476,6 @@ func (fsm *FileSystem) Remove(p string) error {
 	return os.Remove(path.Join(fsm.workspace, p))
 }
 
-func (fs *FileSystem) RenameFile(p, newFileName string) error {
-	return fmt.Errorf("not implemented")
-}
-
 // readDirectory - read directory entry on iso only (not workspace)
 func (fsm *FileSystem) readDirectory(p string) ([]*directoryEntry, error) {
 	var (

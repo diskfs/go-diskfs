@@ -1145,10 +1145,10 @@ func TestCreateFileTree(t *testing.T) {
 	}
 }
 
-func Test_RenameFile(t *testing.T) {
+func Test_Rename(t *testing.T) {
 	workingPath := "/"
-	oldFileName := "old.txt"
-	newFileName := "new.txt"
+	srcFile := "old.txt"
+	dstFile := "new.txt"
 	createFile := func(t *testing.T, fs *fat32.FileSystem, name, content string) {
 		origFile, err := fs.OpenFile(filepath.Join(workingPath, name), os.O_CREATE|os.O_RDWR)
 		if err != nil {
@@ -1184,39 +1184,38 @@ func Test_RenameFile(t *testing.T) {
 			name:     "simple renaming works without errors",
 			hasError: false,
 			pre: func(t *testing.T, fs *fat32.FileSystem) {
-				createFile(t, fs, oldFileName, "FooBar")
+				createFile(t, fs, srcFile, "FooBar")
 			},
 			post: func(t *testing.T, fs *fat32.FileSystem) {
 				//check if original file is there -> should not be the case
-				origFile, err := fs.OpenFile(oldFileName, os.O_RDONLY)
+				origFile, err := fs.OpenFile(srcFile, os.O_RDONLY)
 				if err == nil {
 					defer origFile.Close()
 					t.Fatal("Original file is still there")
 				}
 				// check if new file is there -> should be the case
-				content := readFile(t, fs, newFileName)
+				content := readFile(t, fs, dstFile)
 				if content != "FooBar" {
 					t.Fatalf("Content should be '%s', but is '%s'", "FooBar", content)
 				}
 			},
 		},
 		{
-			name:     "destination file already exists",
-			hasError: true,
+			name:     "destination file already exists and gets overwritten",
+			hasError: false,
 			pre: func(t *testing.T, fs *fat32.FileSystem) {
-				createFile(t, fs, oldFileName, "FooBar")
+				createFile(t, fs, srcFile, "FooBar")
 				//create destination file
-				createFile(t, fs, newFileName, "This should keep")
+				createFile(t, fs, dstFile, "This should be overwritten")
 			},
 			post: func(t *testing.T, fs *fat32.FileSystem) {
-				// new file is not touched
-				content := readFile(t, fs, newFileName)
-				if content != "This should keep" {
-					t.Fatalf("Content should be '%s', but is '%s'", "This should keep", content)
+				origFile, err := fs.OpenFile(filepath.Join(workingPath, srcFile), os.O_RDONLY)
+				if err == nil {
+					defer origFile.Close()
+					t.Fatal("Original file is still there")
 				}
-
-				// old file is still there
-				content = readFile(t, fs, oldFileName)
+				// check if new file is there -> should be the case
+				content := readFile(t, fs, dstFile)
 				if content != "FooBar" {
 					t.Fatalf("Content should be '%s', but is '%s'", "FooBar", content)
 				}
@@ -1240,11 +1239,11 @@ func Test_RenameFile(t *testing.T) {
 				for i := 0; i < 255; i++ {
 					s += "a"
 				}
-				oldFileName = s
+				srcFile = s
 				createFile(t, fs, s, "orig")
 			},
 			post: func(t *testing.T, fs *fat32.FileSystem) {
-				oldFileName = "old.txt"
+				srcFile = "old.txt"
 			},
 		},
 		{
@@ -1255,11 +1254,11 @@ func Test_RenameFile(t *testing.T) {
 				for i := 0; i < 255; i++ {
 					s += "a"
 				}
-				newFileName = s
-				createFile(t, fs, oldFileName, "orig")
+				dstFile = s
+				createFile(t, fs, srcFile, "orig")
 			},
 			post: func(t *testing.T, fs *fat32.FileSystem) {
-				newFileName = "new.txt"
+				dstFile = "new.txt"
 			},
 		},
 	}
@@ -1290,7 +1289,7 @@ func Test_RenameFile(t *testing.T) {
 
 			test.pre(t, fs)
 
-			err = fs.RenameFile(filepath.Join(workingPath, oldFileName), newFileName)
+			err = fs.Rename(filepath.Join(workingPath, srcFile), filepath.Join(workingPath, dstFile))
 
 			if test.hasError {
 				if err == nil {

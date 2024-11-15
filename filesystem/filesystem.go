@@ -40,8 +40,6 @@ type FileSystem interface {
 	Rename(oldpath, newpath string) error
 	// removes the named file or (empty) directory.
 	Remove(pathname string) error
-	// RenameFile renames a file from the filesystem
-	RenameFile(p, newFileName string) error
 	// Label get the label for the filesystem, or "" if none. Be careful to trim it, as it may contain
 	// leading or following whitespace. The label is passed as-is and not cleaned up at all.
 	Label() string

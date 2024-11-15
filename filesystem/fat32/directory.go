@@ -116,7 +116,7 @@ func (d *Directory) renameEntry(oldFileName, newFileName string) error {
 	var isReplaced = false
 	for _, entry := range d.entries {
 		if entry.filenameLong == newFileName {
-			return fmt.Errorf("file with name %s already exists", newFileName)
+			continue // skip adding already existing file, will be overwritten
 		}
 		if entry.filenameLong == lfn { //  || entry.filenameShort == shortName  do not compare SFN, since it is not incremented correctly
 			shortName, extension, isLFN, _ := convertLfnSfn(newFileName)
