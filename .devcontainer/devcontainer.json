@@ -20,6 +20,16 @@
 				"Gruntfuggly.todo-tree"
 			]
 		}
+	},
+	"features": {
+		"ghcr.io/devcontainers/features/docker-in-docker:2": {
+			"moby": true,
+			"azureDnsAutoDetection": false,
+			"installDockerBuildx": false,
+			"installDockerComposeSwitch": false,
+			"version": "latest",
+			"dockerDashComposeVersion": "none"
+		}
 	}
 	// Configure tool-specific properties.
 	// "customizations": {},
