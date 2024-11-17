@@ -73,19 +73,11 @@ func (d *Directory) createEntry(name string, cluster uint32, dir bool) (*directo
 
 // removeEntry removes an entry in the given directory
 func (d *Directory) removeEntry(name string) error {
-	// is it a long filename or a short filename?
-	var isLFN bool
-	// TODO: convertLfnSfn does not calculate if the short name conflicts and thus should increment the last character
-	//       that should happen here, once we can look in the directory entry
-	_, _, isLFN, _ = convertLfnSfn(name)
-	lfn := ""
-	if isLFN {
-		lfn = name
-	}
+	// TODO implement check for long/short filename after increment of sfn is correctly implemented
 
 	removeEntryIndex := -1
 	for i, entry := range d.entries {
-		if entry.filenameLong == lfn { // || entry.filenameShort == shortName  do not compare SFN, since it is not incremented correctly
+		if entry.filenameLong == name { // || entry.filenameShort == shortName  do not compare SFN, since it is not incremented correctly
 			removeEntryIndex = i
 		}
 	}
@@ -102,23 +94,16 @@ func (d *Directory) removeEntry(name string) error {
 
 // renameEntry renames an entry in the given directory, and returns the handle to it
 func (d *Directory) renameEntry(oldFileName, newFileName string) error {
-	// is it a long filename or a short filename?
-	var isLFN bool
-	// TODO: convertLfnSfn does not calculate if the short name conflicts and thus should increment the last character
-	//       that should happen here, once we can look in the directory entry
-	_, _, isLFN, _ = convertLfnSfn(oldFileName)
-	lfn := ""
-	if isLFN {
-		lfn = oldFileName
-	}
+	// TODO implement check for long/short filename after increment of sfn is correctly implemented
 
-	var newEntries []*directoryEntry
+	newEntries := make([]*directoryEntry, 0, len(d.entries))
 	var isReplaced = false
 	for _, entry := range d.entries {
 		if entry.filenameLong == newFileName {
 			continue // skip adding already existing file, will be overwritten
 		}
-		if entry.filenameLong == lfn { //  || entry.filenameShort == shortName  do not compare SFN, since it is not incremented correctly
+		if entry.filenameLong == oldFileName { //  || entry.filenameShort == shortName  do not compare SFN, since it is not incremented correctly
+			var lfn string
 			shortName, extension, isLFN, _ := convertLfnSfn(newFileName)
 			if isLFN {
 				lfn = newFileName
