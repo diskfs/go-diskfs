@@ -638,8 +638,6 @@ func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 }
 
 // removes the named file or (empty) directory.
-//
-//nolint:revive // parameters will be used eventually
 func (fs *FileSystem) Remove(pathname string) error {
 	// get the path
 	dir := path.Dir(pathname)
