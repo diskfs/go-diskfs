@@ -1189,7 +1189,7 @@ func Test_Rename(t *testing.T) {
 				t.Helper()
 				createFile(t, fs, srcFile, "FooBar")
 			},
-			post: func(t *testing.T, fs *fat32.FileSystem) {
+			post: func(_ *testing.T, fs *fat32.FileSystem) {
 				// check if original file is there -> should not be the case
 				origFile, err := fs.OpenFile(srcFile, os.O_RDONLY)
 				if err == nil {
@@ -1206,12 +1206,12 @@ func Test_Rename(t *testing.T) {
 		{
 			name:     "destination file already exists and gets overwritten",
 			hasError: false,
-			pre: func(t *testing.T, fs *fat32.FileSystem) {
+			pre: func(_ *testing.T, fs *fat32.FileSystem) {
 				createFile(t, fs, srcFile, "FooBar")
 				// create destination file
 				createFile(t, fs, dstFile, "This should be overwritten")
 			},
-			post: func(t *testing.T, fs *fat32.FileSystem) {
+			post: func(_ *testing.T, fs *fat32.FileSystem) {
 				origFile, err := fs.OpenFile(filepath.Join(workingPath, srcFile), os.O_RDONLY)
 				if err == nil {
 					defer origFile.Close()
@@ -1227,10 +1227,10 @@ func Test_Rename(t *testing.T) {
 		{
 			name:     "source file does not exist",
 			hasError: true,
-			pre: func(_ *testing.T, fs *fat32.FileSystem) {
+			pre: func(_ *testing.T, _ *fat32.FileSystem) {
 				// do not create orig file
 			},
-			post: func(_ *testing.T, fs *fat32.FileSystem) {
+			post: func(_ *testing.T, _ *fat32.FileSystem) {
 
 			},
 		},
@@ -1238,6 +1238,7 @@ func Test_Rename(t *testing.T) {
 			name:     "renaming long file to short file",
 			hasError: false,
 			pre: func(t *testing.T, fs *fat32.FileSystem) {
+				t.Helper()
 				var s string
 				for i := 0; i < 255; i++ {
 					s += "a"
@@ -1245,7 +1246,7 @@ func Test_Rename(t *testing.T) {
 				srcFile = s
 				createFile(t, fs, s, "orig")
 			},
-			post: func(_ *testing.T, fs *fat32.FileSystem) {
+			post: func(_ *testing.T, _ *fat32.FileSystem) {
 				srcFile = "old.txt"
 			},
 		},
@@ -1253,6 +1254,7 @@ func Test_Rename(t *testing.T) {
 			name:     "renaming short file to long file",
 			hasError: false,
 			pre: func(t *testing.T, fs *fat32.FileSystem) {
+				t.Helper()
 				var s string
 				for i := 0; i < 255; i++ {
 					s += "a"
@@ -1260,7 +1262,7 @@ func Test_Rename(t *testing.T) {
 				dstFile = s
 				createFile(t, fs, srcFile, "orig")
 			},
-			post: func(t *testing.T, fs *fat32.FileSystem) {
+			post: func(_ *testing.T, _ *fat32.FileSystem) {
 				dstFile = "new.txt"
 			},
 		},
@@ -1268,6 +1270,7 @@ func Test_Rename(t *testing.T) {
 			name:     "rename a non empty directory",
 			hasError: false,
 			pre: func(t *testing.T, fs *fat32.FileSystem) {
+				t.Helper()
 				err := fs.Mkdir(filepath.Join(workingPath, srcFile))
 				if err != nil {
 					t.Fatalf("Could not create directory %s: %+v", srcFile, err)
@@ -1276,6 +1279,7 @@ func Test_Rename(t *testing.T) {
 				createFile(t, fs, filepath.Join(srcFile, "test.txt"), "FooBar")
 			},
 			post: func(t *testing.T, fs *fat32.FileSystem) {
+				t.Helper()
 				_, err := fs.ReadDir(filepath.Join(workingPath, srcFile))
 				if err == nil {
 					t.Fatalf("source directory does exist: %+v", err)
@@ -1339,6 +1343,7 @@ func Test_Remove(t *testing.T) {
 	workingPath := "/"
 	fileToRemove := "fileToRemove.txt"
 	createFile := func(t *testing.T, fs *fat32.FileSystem, name, content string) {
+		t.Helper()
 		origFile, err := fs.OpenFile(filepath.Join(workingPath, name), os.O_CREATE|os.O_RDWR)
 		if err != nil {
 			t.Fatalf("Could not create file %s: %+v", name, err)
@@ -1361,9 +1366,11 @@ func Test_Remove(t *testing.T) {
 			name:     "simple remove works without",
 			hasError: false,
 			pre: func(t *testing.T, fs *fat32.FileSystem) {
+				t.Helper()
 				createFile(t, fs, fileToRemove, "FooBar")
 			},
 			post: func(t *testing.T, fs *fat32.FileSystem) {
+				t.Helper()
 				// check if original file is there -> should not be the case
 				origFile, err := fs.OpenFile(fileToRemove, os.O_RDONLY)
 				if err == nil {
@@ -1376,10 +1383,10 @@ func Test_Remove(t *testing.T) {
 			name:     "file to remove does not exist",
 			hasError: true,
 			errorMsg: "target file /fileToRemove.txt does not exist",
-			pre: func(t *testing.T, fs *fat32.FileSystem) {
+			pre: func(_ *testing.T, _ *fat32.FileSystem) {
 				// do not create any file
 			},
-			post: func(t *testing.T, fs *fat32.FileSystem) {
+			post: func(_ *testing.T, _ *fat32.FileSystem) {
 
 			},
 		},
@@ -1387,6 +1394,7 @@ func Test_Remove(t *testing.T) {
 			name:     "removing multiple files",
 			hasError: false,
 			pre: func(t *testing.T, fs *fat32.FileSystem) {
+				t.Helper()
 				var s string
 				for i := 0; i < 10240; i++ {
 					s += "this is a big file\n"
@@ -1400,6 +1408,7 @@ func Test_Remove(t *testing.T) {
 				}
 			},
 			post: func(t *testing.T, fs *fat32.FileSystem) {
+				t.Helper()
 				for i := 0; i < 100; i++ {
 					err := fs.Remove(fmt.Sprintf("/file%d.txt", i))
 					if err != nil {
@@ -1412,11 +1421,13 @@ func Test_Remove(t *testing.T) {
 			name:     "removing empty dir",
 			hasError: false,
 			pre: func(t *testing.T, fs *fat32.FileSystem) {
+				t.Helper()
 				if err := fs.Mkdir(filepath.Join(workingPath, fileToRemove)); err != nil {
 					t.Fatalf("could not create test directory: %+v", err)
 				}
 			},
 			post: func(t *testing.T, fs *fat32.FileSystem) {
+				t.Helper()
 				_, err := fs.ReadDir(filepath.Join(workingPath, fileToRemove))
 				if err == nil {
 					t.Fatalf("Expected that dir cannot be read, but is still there")
@@ -1427,6 +1438,7 @@ func Test_Remove(t *testing.T) {
 			name:     "cannot delete dir with content",
 			hasError: true,
 			pre: func(t *testing.T, fs *fat32.FileSystem) {
+				t.Helper()
 				if err := fs.Mkdir(filepath.Join(workingPath, fileToRemove)); err != nil {
 					t.Fatalf("could not create test directory: %+v", err)
 				}
@@ -1434,6 +1446,7 @@ func Test_Remove(t *testing.T) {
 				createFile(t, fs, filepath.Join(workingPath, fileToRemove, "test"), "foo")
 			},
 			post: func(t *testing.T, fs *fat32.FileSystem) {
+				t.Helper()
 				_, err := fs.ReadDir(filepath.Join(workingPath, fileToRemove))
 				if err != nil {
 					t.Fatalf("Expected that dir can be read, but has error: %+v", err)
