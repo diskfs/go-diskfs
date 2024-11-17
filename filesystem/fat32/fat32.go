@@ -637,18 +637,128 @@ func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 	}, nil
 }
 
-// Rename renames (moves) oldpath to newpath. If newpath already exists and is not a directory, Rename replaces it.
-//
-//nolint:revive // parameters will be used eventually
-func (fs *FileSystem) Rename(oldpath, newpath string) error {
-	return filesystem.ErrNotImplemented
+// removes the named file or (empty) directory.
+func (fs *FileSystem) Remove(pathname string) error {
+	// get the path
+	dir := path.Dir(pathname)
+	filename := path.Base(pathname)
+	// if the dir == filename, then it is just /
+	if dir == filename {
+		return fmt.Errorf("cannot remove directory %s as file", pathname)
+	}
+	// get the directory entries
+	parentDir, entries, err := fs.readDirWithMkdir(dir, false)
+	if err != nil {
+		return fmt.Errorf("could not read directory entries for %s", dir)
+	}
+	// we now know that the directory exists, see if the file exists
+	var targetEntry *directoryEntry
+	for _, e := range entries {
+		shortName := e.filenameShort
+		if e.fileExtension != "" {
+			shortName += "." + e.fileExtension
+		}
+		if e.filenameLong != filename && shortName != filename {
+			continue
+		}
+		// cannot do anything with directories
+		if e.isSubdirectory {
+			content, err := fs.ReadDir(pathname)
+			if err != nil {
+				return fmt.Errorf("error while checking if file to delete is empty: %+v", err)
+			}
+			// '.' & '..' are always present in directory
+			if len(content) > 2 {
+				return fmt.Errorf("cannot remove non-empty directory %s", pathname)
+			}
+		}
+		// if we got this far, we have found the file
+		targetEntry = e
+	}
+
+	// see if the file exists
+	// if the file does not exist, and is not opened for os.O_CREATE, return an error
+	if targetEntry == nil {
+		return fmt.Errorf("target file %s does not exist", pathname)
+	}
+	err = parentDir.removeEntry(filename)
+	if err != nil {
+		return fmt.Errorf("failed to remove file %s: %v", pathname, err)
+	}
+
+	// we need to make sure that clusters are removed which may not be used anymore
+	_, err = fs.allocateSpace(uint64(parentDir.fileSize), parentDir.clusterLocation)
+	if err != nil {
+		return fmt.Errorf("failed to allocate clusters: %v", err)
+	}
+
+	// write the directory entries to disk
+	err = fs.writeDirectoryEntries(parentDir)
+	if err != nil {
+		return fmt.Errorf("error writing directory file %s to disk: %v", pathname, err)
+	}
+
+	return nil
 }
 
-// removes the named file or (empty) directory.
-//
-//nolint:revive // parameters will be used eventually
-func (fs *FileSystem) Remove(pathname string) error {
-	return filesystem.ErrNotImplemented
+// Rename renames (moves) oldpath to newpath. If newpath already exists and is not a directory, Rename replaces it.
+func (fs *FileSystem) Rename(oldpath, newpath string) error {
+	// get the path
+	dir := path.Dir(oldpath)
+	filename := path.Base(oldpath)
+
+	newDir := path.Dir(newpath)
+	newname := path.Base(newpath)
+	if dir != newDir {
+		return errors.New("can only rename files within the same directory")
+	}
+
+	// if the dir == filename, then it is just /
+	if dir == filename {
+		return fmt.Errorf("cannot rename directory %s as file", oldpath)
+	}
+	// get the directory entries
+	parentDir, entries, err := fs.readDirWithMkdir(dir, false)
+	if err != nil {
+		return fmt.Errorf("could not read directory entries for %s", dir)
+	}
+	// we now know that the directory exists, see if the file exists
+	var targetEntry *directoryEntry
+	for _, e := range entries {
+		shortName := e.filenameShort
+		if e.fileExtension != "" {
+			shortName += "." + e.fileExtension
+		}
+		if e.filenameLong != filename && shortName != filename {
+			continue
+		}
+		// if we got this far, we have found the file
+		targetEntry = e
+	}
+
+	// see if the file exists
+	// if the file does not exist, and is not opened for os.O_CREATE, return an error
+	if targetEntry == nil {
+		return fmt.Errorf("target file %s does not exist", oldpath)
+	}
+	err = parentDir.renameEntry(filename, newname)
+	if err != nil {
+		return fmt.Errorf("failed to rename file %s: %v", oldpath, err)
+	}
+
+	// we need to make sure that clusters are removed which may not be used anymore
+	_, err = fs.allocateSpace(uint64(parentDir.fileSize), parentDir.clusterLocation)
+	if err != nil {
+		return fmt.Errorf("failed to allocate clusters: %v", err)
+	}
+
+	// write the directory entries to disk
+	err = fs.writeDirectoryEntries(parentDir)
+	if err != nil {
+		return fmt.Errorf("error writing directory file %s to disk: %v", oldpath, err)
+	}
+
+	return nil
 }
 
 // Label get the label of the filesystem from the secial file in the root directory.
@@ -801,7 +911,7 @@ func (fs *FileSystem) mkSubdir(parent *Directory, name string) (*directoryEntry,
 }
 
 func (fs *FileSystem) writeDirectoryEntries(dir *Directory) error {
-	// we need to save the entries of theparent
+	// we need to save the entries of the parent
 	b, err := dir.entriesToBytes(fs.bytesPerCluster)
 	if err != nil {
 		return fmt.Errorf("could not create a valid byte stream for a FAT32 Entries: %w", err)
