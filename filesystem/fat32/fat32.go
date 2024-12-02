@@ -990,6 +990,10 @@ func (fs *FileSystem) readDirWithMkdir(p string, doMake bool) (*Directory, []*di
 		// do we have an entry whose name is the same as this name?
 		found := false
 		for _, e := range entries {
+			// don't match volume label
+			if e.isVolumeLabel {
+				continue
+			}
 			// if the filename does not match, continue
 			// match is determined by any one of:
 			// - long filename == provided name
