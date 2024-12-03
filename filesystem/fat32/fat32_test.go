@@ -1078,6 +1078,16 @@ func testMkFile(fs filesystem.FileSystem, p string, size int) error {
 }
 
 func TestCreateFileTree(t *testing.T) {
+	testCreateFileTree(t, false)
+}
+
+func TestCreateFileTreeLazy(t *testing.T) {
+	testCreateFileTree(t, true)
+}
+
+func testCreateFileTree(t *testing.T, lazy bool) {
+	t.Helper()
+
 	filename := "fat32_test"
 	tmpDir := t.TempDir()
 	tmpImgPath := filepath.Join(tmpDir, filename)
@@ -1097,6 +1107,7 @@ func TestCreateFileTree(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error creating filesystem: %v", err)
 	}
+	fs.(*fat32.FileSystem).SetLazy(lazy)
 
 	if err := fs.Mkdir("/A"); err != nil {
 		t.Errorf("Error making dir /A in root: %v", err)
@@ -1142,6 +1153,10 @@ func TestCreateFileTree(t *testing.T) {
 	file = "/b/sub51/blob/gigfile1"
 	if err := testMkFile(fs, file, gb); err != nil {
 		t.Errorf("Error making gigfile1 %s: %v", file, err)
+	}
+
+	if err := fs.(*fat32.FileSystem).Commit(); err != nil {
+		t.Errorf("Error committing filesystem: %v", err)
 	}
 }
 

@@ -60,6 +60,7 @@ type FileSystem struct {
 	size            int64
 	start           int64
 	file            util.File
+	lazy            bool
 }
 
 // Equal compare if two filesystems are equal
@@ -433,6 +434,10 @@ func (fs *FileSystem) writeBootSector() error {
 }
 
 func (fs *FileSystem) writeFsis() error {
+	if fs.lazy {
+		return nil
+	}
+
 	fsInformationSector := fs.bootSector.biosParameterBlock.fsInformationSector
 	backupBootSector := fs.bootSector.biosParameterBlock.backupBootSector
 	fsisPrimary := int64(fsInformationSector * uint16(SectorSize512))
@@ -453,6 +458,10 @@ func (fs *FileSystem) writeFsis() error {
 }
 
 func (fs *FileSystem) writeFat() error {
+	if fs.lazy {
+		return nil
+	}
+
 	reservedSectors := fs.bootSector.biosParameterBlock.dos331BPB.dos20BPB.reservedSectors
 	fatPrimaryStart := uint64(reservedSectors) * uint64(SectorSize512)
 	fatSecondaryStart := fatPrimaryStart + uint64(fs.table.size)
@@ -838,6 +847,32 @@ func (fs *FileSystem) SetLabel(volumeLabel string) error {
 	err = fs.writeDirectoryEntries(rootDir)
 	if err != nil {
 		return fmt.Errorf("failed to save the root directory to disk: %w", err)
+	}
+
+	return nil
+}
+
+// SetLazy sets the lazy flag for the filesystem. If lazy is true, then the filesystem will not write FAT tables and
+// other metadata to the disk when creating/writing files or directories. After all changes to file system are done
+// Commit() must be called to write the changes to the disk.
+func (fs *FileSystem) SetLazy(lazy bool) {
+	fs.lazy = lazy
+}
+
+// Commit writes the FAT tables and other metadata to the disk. This is only necessary if lazy is set to true.
+func (fs *FileSystem) Commit() error {
+	curr := fs.lazy
+	fs.lazy = false
+	defer func() {
+		fs.lazy = curr
+	}()
+
+	if err := fs.writeFsis(); err != nil {
+		return fmt.Errorf("failed to write the file system information sector: %w", err)
+	}
+
+	if err := fs.writeFat(); err != nil {
+		return fmt.Errorf("failed to write the file allocation table: %w", err)
 	}
 
 	return nil
