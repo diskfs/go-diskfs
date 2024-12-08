@@ -15,11 +15,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/diskfs/go-diskfs/backend/file"
 	"github.com/diskfs/go-diskfs/disk"
 	"github.com/diskfs/go-diskfs/filesystem"
 	"github.com/diskfs/go-diskfs/partition"
 	"github.com/diskfs/go-diskfs/partition/gpt"
 	"github.com/diskfs/go-diskfs/partition/mbr"
+	"github.com/diskfs/go-diskfs/testhelper"
 )
 
 var (
@@ -70,10 +72,9 @@ func TestGetPartitionTable(t *testing.T) {
 	defer f.Close()
 
 	d := &disk.Disk{
-		File:              f,
+		Backend:           file.New(f, true),
 		LogicalBlocksize:  512,
 		PhysicalBlocksize: 512,
-		Writable:          false,
 	}
 	table, err := d.GetPartitionTable()
 
@@ -109,11 +110,9 @@ func TestPartition(t *testing.T) {
 		}
 
 		d := &disk.Disk{
-			File:              f,
+			Backend:           file.New(f, false),
 			LogicalBlocksize:  512,
 			PhysicalBlocksize: 512,
-			Info:              fileInfo,
-			Writable:          true,
 			Size:              fileInfo.Size(),
 		}
 		// this is partition start and end in sectors, not bytes
@@ -146,17 +145,10 @@ func TestPartition(t *testing.T) {
 			fmt.Println(f.Name())
 		}
 
-		fileInfo, err := f.Stat()
-		if err != nil {
-			t.Fatalf("error reading info on temporary disk: %v", err)
-		}
-
 		d := &disk.Disk{
-			File:              f,
+			Backend:           file.New(f, false),
 			LogicalBlocksize:  512,
 			PhysicalBlocksize: 512,
-			Info:              fileInfo,
-			Writable:          true,
 		}
 		// this is partition start and end in sectors, not bytes
 		sectorSize := 512
@@ -176,7 +168,7 @@ func TestPartition(t *testing.T) {
 	})
 	t.Run("readonly", func(t *testing.T) {
 		d := &disk.Disk{
-			Writable: false,
+			Backend: file.New(&testhelper.FileImpl{}, true),
 		}
 		expectedErr := fmt.Errorf("disk file or device not open for write")
 		err := d.Partition(&mbr.Table{})
@@ -226,18 +218,11 @@ func TestWritePartitionContents(t *testing.T) {
 					fmt.Println(f.Name())
 				}
 
-				fileInfo, err := f.Stat()
-				if err != nil {
-					t.Fatalf("error reading info on temporary disk: %v", err)
-				}
-
 				d := &disk.Disk{
-					File:              f,
+					Backend:           file.New(f, false),
 					LogicalBlocksize:  512,
 					PhysicalBlocksize: 512,
-					Info:              fileInfo,
 					Table:             tt.table,
-					Writable:          true,
 				}
 				b := make([]byte, partitionSize)
 				_, _ = rand.Read(b)
@@ -256,7 +241,7 @@ func TestWritePartitionContents(t *testing.T) {
 	})
 	t.Run("readonly", func(t *testing.T) {
 		d := &disk.Disk{
-			Writable: false,
+			Backend: file.New(&testhelper.FileImpl{}, true),
 		}
 		expectedErr := fmt.Errorf("disk file or device not open for write")
 		_, err := d.WritePartitionContents(0, nil)
@@ -266,7 +251,6 @@ func TestWritePartitionContents(t *testing.T) {
 	})
 }
 
-//nolint:gocyclo // we do not care much about cyclomatic complexity in the test function. Maybe someday we can improve it.
 func TestReadPartitionContents(t *testing.T) {
 	t.Run("gpt", func(t *testing.T) {
 		partitionStart := uint64(2048)
@@ -308,22 +292,15 @@ func TestReadPartitionContents(t *testing.T) {
 					fmt.Println(f.Name())
 				}
 
-				fileInfo, err := f.Stat()
-				if err != nil {
-					t.Fatalf("error reading info on temporary disk: %v", err)
-				}
-
 				// get the actual content
 				b2 := make([]byte, partitionSize*512)
 				_, _ = f.ReadAt(b2, int64(partitionStart*512))
 
 				d := &disk.Disk{
-					File:              f,
+					Backend:           file.New(f, true),
 					LogicalBlocksize:  512,
 					PhysicalBlocksize: 512,
-					Info:              fileInfo,
 					Table:             tt.table,
-					Writable:          false,
 				}
 				var writer bytes.Buffer
 				read, err := d.ReadPartitionContents(tt.partition, &writer)
@@ -381,22 +358,15 @@ func TestReadPartitionContents(t *testing.T) {
 					fmt.Println(f.Name())
 				}
 
-				fileInfo, err := f.Stat()
-				if err != nil {
-					t.Fatalf("error reading info on temporary disk: %v", err)
-				}
-
 				// get the actual content
 				b2 := make([]byte, partitionSize*512)
 				_, _ = f.ReadAt(b2, int64(partitionStart*512))
 
 				d := &disk.Disk{
-					File:              f,
+					Backend:           file.New(f, true),
 					LogicalBlocksize:  512,
 					PhysicalBlocksize: 512,
-					Info:              fileInfo,
 					Table:             tt.table,
-					Writable:          false,
 				}
 				var writer bytes.Buffer
 				read, err := d.ReadPartitionContents(tt.partition, &writer)
@@ -433,17 +403,10 @@ func TestCreateFilesystem(t *testing.T) {
 			fmt.Println(f.Name())
 		}
 
-		fileInfo, err := f.Stat()
-		if err != nil {
-			t.Fatalf("error reading info on temporary disk: %v", err)
-		}
-
 		d := &disk.Disk{
-			File:              f,
+			Backend:           file.New(f, false),
 			LogicalBlocksize:  512,
 			PhysicalBlocksize: 512,
-			Info:              fileInfo,
-			Writable:          true,
 		}
 		expected := fmt.Errorf("cannot create filesystem on a partition without a partition table")
 		fs, err := d.CreateFilesystem(disk.FilesystemSpec{Partition: 1, FSType: filesystem.TypeFat32})
@@ -473,12 +436,10 @@ func TestCreateFilesystem(t *testing.T) {
 		}
 
 		d := &disk.Disk{
-			File:              f,
+			Backend:           file.New(f, false),
 			LogicalBlocksize:  512,
 			PhysicalBlocksize: 512,
-			Info:              fileInfo,
 			Size:              fileInfo.Size(),
-			Writable:          true,
 		}
 		fs, err := d.CreateFilesystem(disk.FilesystemSpec{Partition: 0, FSType: filesystem.TypeFat32})
 		if err != nil {
@@ -515,13 +476,11 @@ func TestCreateFilesystem(t *testing.T) {
 			LogicalSectorSize: 512,
 		}
 		d := &disk.Disk{
-			File:              f,
+			Backend:           file.New(f, false),
 			LogicalBlocksize:  512,
 			PhysicalBlocksize: 512,
-			Info:              fileInfo,
 			Size:              fileInfo.Size(),
 			Table:             table,
-			Writable:          true,
 		}
 		fs, err := d.CreateFilesystem(disk.FilesystemSpec{Partition: 1, FSType: filesystem.TypeFat32})
 		if err != nil {
@@ -533,7 +492,7 @@ func TestCreateFilesystem(t *testing.T) {
 	})
 	t.Run("readonly", func(t *testing.T) {
 		d := &disk.Disk{
-			Writable: false,
+			Backend: file.New(&testhelper.FileImpl{}, true),
 		}
 		expectedErr := fmt.Errorf("disk file or device not open for write")
 		_, err := d.CreateFilesystem(disk.FilesystemSpec{})
@@ -557,17 +516,10 @@ func TestGetFilesystem(t *testing.T) {
 			fmt.Println(f.Name())
 		}
 
-		fileInfo, err := f.Stat()
-		if err != nil {
-			t.Fatalf("error reading info on temporary disk: %v", err)
-		}
-
 		d := &disk.Disk{
-			File:              f,
+			Backend:           file.New(f, true),
 			LogicalBlocksize:  512,
 			PhysicalBlocksize: 512,
-			Info:              fileInfo,
-			Writable:          false,
 		}
 		expected := fmt.Errorf("cannot read filesystem on a partition without a partition table")
 		fs, err := d.GetFilesystem(1)
@@ -609,12 +561,10 @@ func TestGetFilesystem(t *testing.T) {
 		}
 
 		d := &disk.Disk{
-			File:              f,
+			Backend:           file.New(f, true),
 			LogicalBlocksize:  512,
 			PhysicalBlocksize: 512,
-			Info:              fileInfo,
 			Size:              fileInfo.Size(),
-			Writable:          false,
 		}
 		fs, err := d.GetFilesystem(0)
 		if err != nil {
@@ -651,13 +601,11 @@ func TestGetFilesystem(t *testing.T) {
 			LogicalSectorSize: 512,
 		}
 		d := &disk.Disk{
-			File:              f,
+			Backend:           file.New(f, true),
 			LogicalBlocksize:  512,
 			PhysicalBlocksize: 512,
-			Info:              fileInfo,
 			Size:              fileInfo.Size(),
 			Table:             table,
-			Writable:          false,
 		}
 		fs, err := d.GetFilesystem(1)
 		if err != nil {

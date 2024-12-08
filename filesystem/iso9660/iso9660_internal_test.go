@@ -3,17 +3,19 @@ package iso9660
 import (
 	"os"
 	"testing"
+
+	"github.com/diskfs/go-diskfs/backend/file"
 )
 
 func TestIso9660ReadDirectory(t *testing.T) {
-	// will use the file.iso fixture to test an actual directory
+	// will use the testFile.iso fixture to test an actual directory
 	// \ (root directory) should be in one block
 	// \FOO should be in multiple blocks
-	file, err := os.Open(ISO9660File)
+	testFile, err := os.Open(ISO9660File)
 	if err != nil {
 		t.Fatalf("could not open file %s to read: %v", ISO9660File, err)
 	}
-	defer file.Close()
+	defer testFile.Close()
 	// FileSystem implements the FileSystem interface
 	pathTable, _, _, err := get9660PathTable()
 	if err != nil {
@@ -23,7 +25,7 @@ func TestIso9660ReadDirectory(t *testing.T) {
 		workspace: "", // we only ever call readDirectory with no workspace
 		size:      ISO9660Size,
 		start:     0,
-		file:      file,
+		backend:   file.New(testFile, true),
 		blocksize: 2048,
 		pathTable: pathTable,
 	}
@@ -66,14 +68,14 @@ func TestIso9660ReadDirectory(t *testing.T) {
 }
 
 func TestRockRidgeReadDirectory(t *testing.T) {
-	// will use the file.iso fixture to test an actual directory
+	// will use the testFile.iso fixture to test an actual directory
 	// \ (root directory) should be in one block
 	// \FOO should be in multiple blocks
-	file, err := os.Open(RockRidgeFile)
+	testFile, err := os.Open(RockRidgeFile)
 	if err != nil {
 		t.Fatalf("could not open file %s to read: %v", RockRidgeFile, err)
 	}
-	defer file.Close()
+	defer testFile.Close()
 	// FileSystem implements the FileSystem interface
 	pathTable, _, _, err := getRockRidgePathTable()
 	if err != nil {
@@ -83,7 +85,7 @@ func TestRockRidgeReadDirectory(t *testing.T) {
 		workspace:      "", // we only ever call readDirectory with no workspace
 		size:           ISO9660Size,
 		start:          0,
-		file:           file,
+		backend:        file.New(testFile, true),
 		blocksize:      2048,
 		pathTable:      pathTable,
 		suspEnabled:    true,

@@ -7,10 +7,11 @@ package squashfs
 // 3. Take the relevant sizes, locations and inodes and use them here.
 
 import (
+	"io/fs"
 	"os"
 	"time"
 
-	"github.com/diskfs/go-diskfs/util"
+	"github.com/diskfs/go-diskfs/backend/file"
 )
 
 const (
@@ -143,14 +144,13 @@ var (
 	testLargeDirEntryCount = 252
 )
 
-func testGetFilesystem(f util.File) (*FileSystem, []byte, error) {
-	file := f
+func testGetFilesystem(f fs.File) (*FileSystem, []byte, error) {
 	var (
 		err error
 		b   []byte
 	)
-	if file == nil {
-		file, err = os.Open(SquashfsUncompressedfile)
+	if f == nil {
+		f, err = os.Open(SquashfsUncompressedfile)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -161,7 +161,7 @@ func testGetFilesystem(f util.File) (*FileSystem, []byte, error) {
 	}
 	blocksize := int64(testValidBlocksize)
 	sb := testValidSuperblockUncompressed
-	fs := &FileSystem{
+	testFs := &FileSystem{
 		/*
 			TODO: Still need to add these in
 			uidsGids       []byte
@@ -173,7 +173,7 @@ func testGetFilesystem(f util.File) (*FileSystem, []byte, error) {
 		compressor: &CompressorGzip{},
 		size:       5251072,
 		start:      0,
-		file:       file,
+		backend:    file.New(f, true),
 		blocksize:  blocksize,
 		xattrs:     nil,
 		rootDir: &inodeImpl{
@@ -196,15 +196,15 @@ func testGetFilesystem(f util.File) (*FileSystem, []byte, error) {
 		uidsGids:   []uint32{5, 0, 1},
 		superblock: sb,
 	}
-	return fs, b, nil
+	return testFs, b, nil
 }
 
 func testGetInodeMetabytes() (inodeBytes []byte, inodesStart uint64, err error) {
-	fs, b, err := testGetFilesystem(nil)
+	testFs, b, err := testGetFilesystem(nil)
 	if err != nil {
 		return nil, 0, err
 	}
-	return b[fs.superblock.inodeTableStart+2:], fs.superblock.inodeTableStart, nil
+	return b[testFs.superblock.inodeTableStart+2:], testFs.superblock.inodeTableStart, nil
 }
 
 //nolint:deadcode // we need these references in the future
@@ -233,12 +233,12 @@ func testGetFilesystemRoot() []*directoryEntry {
 }
 
 // GetTestFileSmall get a *squashfs.File to a usable and known test file
-func GetTestFileSmall(f util.File, c Compressor) (*File, error) {
-	fs, _, err := testGetFilesystem(f)
+func GetTestFileSmall(f fs.File, c Compressor) (*File, error) {
+	testFs, _, err := testGetFilesystem(f)
 	if err != nil {
 		return nil, err
 	}
-	fs.compressor = c
+	testFs.compressor = c
 	ef := &extendedFile{
 		startBlock:         superblockSize,
 		fileSize:           7,
@@ -255,19 +255,19 @@ func GetTestFileSmall(f util.File, c Compressor) (*File, error) {
 		isReadWrite:  false,
 		isAppend:     false,
 		offset:       0,
-		filesystem:   fs,
+		filesystem:   testFs,
 	}, nil
 }
 
 // GetTestFileBig get a *squashfs.File to a usable and known test file
-func GetTestFileBig(f util.File, c Compressor) (*File, error) {
-	fs, _, err := testGetFilesystem(f)
+func GetTestFileBig(f fs.File, c Compressor) (*File, error) {
+	testFs, _, err := testGetFilesystem(f)
 	if err != nil {
 		return nil, err
 	}
-	fs.compressor = c
+	testFs.compressor = c
 	fragSize := uint64(5)
-	size := uint64(fs.blocksize) + fragSize
+	size := uint64(testFs.blocksize) + fragSize
 	ef := &extendedFile{
 		startBlock:         superblockSize,
 		fileSize:           size,
@@ -277,7 +277,7 @@ func GetTestFileBig(f util.File, c Compressor) (*File, error) {
 		fragmentOffset:     7,
 		xAttrIndex:         0,
 		blockSizes: []*blockData{
-			{size: uint32(fs.blocksize), compressed: false},
+			{size: uint32(testFs.blocksize), compressed: false},
 		},
 	}
 	// inode 0, offset 0, name "README.md", type basic file
@@ -286,6 +286,6 @@ func GetTestFileBig(f util.File, c Compressor) (*File, error) {
 		isReadWrite:  false,
 		isAppend:     false,
 		offset:       0,
-		filesystem:   fs,
+		filesystem:   testFs,
 	}, nil
 }

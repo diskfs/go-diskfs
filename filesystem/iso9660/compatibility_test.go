@@ -4,6 +4,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/diskfs/go-diskfs/backend/file"
 	"github.com/diskfs/go-diskfs/filesystem"
 )
 
@@ -13,7 +14,9 @@ func TestISO9660FSCompatibility(t *testing.T) {
 		t.Fatalf("Failed to read iso9660 testfile: %v", err)
 	}
 	defer f.Close()
-	isofs, err := Read(f, 0, 0, 2048)
+
+	b := file.New(f, true)
+	isofs, err := Read(b, 0, 0, 2048)
 	if err != nil {
 		t.Fatalf("iso read: %s", err)
 	}

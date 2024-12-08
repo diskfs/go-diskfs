@@ -4,6 +4,8 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/diskfs/go-diskfs/backend/file"
 )
 
 const (
@@ -13,7 +15,7 @@ const (
 	ISO9660Size   = 11018240
 )
 
-func GetTestFile(t *testing.T) (file *File, name string) {
+func GetTestFile(t *testing.T) (isoFile *File, name string) {
 	t.Helper()
 	// we use the entry for FILENA01.;1 , which should have the content "filename_01" (without the quotes)
 	// see ./testdata/README.md
@@ -29,7 +31,7 @@ func GetTestFile(t *testing.T) (file *File, name string) {
 		workspace: "",
 		size:      ISO9660Size,
 		start:     0,
-		file:      f,
+		backend:   file.New(f, true),
 		blocksize: 2048,
 	}
 	de := &directoryEntry{
@@ -48,10 +50,10 @@ func GetTestFile(t *testing.T) (file *File, name string) {
 	}, "README\n"
 }
 
-func GetLargeTestFile(t *testing.T) (file *File, size uint32) {
+func GetLargeTestFile(t *testing.T) (isoFile *File, size uint32) {
 	t.Helper()
 	// FileSystem implements the FileSystem interface
-	f, err := os.Open(ISO9660File)
+	testFile, err := os.Open(ISO9660File)
 	if err != nil {
 		t.Errorf("could not read ISO9660 test file %s: %v", ISO9660File, err)
 	}
@@ -59,7 +61,7 @@ func GetLargeTestFile(t *testing.T) (file *File, size uint32) {
 		workspace: "",
 		size:      ISO9660Size,
 		start:     0,
-		file:      f,
+		backend:   file.New(testFile, true),
 		blocksize: 2048,
 	}
 	de := &directoryEntry{
