@@ -18,6 +18,65 @@ type File struct {
 	filesystem  *FileSystem
 }
 
+// Get the full cluster chain of the File.
+// Getting this file system internal info can be beneficial for some low-level operations, such as:
+// - Performing secure erase.
+// - Detecting file fragmentation.
+// - Passing Disk locations to a different tool that can work with it.
+func (fl *File) GetClusterChain() ([]uint32, error) {
+	if fl == nil || fl.filesystem == nil {
+		return nil, os.ErrClosed
+	}
+
+	fs := fl.filesystem
+	clusters, err := fs.getClusterList(fl.clusterLocation)
+	if err != nil {
+		return nil, fmt.Errorf("unable to get list of clusters for file: %v", err)
+	}
+
+	return clusters, nil
+}
+
+type DiskRange struct {
+	Offset uint64
+	Length uint64
+}
+
+// Get the disk ranges occupied by the File.
+// Returns an array of disk ranges, where each entry is a contiguous area on disk.
+// This information is similar to that returned by GetClusterChain, just in a different format,
+// directly returning disk ranges instead of FAT clusters.
+func (fl *File) GetDiskRanges() ([]DiskRange, error) {
+	clusters, err := fl.GetClusterChain()
+	if err != nil {
+		return nil, err
+	}
+
+	fs := fl.filesystem
+	bytesPerCluster := uint64(fs.bytesPerCluster)
+	dataStart := uint64(fs.dataStart)
+
+	var ranges []DiskRange
+	var lastCluster uint32
+
+	for _, cluster := range clusters {
+		if lastCluster != 0 && cluster == lastCluster+1 {
+			// Extend the current range
+			ranges[len(ranges)-1].Length += bytesPerCluster
+		} else {
+			// Add a new range
+			offset := dataStart + uint64(cluster-2)*bytesPerCluster
+			ranges = append(ranges, DiskRange{
+				Offset: offset,
+				Length: bytesPerCluster,
+			})
+		}
+		lastCluster = cluster
+	}
+
+	return ranges, nil
+}
+
 // Read reads up to len(b) bytes from the File.
 // It returns the number of bytes read and any error encountered.
 // At end of file, Read returns 0, io.EOF
