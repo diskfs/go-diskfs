@@ -18,7 +18,11 @@ type File struct {
 	filesystem  *FileSystem
 }
 
-// Get the full cluster chain of the File
+// Get the full cluster chain of the File.
+// Getting this file system internal info can be beneficial for some low-level operations, such as:
+// - Performing secure erase.
+// - Detecting file fragmentation.
+// - Passing Disk locations to a different tool that can work with it.
 func (fl *File) GetClusterChain() ([]uint32, error) {
 	if fl == nil || fl.filesystem == nil {
 		return nil, os.ErrClosed
@@ -40,6 +44,8 @@ type DiskRange struct {
 
 // Get the disk ranges occupied by the File.
 // Returns an array of disk ranges, where each entry is a contiguous area on disk.
+// This information is similar to that returned by GetClusterChain, just in a different format,
+// directly returning disk ranges instead of FAT clusters.
 func (fl *File) GetDiskRanges() ([]DiskRange, error) {
 	clusters, err := fl.GetClusterChain()
 	if err != nil {
