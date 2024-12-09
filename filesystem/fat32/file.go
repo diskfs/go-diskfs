@@ -57,7 +57,7 @@ func (fl *File) GetDiskRanges() ([]DiskRange, error) {
 	dataStart := uint64(fs.dataStart)
 
 	var ranges []DiskRange
-	var lastCluster uint32 = 0
+	var lastCluster uint32
 
 	for _, cluster := range clusters {
 		if lastCluster != 0 && cluster == lastCluster+1 {
