@@ -809,6 +809,7 @@ func readXattrsTable(s *superblock, file backend.File, c Compressor) (*xAttrTabl
 	// now load the actual xAttrs data
 	xAttrEnd := binary.LittleEndian.Uint64(b[:8])
 	xAttrData := make([]byte, 0)
+	offsetMap := map[uint32]uint32{0: 0}
 	for i := xAttrStart; i < xAttrEnd; {
 		uncompressed, size, err = fs.readMetaBlock(file, c, int64(i))
 		if err != nil {
@@ -816,15 +817,16 @@ func readXattrsTable(s *superblock, file backend.File, c Compressor) (*xAttrTabl
 		}
 		xAttrData = append(xAttrData, uncompressed...)
 		i += uint64(size)
+		offsetMap[uint32(i-xAttrStart)] = uint32(len(xAttrData))
 	}
 
 	// now have all of the indexes and metadata loaded
 	// need to pass it the offset of the beginning of the id table from the beginning of the disk
-	return parseXattrsTable(xAttrData, bIndex, s.idTableStart, c)
+	return parseXattrsTable(xAttrData, bIndex, offsetMap, c)
 }
 
-//nolint:unparam,unused,revive // this does not use offset or compressor yet, but only because we have not yet added support
-func parseXattrsTable(bUIDXattr, bIndex []byte, offset uint64, c Compressor) (*xAttrTable, error) {
+//nolint:unparam,unused,revive // this does not use compressor yet, but only because we have not yet added support
+func parseXattrsTable(bUIDXattr, bIndex []byte, offsetMap map[uint32]uint32, c Compressor) (*xAttrTable, error) {
 	// create the ID list
 	var (
 		xAttrIDList []*xAttrIndex
@@ -832,7 +834,7 @@ func parseXattrsTable(bUIDXattr, bIndex []byte, offset uint64, c Compressor) (*x
 
 	entrySize := int(xAttrIDEntrySize)
 	for i := 0; i+entrySize <= len(bIndex); i += entrySize {
-		entry, err := parseXAttrIndex(bIndex[i:])
+		entry, err := parseXAttrIndex(bIndex[i:], offsetMap)
 		if err != nil {
 			return nil, fmt.Errorf("error parsing xAttr ID table entry in position %d: %v", i, err)
 		}
