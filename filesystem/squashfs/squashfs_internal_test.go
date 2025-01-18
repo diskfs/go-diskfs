@@ -68,7 +68,7 @@ func TestValidateBlocksize(t *testing.T) {
 
 func TestParseXAttrsTable(t *testing.T) {
 	// parseXattrsTable(bUIDXattr, bIndex []byte, offset uint64, c compressor) (*xAttrTable, error) {
-	b, _, err := testGetInodeMetabytes()
+	b, err := testGetInodeMetabytes()
 	if err != nil {
 		t.Fatalf("error getting metadata bytes: %v", err)
 	}

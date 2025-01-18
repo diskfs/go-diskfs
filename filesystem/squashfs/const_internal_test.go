@@ -199,12 +199,12 @@ func testGetFilesystem(f fs.File) (*FileSystem, []byte, error) {
 	return testFs, b, nil
 }
 
-func testGetInodeMetabytes() (inodeBytes []byte, inodesStart uint64, err error) {
+func testGetInodeMetabytes() (inodeBytes []byte, err error) {
 	testFs, b, err := testGetFilesystem(nil)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
-	return b[testFs.superblock.inodeTableStart+2:], testFs.superblock.inodeTableStart, nil
+	return b[testFs.superblock.inodeTableStart+2:], nil
 }
 
 //nolint:deadcode // we need these references in the future
