@@ -69,7 +69,7 @@ func TestInodeSize(t *testing.T) {
 }
 
 func TestInodeHeader(t *testing.T) {
-	b, _, err := testGetInodeMetabytes()
+	b, err := testGetInodeMetabytes()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +142,7 @@ func TestBlockData(t *testing.T) {
 
 func TestBasicDirectory(t *testing.T) {
 	dir := testBasicDirectory
-	b, _, err := testGetInodeMetabytes()
+	b, err := testGetInodeMetabytes()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,7 +203,7 @@ func TestExtendedDirectory(t *testing.T) {
 
 func TestBasicFile(t *testing.T) {
 	f := testBasicFile
-	b, _, err := testGetInodeMetabytes()
+	b, err := testGetInodeMetabytes()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -279,7 +279,7 @@ func TestBasicFile(t *testing.T) {
 func TestExtendedFile(t *testing.T) {
 	fd := testExtendedFile
 	f := &fd
-	b, _, err := testGetInodeMetabytes()
+	b, err := testGetInodeMetabytes()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -332,7 +332,7 @@ func TestExtendedFile(t *testing.T) {
 
 func TestBasicSymlink(t *testing.T) {
 	s := testBasicSymlink
-	b, _, err := testGetInodeMetabytes()
+	b, err := testGetInodeMetabytes()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -430,7 +430,7 @@ func TestExtendedIPC(t *testing.T) {
 }
 
 func TestInode(t *testing.T) {
-	b, _, err := testGetInodeMetabytes()
+	b, err := testGetInodeMetabytes()
 	if err != nil {
 		t.Fatal(err)
 	}

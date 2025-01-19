@@ -68,7 +68,7 @@ func TestValidateBlocksize(t *testing.T) {
 
 func TestParseXAttrsTable(t *testing.T) {
 	// parseXattrsTable(bUIDXattr, bIndex []byte, offset uint64, c compressor) (*xAttrTable, error) {
-	b, offset, err := testGetInodeMetabytes()
+	b, err := testGetInodeMetabytes()
 	if err != nil {
 		t.Fatalf("error getting metadata bytes: %v", err)
 	}
@@ -81,7 +81,7 @@ func TestParseXAttrsTable(t *testing.T) {
 
 	// entries in the xattr ID table are offset from beginning of disk, not from xattr table
 	//   so need offset of bUIDXattr from beginning of disk to make use of it
-	table, err := parseXattrsTable(bUIDXattr, bIndex, offset+startUID, nil)
+	table, err := parseXattrsTable(bUIDXattr, bIndex, map[uint32]uint32{0: 0}, nil)
 	if err != nil {
 		t.Fatalf("error reading xattrs table: %v", err)
 	}

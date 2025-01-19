@@ -9,23 +9,43 @@ import (
 func TestParseXAttrIndex(t *testing.T) {
 	tests := []struct {
 		b   []byte
+		o   map[uint32]uint32
 		x   *xAttrIndex
 		err error
 	}{
-		{[]byte{0x0, 0x1}, nil, fmt.Errorf("cannot parse xAttr Index of size %d less than minimum %d", 2, xAttrIDEntrySize)},
+		{[]byte{0x0, 0x1}, map[uint32]uint32{0: 0}, nil, fmt.Errorf("cannot parse xAttr Index of size %d less than minimum %d", 2, xAttrIDEntrySize)},
 		{[]byte{
-			0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7,
-			0x8, 0x9, 0xa, 0xb,
-			0xc, 0xd, 0xe, 0xf,
-			0x10, 0x11, 0x12, 0x13, 0x14},
+			0x0, 0x1, // position in decompressed
+			0x2, 0x3, 0x4, 0x5, // offset of compressed data
+			0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd,
+			0xe, 0xf, 0x10, 0x11, 0x12, 0x13, 0x14},
+			map[uint32]uint32{},
+			nil, fmt.Errorf("cannot parse xAttr Index invalid offset key %d", 84148994)},
+		{[]byte{
+			0x0, 0x1, // position in decompressed
+			0x2, 0x3, 0x4, 0x5, // offset of compressed data
+			0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd,
+			0xe, 0xf, 0x10, 0x11, 0x12, 0x13, 0x14},
+			map[uint32]uint32{84148994: 5},
 			&xAttrIndex{
-				pos:   0x0706050403020100,
+				pos:   261,
+				count: 0x0b0a0908,
+				size:  0x0f0e0d0c,
+			}, nil},
+		{[]byte{
+			0x0, 0x1, // position in decompressed
+			0x2, 0x0, 0x0, 0x0, // offset of compressed data
+			0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd,
+			0xe, 0xf, 0x10, 0x11, 0x12, 0x13, 0x14},
+			map[uint32]uint32{2: 0},
+			&xAttrIndex{
+				pos:   256,
 				count: 0x0b0a0908,
 				size:  0x0f0e0d0c,
 			}, nil},
 	}
 	for i, tt := range tests {
-		x, err := parseXAttrIndex(tt.b)
+		x, err := parseXAttrIndex(tt.b, tt.o)
 		switch {
 		case (err == nil && tt.err != nil) || (err != nil && tt.err == nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
 			t.Errorf("%d: mismatched error, actual then expected", i)
