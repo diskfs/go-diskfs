@@ -532,7 +532,7 @@ func (fs *FileSystem) hydrateDirectoryEntries(entries []*directoryEntryRaw) ([]*
 		body, header := in.getBody(), in.getHeader()
 		xattrIndex, has := body.xattrIndex()
 		xattrs := map[string]string{}
-		if has && xattrIndex != noXattrInodeFlag {
+		if has {
 			xattrs, err = fs.xattrs.find(int(xattrIndex))
 			if err != nil {
 				return nil, fmt.Errorf("error reading xattrs for %s: %v", e.name, err)
