@@ -2,6 +2,7 @@ package squashfs
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"strings"
 	"testing"
@@ -383,13 +384,61 @@ func TestBasicSymlink(t *testing.T) {
 	})
 }
 
-//nolint:unused,revive // keep for future when we implement it and will need t
 func TestExtendedSymlink(t *testing.T) {
-	// when we have more data with which to work
+	s := &extendedSymlink{
+		links:      1,
+		target:     "/a/b/c/d/ef/g/h",
+		xAttrIndex: 46,
+	}
+	b, err := testGetInodeMetabytes()
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	// func (i extendedSymlink) toBytes() []byte {
-	// func (i extendedSymlink) size() int64 {
-	// func parseExtendedSymlink(b []byte) (*extendedSymlink, error) {
+	inodeB := binary.LittleEndian.AppendUint32(b[testBasicSymlinkStart:testBasicSymlinkEnd], s.xAttrIndex)
+	tests := []struct {
+		b   []byte
+		sym *extendedSymlink
+		err error
+	}{
+		{inodeB, s, nil},
+		{inodeB[:7], nil, fmt.Errorf("received %d bytes instead of expected minimal %d", 7, 8)},
+	}
+
+	t.Run("toBytes", func(t *testing.T) {
+		for i, tt := range tests {
+			if tt.sym == nil {
+				continue
+			}
+			b := tt.sym.toBytes()
+			if !bytes.Equal(b, tt.b) {
+				t.Errorf("%d: mismatched output, actual then expected", i)
+				t.Logf("% x", b)
+				t.Logf("% x", tt.b)
+			}
+		}
+	})
+	t.Run("Size", func(t *testing.T) {
+		size := s.size()
+		if size != 0 {
+			t.Errorf("mismatched sizes, actual %d expected %d", size, 0)
+		}
+	})
+	t.Run("parse", func(t *testing.T) {
+		for i, tt := range tests {
+			sym, _, err := parseExtendedSymlink(tt.b)
+			switch {
+			case (err == nil && tt.err != nil) || (err != nil && tt.err == nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
+				t.Errorf("%d: mismatched error, actual then expected", i)
+				t.Logf("%v", err)
+				t.Logf("%v", tt.err)
+			case (sym == nil && tt.sym != nil) || (sym != nil && tt.sym == nil) || (sym != nil && tt.sym != nil && *sym != *tt.sym):
+				t.Errorf("%d: mismatched results, actual then expected", i)
+				t.Logf("%#v", *sym)
+				t.Logf("%#v", *tt.sym)
+			}
+		}
+	})
 }
 
 //nolint:unused,revive // keep for future when we implement it and will need t
