@@ -642,7 +642,7 @@ func parseExtendedSymlink(b []byte) (*extendedSymlink, int, error) {
 	targetSize := int(binary.LittleEndian.Uint32(b[4:8]))
 	// account for the synlink target, plus 4 bytes for the xattr index after it
 	extra = targetSize + 4
-	if len(b) > extra+target {
+	if len(b) >= extra+target {
 		s.target = string(b[target : target+targetSize])
 		s.xAttrIndex = binary.LittleEndian.Uint32(b[target+targetSize : target+targetSize+4])
 		extra = 0

@@ -396,26 +396,13 @@ func TestExtendedSymlink(t *testing.T) {
 	}
 
 	inodeB := binary.LittleEndian.AppendUint32(b[testBasicSymlinkStart:testBasicSymlinkEnd], s.xAttrIndex)
-	tests := []struct {
-		b   []byte
-		sym *extendedSymlink
-		err error
-	}{
-		{inodeB, s, nil},
-		{inodeB[:7], nil, fmt.Errorf("received %d bytes instead of expected minimal %d", 7, 8)},
-	}
 
 	t.Run("toBytes", func(t *testing.T) {
-		for i, tt := range tests {
-			if tt.sym == nil {
-				continue
-			}
-			b := tt.sym.toBytes()
-			if !bytes.Equal(b, tt.b) {
-				t.Errorf("%d: mismatched output, actual then expected", i)
-				t.Logf("% x", b)
-				t.Logf("% x", tt.b)
-			}
+		b := s.toBytes()
+		if !bytes.Equal(b, inodeB) {
+			t.Errorf("mismatched output, actual then expected")
+			t.Logf("% x", b)
+			t.Logf("% x", inodeB)
 		}
 	})
 	t.Run("Size", func(t *testing.T) {
@@ -424,14 +411,30 @@ func TestExtendedSymlink(t *testing.T) {
 			t.Errorf("mismatched sizes, actual %d expected %d", size, 0)
 		}
 	})
+
+	tests := []struct {
+		b   []byte
+		sym *extendedSymlink
+		ext int
+		err error
+	}{
+		{inodeB, s, 0, nil},
+		{inodeB[:7], nil, 0, fmt.Errorf("received %d bytes instead of expected minimal %d", 7, 8)},
+		{inodeB[:20], &extendedSymlink{links: 1}, 19, nil},
+	}
+
 	t.Run("parse", func(t *testing.T) {
 		for i, tt := range tests {
-			sym, _, err := parseExtendedSymlink(tt.b)
+			sym, ext, err := parseExtendedSymlink(tt.b)
 			switch {
 			case (err == nil && tt.err != nil) || (err != nil && tt.err == nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
 				t.Errorf("%d: mismatched error, actual then expected", i)
 				t.Logf("%v", err)
 				t.Logf("%v", tt.err)
+			case tt.ext != ext:
+				t.Errorf("%d: mismatched extra, actual then expected", i)
+				t.Logf("%v", ext)
+				t.Logf("%v", tt.ext)
 			case (sym == nil && tt.sym != nil) || (sym != nil && tt.sym == nil) || (sym != nil && tt.sym != nil && *sym != *tt.sym):
 				t.Errorf("%d: mismatched results, actual then expected", i)
 				t.Logf("%#v", *sym)
