@@ -30,6 +30,7 @@ func TestFinalizeElTorito(t *testing.T) {
 	}
 	finalizeElTorito(t, dir)
 }
+
 func TestFinalizeElToritoWithInaccurateTmpDir(t *testing.T) {
 	finalizeElTorito(t, "")
 	dir, err := os.MkdirTemp("/tmp//", "workspace")
@@ -39,6 +40,7 @@ func TestFinalizeElToritoWithInaccurateTmpDir(t *testing.T) {
 	finalizeElTorito(t, dir)
 }
 
+//nolint:thelper // this is not a helper function
 func finalizeElTorito(t *testing.T, workspace string) {
 	blocksize := int64(2048)
 	f, err := os.CreateTemp("", "iso_finalize_test")
