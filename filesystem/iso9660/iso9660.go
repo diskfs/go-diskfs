@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 
 	"github.com/diskfs/go-diskfs/backend"
 	"github.com/diskfs/go-diskfs/filesystem"
@@ -96,6 +97,9 @@ func Create(b backend.Storage, size, start, blocksize int64, workspace string) (
 			return nil, fmt.Errorf("could not create working directory: %v", err)
 		}
 	}
+
+	// sometimes, at least on macos, extra separators in path can cause panic
+	workdir = filepath.Clean(workdir)
 
 	// create root directory
 	// there is nothing in there

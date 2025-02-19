@@ -23,6 +23,25 @@ var (
 
 // test creating an iso with el torito boot
 func TestFinalizeElTorito(t *testing.T) {
+	finalizeElTorito(t, "")
+	dir, err := os.MkdirTemp("", "workspace")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	finalizeElTorito(t, dir)
+}
+
+func TestFinalizeElToritoWithInaccurateTmpDir(t *testing.T) {
+	finalizeElTorito(t, "")
+	dir, err := os.MkdirTemp("/tmp//", "workspace")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	finalizeElTorito(t, dir)
+}
+
+//nolint:thelper // this is not a helper function
+func finalizeElTorito(t *testing.T, workspace string) {
 	blocksize := int64(2048)
 	f, err := os.CreateTemp("", "iso_finalize_test")
 	defer os.Remove(f.Name())
@@ -31,7 +50,7 @@ func TestFinalizeElTorito(t *testing.T) {
 	}
 
 	b := file.New(f, false)
-	fs, err := iso9660.Create(b, 0, 0, blocksize, "")
+	fs, err := iso9660.Create(b, 0, 0, blocksize, workspace)
 	if err != nil {
 		t.Fatalf("Failed to iso9660.Create: %v", err)
 	}
