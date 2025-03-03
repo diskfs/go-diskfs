@@ -2,6 +2,8 @@ package ext4
 
 import (
 	"testing"
+
+	"github.com/diskfs/go-diskfs/testhelper"
 )
 
 func TestDirectoryToBytes(t *testing.T) {
@@ -17,7 +19,7 @@ func TestDirectoryToBytes(t *testing.T) {
 	b := dir.toBytes(bytesPerBlock, directoryChecksumAppender(sb.checksumSeed, 2, 0))
 
 	// read the bytes from the disk
-	diff, diffString := dumpByteSlicesWithDiffs(b, expected, 32, false, true, true)
+	diff, diffString := testhelper.DumpByteSlicesWithDiffs(b, expected, 32, false, true, true)
 	if diff {
 		t.Errorf("directory.toBytes() mismatched, actual then expected\n%s", diffString)
 	}

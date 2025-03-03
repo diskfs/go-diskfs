@@ -5,6 +5,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/diskfs/go-diskfs/testhelper"
 	"github.com/go-test/deep"
 )
 
@@ -60,7 +61,7 @@ func TestGroupDescriptorToBytes(t *testing.T) {
 	}
 	b := gd.toBytes(sb.gdtChecksumType(), sb.checksumSeed)
 	expected = expected[:64]
-	diff, diffString := dumpByteSlicesWithDiffs(b, expected, 32, false, true, true)
+	diff, diffString := testhelper.DumpByteSlicesWithDiffs(b, expected, 32, false, true, true)
 	if diff {
 		t.Errorf("groupdescriptor.toBytes() mismatched, actual then expected\n%s", diffString)
 	}
@@ -94,7 +95,7 @@ func TestGroupDescriptorsToBytes(t *testing.T) {
 		descriptors: groupdescriptors,
 	}
 	b := gds.toBytes(sb.gdtChecksumType(), sb.checksumSeed)
-	diff, diffString := dumpByteSlicesWithDiffs(b, expected, 32, false, true, true)
+	diff, diffString := testhelper.DumpByteSlicesWithDiffs(b, expected, 32, false, true, true)
 	if diff {
 		t.Errorf("groupDescriptors.toBytes() mismatched, actual then expected\n%s", diffString)
 	}
