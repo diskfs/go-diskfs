@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/diskfs/go-diskfs/testhelper"
 	"github.com/go-test/deep"
 )
 
@@ -32,7 +33,7 @@ func TestSuperblockToBytes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to serialize superblock: %v", err)
 	}
-	diff, diffString := dumpByteSlicesWithDiffs(b, expected, 32, false, true, true)
+	diff, diffString := testhelper.DumpByteSlicesWithDiffs(b, expected, 32, false, true, true)
 	if diff {
 		t.Errorf("superblock.toBytes() mismatched, actual then expected\n%s", diffString)
 	}
