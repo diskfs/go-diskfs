@@ -1448,7 +1448,7 @@ func populateDirectoryLocations(directories []*finalizeFileInfo) {
 		d.directoryLocation = blockPosition{
 			block:  uint32(pos / int(metadataBlockSize)),
 			offset: uint16(pos % int(metadataBlockSize)),
-			size:   len(b),
+			size:   len(b) + 3,
 		}
 		pos += len(b)
 	}
