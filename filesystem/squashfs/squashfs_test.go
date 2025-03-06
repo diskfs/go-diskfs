@@ -808,6 +808,7 @@ func TestCreateAndReadFile(t *testing.T) {
 			start = partitions[part].GetStart()
 		}
 
+		//nolint:exhaustive // we only support squashfs
 		switch spec.FSType {
 		case filesystem.TypeSquashfs:
 			return squashfs.Create(d.Backend, size, start, d.LogicalBlocksize)
@@ -857,11 +858,11 @@ func TestCreateAndReadFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	disk, err := diskfs.Open(initdataImagePath, diskfs.WithSectorSize(4096))
+	di, err := diskfs.Open(initdataImagePath, diskfs.WithSectorSize(4096))
 	if err != nil {
 		t.Fatal(err)
 	}
-	fsr, err := disk.GetFilesystem(0) // assuming it is the whole disk, so partition = 0
+	fsr, err := di.GetFilesystem(0) // assuming it is the whole disk, so partition = 0
 	if err != nil {
 		t.Fatal(err)
 	}
