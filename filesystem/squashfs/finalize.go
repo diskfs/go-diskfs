@@ -1128,6 +1128,8 @@ func createInodes(fileList []*finalizeFileInfo, idtable map[uint32]uint16, optio
 				if e.fragment != nil {
 					bf.fragmentBlockIndex = e.fragment.block
 					bf.fragmentOffset = e.fragment.offset
+				} else {
+					bf.fragmentBlockIndex = 0xffffffff
 				}
 				in = bf
 				inodeT = inodeBasicFile
