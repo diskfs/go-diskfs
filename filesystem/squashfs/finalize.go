@@ -137,11 +137,11 @@ func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 	// write file fragments
 	//
 	fragmentBlockStart := location
-	fragmentBlocks, fragsWritten, err := writeFragmentBlocks(fileList, f, fs.workspace, blocksize, options, fragmentBlockStart)
+	fragmentBlocks, _, err := writeFragmentBlocks(fileList, f, fs.workspace, blocksize, options, fragmentBlockStart)
 	if err != nil {
 		return fmt.Errorf("error writing file fragment blocks: %v", err)
 	}
-	location += fragsWritten
+	location += int64(len(fragmentBlocks) * blocksize)
 
 	// extract extended attributes, and save them for later; these are written at the very end
 	// this must be done *before* creating inodes, as inodes reference these
@@ -638,6 +638,7 @@ func writeFragmentBlocks(fileList []*finalizeFileInfo, f backend.WritableFile, w
 				compressed: compressed,
 				location:   location,
 			})
+			location += int64(blocksize)
 			// increment as all writes will be to next block block
 			fragmentBlockIndex++
 			fragmentData = fragmentData[:blocksize]
