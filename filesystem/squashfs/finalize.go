@@ -641,7 +641,7 @@ func writeFragmentBlocks(fileList []*finalizeFileInfo, f backend.WritableFile, w
 			location += int64(blocksize)
 			// increment as all writes will be to next block block
 			fragmentBlockIndex++
-			fragmentData = fragmentData[:blocksize]
+			fragmentData = make([]byte, 0)
 		}
 
 		e.fragment = &fragmentRef{
