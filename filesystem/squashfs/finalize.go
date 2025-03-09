@@ -588,6 +588,7 @@ func writeDataBlocks(fileList []*finalizeFileInfo, f backend.WritableFile, ws st
 		}
 		allBlocks += blocks
 		allWritten += written
+		location += int64(written)
 	}
 	return allWritten, nil
 }
@@ -1104,7 +1105,7 @@ func createInodes(fileList []*finalizeFileInfo, idtable map[uint32]uint16, optio
 			if e.startBlock|uint32max != uint32max || e.Size()|int64(uint32max) != int64(uint32max) || len(e.xattrs) > 0 || e.links > 0 {
 				// use extendedFile inode
 				ef := &extendedFile{
-					startBlock: e.startBlock,
+					blocksStart: uint64(e.dataLocation),
 					fileSize:   uint64(e.Size()),
 					blockSizes: e.blocks,
 					links:      e.links,
@@ -1119,9 +1120,9 @@ func createInodes(fileList []*finalizeFileInfo, idtable map[uint32]uint16, optio
 			} else {
 				// use basicFile
 				bf := &basicFile{
-					startBlock: uint32(e.startBlock),
-					fileSize:   uint32(e.Size()),
-					blockSizes: e.blocks,
+					blocksStart: uint32(e.dataLocation),
+					fileSize:    uint32(e.Size()),
+					blockSizes:  e.blocks,
 				}
 				if e.fragment != nil {
 					bf.fragmentBlockIndex = e.fragment.block

@@ -260,8 +260,8 @@ func TestBasicFile(t *testing.T) {
 		if ext.size() != f.size() {
 			t.Errorf("Mismatched sizes actual %d expected %d", ext.size(), f.size())
 		}
-		if ext.startBlock != uint64(f.startBlock) {
-			t.Errorf("Mismatched startBlock actual %d expected %d", ext.startBlock, f.startBlock)
+		if ext.blocksStart != uint64(f.blocksStart) {
+			t.Errorf("Mismatched startBlock actual %d expected %d", ext.blocksStart, f.blocksStart)
 		}
 		if ext.fragmentOffset != f.fragmentOffset {
 			t.Errorf("Mismatched fragmentOffset actual %d expected %d", ext.fragmentOffset, f.fragmentOffset)
