@@ -1107,10 +1107,10 @@ func createInodes(fileList []*finalizeFileInfo, idtable map[uint32]uint16, optio
 				// use extendedFile inode
 				ef := &extendedFile{
 					blocksStart: uint64(e.dataLocation),
-					fileSize:   uint64(e.Size()),
-					blockSizes: e.blocks,
-					links:      e.links,
-					xAttrIndex: e.xAttrIndex,
+					fileSize:    uint64(e.Size()),
+					blockSizes:  e.blocks,
+					links:       e.links,
+					xAttrIndex:  e.xAttrIndex,
 				}
 				if e.fragment != nil {
 					ef.fragmentBlockIndex = e.fragment.block
