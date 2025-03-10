@@ -693,6 +693,11 @@ func Read(b backend.Storage, size, start, sectorsize int64) (*FileSystem, error)
 // interface guard
 var _ filesystem.FileSystem = (*FileSystem)(nil)
 
+// Do cleaning job for ext4. Note that ext4 does not have side-effects so we do not do anything.
+func (fs *FileSystem) Close() error {
+	return nil
+}
+
 // Type returns the type code for the filesystem. Always returns filesystem.TypeExt4
 func (fs *FileSystem) Type() filesystem.Type {
 	return filesystem.TypeExt4

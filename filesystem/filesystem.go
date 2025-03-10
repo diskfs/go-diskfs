@@ -46,6 +46,8 @@ type FileSystem interface {
 	// SetLabel changes the label on the writable filesystem. Different file system may hav different
 	// length constraints.
 	SetLabel(label string) error
+	// Close will cleanup the temporary files created by the filesystem generation steps
+	Close() error
 }
 
 // Type represents the type of disk this is

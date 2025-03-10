@@ -232,6 +232,14 @@ func Read(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) 
 // interface guard
 var _ filesystem.FileSystem = (*FileSystem)(nil)
 
+// Delete the temporary directory created during the SquashFS image creation
+func (fs *FileSystem) Close() error {
+	if fs.workspace != "" {
+		return os.RemoveAll(fs.workspace)
+	}
+	return nil
+}
+
 // Type returns the type code for the filesystem. Always returns filesystem.TypeFat32
 func (fs *FileSystem) Type() filesystem.Type {
 	return filesystem.TypeSquashfs
