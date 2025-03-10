@@ -47,7 +47,7 @@ func (fl *File) Read(b []byte) (int, error) {
 	// 5- read in and uncompress the necessary blocks
 	fs := fl.filesystem
 	size := fl.size() - fl.offset
-	location := int64(fl.startBlock)
+	location := int64(fl.blocksStart)
 	maxRead := len(b)
 
 	// if there is nothing left to read, just return EOF

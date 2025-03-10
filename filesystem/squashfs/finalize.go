@@ -137,11 +137,11 @@ func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 	// write file fragments
 	//
 	fragmentBlockStart := location
-	fragmentBlocks, fragsWritten, err := writeFragmentBlocks(fileList, f, fs.workspace, blocksize, options, fragmentBlockStart)
+	fragmentBlocks, _, err := writeFragmentBlocks(fileList, f, fs.workspace, blocksize, options, fragmentBlockStart)
 	if err != nil {
 		return fmt.Errorf("error writing file fragment blocks: %v", err)
 	}
-	location += fragsWritten
+	location += int64(len(fragmentBlocks) * blocksize)
 
 	// extract extended attributes, and save them for later; these are written at the very end
 	// this must be done *before* creating inodes, as inodes reference these
@@ -588,6 +588,7 @@ func writeDataBlocks(fileList []*finalizeFileInfo, f backend.WritableFile, ws st
 		}
 		allBlocks += blocks
 		allWritten += written
+		location += int64(written)
 	}
 	return allWritten, nil
 }
@@ -637,9 +638,10 @@ func writeFragmentBlocks(fileList []*finalizeFileInfo, f backend.WritableFile, w
 				compressed: compressed,
 				location:   location,
 			})
+			location += int64(blocksize)
 			// increment as all writes will be to next block block
 			fragmentBlockIndex++
-			fragmentData = fragmentData[:blocksize]
+			fragmentData = make([]byte, 0)
 		}
 
 		e.fragment = &fragmentRef{
@@ -1104,11 +1106,11 @@ func createInodes(fileList []*finalizeFileInfo, idtable map[uint32]uint16, optio
 			if e.startBlock|uint32max != uint32max || e.Size()|int64(uint32max) != int64(uint32max) || len(e.xattrs) > 0 || e.links > 0 {
 				// use extendedFile inode
 				ef := &extendedFile{
-					startBlock: e.startBlock,
-					fileSize:   uint64(e.Size()),
-					blockSizes: e.blocks,
-					links:      e.links,
-					xAttrIndex: e.xAttrIndex,
+					blocksStart: uint64(e.dataLocation),
+					fileSize:    uint64(e.Size()),
+					blockSizes:  e.blocks,
+					links:       e.links,
+					xAttrIndex:  e.xAttrIndex,
 				}
 				if e.fragment != nil {
 					ef.fragmentBlockIndex = e.fragment.block
@@ -1119,13 +1121,15 @@ func createInodes(fileList []*finalizeFileInfo, idtable map[uint32]uint16, optio
 			} else {
 				// use basicFile
 				bf := &basicFile{
-					startBlock: uint32(e.startBlock),
-					fileSize:   uint32(e.Size()),
-					blockSizes: e.blocks,
+					blocksStart: uint32(e.dataLocation),
+					fileSize:    uint32(e.Size()),
+					blockSizes:  e.blocks,
 				}
 				if e.fragment != nil {
 					bf.fragmentBlockIndex = e.fragment.block
 					bf.fragmentOffset = e.fragment.offset
+				} else {
+					bf.fragmentBlockIndex = 0xffffffff
 				}
 				in = bf
 				inodeT = inodeBasicFile

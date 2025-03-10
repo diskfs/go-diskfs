@@ -36,7 +36,7 @@ func testGetFirstInodeHeader() *inodeHeader {
 }
 func testGetFirstInodeBody() inodeBody {
 	return extendedFile{
-		startBlock:         0,
+		blocksStart:        0,
 		fragmentBlockIndex: 0,
 		fileSize:           7,
 		fragmentOffset:     0,
@@ -95,7 +95,7 @@ var (
 
 	// this is for /foo/filename_0
 	testBasicFile = &basicFile{
-		startBlock:         0,
+		blocksStart:        0,
 		fragmentBlockIndex: 0,
 		fileSize:           0xb,
 		fragmentOffset:     0xc,
@@ -240,7 +240,7 @@ func GetTestFileSmall(f fs.File, c Compressor) (*File, error) {
 	}
 	testFs.compressor = c
 	ef := &extendedFile{
-		startBlock:         superblockSize,
+		blocksStart:        superblockSize,
 		fileSize:           7,
 		sparse:             0,
 		links:              0,
@@ -269,7 +269,7 @@ func GetTestFileBig(f fs.File, c Compressor) (*File, error) {
 	fragSize := uint64(5)
 	size := uint64(testFs.blocksize) + fragSize
 	ef := &extendedFile{
-		startBlock:         superblockSize,
+		blocksStart:        superblockSize,
 		fileSize:           size,
 		sparse:             0,
 		links:              0,
