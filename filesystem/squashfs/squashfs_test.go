@@ -4,18 +4,23 @@ import (
 	"bufio"
 	"crypto/md5" //nolint:gosec // MD5 is still fine for detecting file corruptions
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	stdfs "io/fs"
 	"os"
 	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/diskfs/go-diskfs"
 	"github.com/diskfs/go-diskfs/backend/file"
+	"github.com/diskfs/go-diskfs/disk"
 	"github.com/diskfs/go-diskfs/filesystem"
 	"github.com/diskfs/go-diskfs/filesystem/squashfs"
+	"github.com/diskfs/go-diskfs/testhelper"
 )
 
 func getOpenMode(mode int) string {
@@ -239,10 +244,17 @@ func TestSquashfsOpenFile(t *testing.T) {
 					if err != nil {
 						t.Errorf("%s: io.ReadAll(reader) unexpected error: %v", header, err)
 					}
-					if string(b) != tt.expected {
-						t.Errorf("%s: mismatched contents, actual then expected", header)
-						t.Log(string(b))
-						t.Log(tt.expected)
+					// limit size
+					if len(b) > 1024 {
+						b = b[:1024]
+					}
+					expected := []byte(tt.expected)
+					if len(expected) > 1024 {
+						expected = expected[:1024]
+					}
+					diff, diffString := testhelper.DumpByteSlicesWithDiffs(b, expected, 32, false, true, true)
+					if diff {
+						t.Errorf("groupdescriptor.toBytes() mismatched, actual then expected\n%s", diffString)
 					}
 				}
 			}
@@ -252,6 +264,7 @@ func TestSquashfsOpenFile(t *testing.T) {
 			if err != nil {
 				t.Errorf("Failed to get read-only squashfs filesystem: %v", err)
 			}
+			var zeros1024 [1024]byte
 			tests := []testStruct{
 				// error opening a directory
 				{"/", os.O_RDONLY, "", fmt.Errorf("cannot open directory %s as file", "/")},
@@ -260,6 +273,7 @@ func TestSquashfsOpenFile(t *testing.T) {
 				{"/foo/filename_75", os.O_RDONLY, "filename_75\n", nil},
 				{"/README.MD", os.O_RDONLY, "", fmt.Errorf("target file %s does not exist", "/README.MD")},
 				{"/README.md", os.O_RDONLY, "README\n", nil},
+				{"/zero/largefile", os.O_RDONLY, string(zeros1024[:]), nil},
 			}
 			runTests(t, fs, tests)
 		})
@@ -768,4 +782,102 @@ func TestSquashfsReadDirCornerCases(t *testing.T) {
 //nolint:unused,revive // keep for future when we implement it and will need t
 func TestFinalize(t *testing.T) {
 
+}
+
+func TestCreateAndReadFile(t *testing.T) {
+	CreateFilesystem := func(d *disk.Disk, spec disk.FilesystemSpec) (filesystem.FileSystem, error) {
+		// find out where the partition starts and ends, or if it is the entire disk
+		var (
+			size, start int64
+		)
+
+		switch {
+		case spec.Partition == 0:
+			size = d.Size
+			start = 0
+		case d.Table == nil:
+			return nil, fmt.Errorf("cannot create filesystem on a partition without a partition table")
+		default:
+			partitions := d.Table.GetPartitions()
+			// API indexes from 1, but slice from 0
+			part := spec.Partition - 1
+			if spec.Partition > len(partitions) {
+				return nil, fmt.Errorf("cannot create filesystem on partition %d greater than maximum partition %d", spec.Partition, len(partitions))
+			}
+			size = partitions[part].GetSize()
+			start = partitions[part].GetStart()
+		}
+
+		//nolint:exhaustive // we only support squashfs
+		switch spec.FSType {
+		case filesystem.TypeSquashfs:
+			return squashfs.Create(d.Backend, size, start, d.LogicalBlocksize)
+		default:
+			return nil, errors.New("unknown filesystem type requested")
+		}
+	}
+
+	// Create squashfs image file
+	var (
+		diskSize          int64 = 10 * 1024 * 1024 // 10 MB
+		dir                     = t.TempDir()
+		initdataImagePath       = filepath.Join(dir, "sqashtest")
+	)
+	mydisk, err := diskfs.Create(initdataImagePath, diskSize, 4096)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fspec := disk.FilesystemSpec{Partition: 0, FSType: filesystem.TypeSquashfs, VolumeLabel: "label"}
+	fs, err := CreateFilesystem(mydisk, fspec)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rw, err := fs.OpenFile("/test", os.O_CREATE|os.O_RDWR)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// content must be bigger than the block size
+	content := []byte("dmVyc2PSAnJycKW3Rva2VuX2NvbmZpZ3NdCgpbdG9rZW5fY29uZmlncy5jb2NvX2FzXQp1cmwgPSAiaHR0cDovLzguMjE4LjIuMjIzOjgwMDAiCgpbdG9rZW5fY29uZmlncy5rYnNdCnVybCA9ICJodHRwczovLzguMjE4LjIuMjIzOjgwODAiCgpbZXZlbnRsb2dfY29uZmlnXQoKZXZlbnRsb2dfYWxnb3JpdGhtID0gInNoYTM4NCIKaW5pdF9wY3IgPSAxNwplbmFibGVfZXZlbnRsb2cgPSBmYWxzZQonJycKCiJjZGgudG9tbCIgPSAnJycKIyBUaGUgdHRycGMgc29jayBvZiBDREggdGhhdCBpcyB1c2VkIHRvIGxpc3RlbiB0byB0aGUgcmVxdWVzdHMKc29ja2V0ID0gInVuaXg6Ly8vcnVuL2NvbmZpZGVudGlhbC1jb250YWluZXJzL2NkaC5zb2NrIgoKIyBLQkMgcmVsYXRlZCBjb25maWdzLgpba2JjXQojIFJlcXVpcmVkLiBUaGUgS0JDIG5hbWUuIEl0IGNvdWxkIGJlIGBjY19rYmNgLCBgb25saW5lX3Nldl9rYmNgIG9yCiMgYG9mZmxpbmVfZnNfa2JjYC4gQWxsIHRoZSBpdGVtcyB1bmRlciBgW2NyZWRlbnRpYWxzXWAgd2lsbCBiZQojIHJldHJpZXZlZCB1c2luZyB0aGUga2JjLgpuYW1lID0gImNjX2tiYyIKCiMgUmVxdWlyZWQuIFRoZSBVUkwgb2YgS0JTLiBJZiBgbmFtZWAgaXMgZWl0aGVyIGBjY19rYmNgIG9yCiMgYG9ubGluZV9zZXZfa2JjYCwgdGhpcyBVUkwgd2lsbCBiZSB1c2VkIHRvIGNvbm5lY3QgdG8gdGhlCiMgQ29Db0tCUyAoZm9yIGNjX2tiYykgb3IgU2ltcGxlLUtCUyAoZm9yIG9ubGluZV9zZXZfa2JjKS4gSWYKIyBgbmFtZWAgaXMgYG9mZmxpbmVfZnNfa2JjYCwgVGhpcyBVUkwgd2lsbCBiZSBpZ25vcmVkLgp1cmwgPSAiaHR0cHM6Ly84LjIxOC4yLjIyMzo4MDgwIgoKIyBPcHRpb25hbC4gVGhlIHB1YmxpYyBrZXkgY2VydCBvZiBLQlMuIElmIG5vdCBnaXZlbiwgQ0RIIHdpbGwKIyB0cnkgdG8gdXNlIEhUVFAgdG8gY29ubmVjdCB0aGUgc2VydmVyLgojIGtic19jZXJ0ID0gIiIKCiMgY3JlZGVudGlhbHMgYXJlIGl0ZW1zIHRoYXQgd2lsbCBiZSByZXRyaWV2ZWQgZnJvbSBLQlMgd2hlbiBDREgKIyBpcyBsYXVuY2hlZC4gYHJlc291cmNlX3VyaWAgcmVmZXJzIHRvIHRoZSBLQlMgcmVzb3VyY2UgdXJpIGFuZAojIGBwYXRoYCBpcyB3aGVyZSB0byBwbGFjZSB0aGUgZmlsZS4KIyBgcGF0aGAgbXVzdCBiZSB3aXRoIHByZWZpeCBgL3J1bi9jb25maWRlbnRpYWwtY29udGFpbmVycy9jZGhgLAojIG9yIGl0IHdpbGwgYmUgYmxvY2tlZCBieSBDREguCiMgW1tjcmVkZW50aWFsc11dCiMgcGF0aCA9ICIvcnVuL2NvbmZpZGVudGlhbC1jb250YWluZXJzL2NkaC9rbXMtY3JlZGVudGlhbC9hbGl5dW4vZWNzUmFtUm9sZS5qc29uIgojIHJlc291cmNlX3VyaSA9ICJrYnM6Ly8vZGVmYXVsdC9hbGl5dW4vZWNzX3JhbV9yb2xlIgoKIyBbW2NyZWRlbnRpYWxzXV0KIyBwYXRoID0gIi9ydW4vY29uZmlkZW50aWFsLWNvbnRhaW5lcnMvY2RoL3Rlc3QvZmlsZSIKIyByZXNvdXJjZV91cmkgPSAia2JzOi8vL2RlZmF1bHQvdGVzdC9maWxlIgoKW2ltYWdlXQoKIyBUaGUgbWF4aW11bSBudW1iZXIgb2YgbGF5ZXJzIGRvd25sb2FkZWQgY29uY3VycmVudGx5IHdoZW4KIyBwdWxsaW5nIG9uZSBzcGVjaWZpYyBpbWFnZS4KIwojIFRoaXMgZGVmYXVsdHMgdG8gMy4KbWF4X2NvbmN1cnJlbnRfbGF5ZXJfZG93bmxvYWRzX3Blcl9pbWFnZSA9IDMKCiMgU2lnc3RvcmUgY29uZmlnIGZpbGUgVVJJIGZvciBzaW1wbGUgc2lnbmluZyBzY2hlbWUuCiMKIyBXaGVuIGBpbWFnZV9zZWN1cml0eV9wb2xpY3lfdXJpYCBpcyBzZXQgYW5kIGBTaW1wbGVTaWduaW5nYCAoc2lnbmVkQnkpIGlzCiMgdXNlZCBpbiB0aGUgcG9saWN5LCB0aGUgc2lnbmF0dXJlcyBvZiB0aGUgaW1hZ2VzIHdvdWxkIGJlIHVzZWQgZm9yIGltYWdlCiMgc2lnbmF0dXJlIHZhbGlkYXRpb24uIFRoaXMgcG9saWN5IHdpbGwgcmVjb3JkIHdoZXJlIHRoZSBzaWduYXR1cmVzIGlzLgojCiMgTm93IGl0IHN1cHBvcnRzIHR3byBkaWZmZXJlbnQgZm9ybXM6CiMgLSBgS0JTIFVSSWA6IHRoZSBzaWdzdG9yZSBjb25maWcgZmlsZSB3aWxsIGJlIGZldGNoZWQgZnJvbSBLQlMsCiMgZS5nLiBga2JzOi8vL2RlZmF1bHQvc2lnc3RvcmUtY29uZmlnL3Rlc3RgLgojIC0gYExvY2FsIFBhdGhgOiB0aGUgc2lnc3RvcmUgY29uZmlnIGZpbGUgd2lsbCBiZSBmZXRjaGVkIGZyb20gc29tZXdoZXJlIGxvY2FsbHksCiMgZS5nLiBgZmlsZTovLy9ldGMvc2ltcGxlLXNpZ25pbmcueWFtbGAuCiMKIyBCeSBkZWZhdWx0IHRoaXMgdmFsdWUgaXMgbm90IHNldC4Kc2lnc3RvcmVfY29uZmlnX3VyaSA9ICJrYnM6Ly8vZGVmYXVsdC9zaWdzdG9yZS1jb25maWcvdGVzdCIKCiMgSWYgYW55IGltYWdlIHNlY3VyaXR5IHBvbGljeSB3b3VsZCBiZSB1c2VkIHRvIGNvbnRyb2wgdGhlIGltYWdlIHB1bGxpbmcKIyBsaWtlIHNpZ25hdHVyZSB2ZXJpZmljYXRpb24sIHRoaXMgZmllbGQgaXMgdXNlZCB0byBzZXQgdGhlIFVSSSBvZiB0aGUKIyBwb2xpY3kgZmlsZS4KIwojIE5vdyBpdCBzdXBwb3J0cyB0d28gZGlmZmVyZW50IGZvcm1zOgojIC0gYEtCUyBVUklgOiB0aGUgaWFtZ2Ugc2VjdXJpdHkgcG9saWN5IHdpbGwgYmUgZmV0Y2hlZCBmcm9tIEtCUy4KIyAtIGBMb2NhbCBQYXRoYDogdGhlIHNlY3VyaXR5IHBvbGljeSB3aWxsIGJlIGZldGNoZWQgZnJvbSBzb21ld2hlcmUgbG9jYWxseS4KIyBlLmcuIGBmaWxlOi8vL2V0Yy9pbWFnZS1wb2xpY3kuanNvbmAuCiMKIyBUaGUgcG9saWN5IGZvbGxvd3MgdGhlIGZvcm1hdCBvZgojIDxodHRwczovL2dpdGh1Yi5jb20vY29udGFpbmVycy9pbWFnZS9ibG9iL21haW4vZG9jcy9jb250YWluZXJzLXBvbGljeS5qc29uLjUubWQ+LgojCiMgQXQgdGhlIHNhbWUgdGltZSwgc29tZSBlbmhlbmNlbWVudHMgYmFzZWQgb24gQ29DbyBpcyB1c2VkLCB0aGF0IGlzIHRoZQojIGBrZXlQYXRoYCBmaWVsZCBjYW4gYmUgZmlsbGVkIHdpdGggYSBLQlMgVVJJIGxpa2UgYGticzovLy9kZWZhdWx0L2tleS8xYAojCiMgQnkgZGVmYXVsdCB0aGlzIHZhbHVlIGlzIG5vdCBzZXQuCmltYWdlX3NlY3VyaXR5X3BvbGljeV91cmkgPSAia2JzOi8vL2RlZmF1bHQvc2VjdXJpdHktcG9saWN5L3Rlc3QiCgojIElmIGFueSBjcmVkZW50aWFsIGF1dGggKEJhc2UpIHdvdWxkIGJlIHVzZWQgdG8gY29ubmVjdCB0byBkb3dubG9hZAojIGltYWdlIGZyb20gcHJpdmF0ZSByZWdpc3RyeSwgdGhpcyBmaWVsZCBpcyB1c2VkIHRvIHNldCB0aGUgVVJJIG9mIHRoZQojIGNyZWRlbnRpYWwgZmlsZS4KIwojIE5vdyBpdCBzdXBwb3J0cyB0d28gZGlmZmVyZW50IGZvcm1zOgojIC0gYEtCUyBVUklgOiB0aGUgcmVnaXN0cnkgYXV0aCB3aWxsIGJlIGZldGNoZWQgZnJvbSBLQlMsCiMgZS5nLiBga2JzOi8vL2RlZmF1bHQvY3JlZGVudGlhbC90ZXN0YC4KIyAtIGBMb2NhbCBQYXRoYDogdGhlIHJlZ2lzdHJ5IGF1dGggd2lsbCBiZSBmZXRjaGVkIGZyb20gc29tZXdoZXJlIGxvY2FsbHksCiMgZS5nLiBgZmlsZTovLy9ldGMvaW1hZ2UtcmVnaXN0cnktYXV0aC5qc29uYC4KIwojIEJ5IGRlZmF1bHQgdGhpcyB2YWx1ZSBpcyBub3Qgc2V0LgphdXRoZW50aWNhdGVkX3JlZ2lzdHJ5X2NyZWRlbnRpYWxzX3VyaSA9ICJrYnM6Ly8vZGVmYXVsdC9jcmVkZW50aWFsL3Rlc3QiCgojIFByb3h5IHRoYXQgd2lsbCBiZSB1c2VkIHRvIHB1bGwgaW1hZ2UKIwojIEJ5IGRlZmF1bHQgdGhpcyB2YWx1ZSBpcyBub3Qgc2V0LgojIGltYWdlX3B1bGxfcHJveHkgPSAiaHR0cDovLzEyNy4wLjAuMTo1NDMyIgoKIyBObyBwcm94eSBlbnYgdGhhdCB3aWxsIGJlIHVzZWQgdG8gcHVsbCBpbWFnZS4KIwojIFRoaXMgd2lsbCBlbnN1cmUgdGhhdCB3aGVuIHdlIGFjY2VzcyB0aGUgaW1hZ2UgcmVnaXN0cnkgd2l0aCBzcGVjaWZpZWQKIyBJUHMsIHRoZSBgaW1hZ2VfcHVsbF9wcm94eWAgd2lsbCBub3QgYmUgdXNlZC4KIwojIElmIGBpbWFnZV9wdWxsX3Byb3h5YCBpcyBub3Qgc2V0LCB0aGlzIGZpZWxkIHdpbGwgZG8gbm90aGluZy4KIwojIEJ5IGRlZmF1bHQgdGhpcyB2YWx1ZSBpcyBub3Qgc2V0Lgpza2lwX3Byb3h5X2lwcyA9ICIxOTIuMTY4LjAuMSxsb2NhbGhvc3QiCgojIFRvIHN1cHBvcnQgcmVnaXN0cmllcyB3aXRoIHNlbGYgc2lnbmVkIGNlcnRzLiBUaGlzIGNvbmZpZyBpdGVtCiMgaXMgdXNlZCB0byBhZGQgZXh0cmEgdHJ1c3RlZCByb290IGNlcnRpZmljYXRpb25zLiBUaGUgY2VydGlmaWNhdGVzCiMgbXVzdCBiZSBlbmNvZGVkIGJ5IFBFTS4KIwojIEJ5IGRlZmF1bHQgdGhpcyB2YWx1ZSBpcyBub3Qgc2V0LgpleHRyYV9yb290X2NlcnRpZmljYXRlcyA9IFtdCgojIFRoZSBwYXRoIHRvIHN0b3JlIHRoZSBwdWxsZWQgaW1hZ2UgbGF5ZXIgZGF0YS4KIwojIFRoaXMgdmFsdWUgZGVmYXVsdHMgdG8gYC9ydW4vaW1hZ2UtcnMvYC4Kd29ya19kaXIgPSAiL3J1bi9pbWFnZS1ycyIKJycnCgoicG9saWN5LnJlZ28iID0gJycnCiMgQ29weXJpZ2h0IChjKSAyMDIzIE1pY3Jvc29mdCBDb3Jwb3JhdGlvbgojCiMgU1BEWC1MaWNlbnNlLUlkZW50aWZpZXI6IEFwYWNoZS0yLjAKIwoKcGFja2FnZSBhZ2VudF9wb2xpY3kKCmRlZmF1bHQgQWRkQVJQTmVpZ2hib3JzUmVxdWVzdCA6PSB0cnVlCmRlZmF1bHQgQWRkU3dhcFJlcXVlc3QgOj0gdHJ1ZQpkZWZhdWx0IENsb3NlU3RkaW5SZXF1ZXN0IDo9IHRydWUKZGVmYXVsdCBDb3B5RmlsZVJlcXVlc3QgOj0gdHJ1ZQpkZWZhdWx0IENyZWF0ZUNvbnRhaW5lclJlcXVlc3QgOj0gdHJ1ZQpkZWZhdWx0IENyZWF0ZVNhbmRib3hSZXF1ZXN0IDo9IHRydWUKZGVmYXVsdCBEZXN0cm95U2FuZGJveFJlcXVlc3QgOj0gdHJ1ZQpkZWZhdWx0IEV4ZWNQcm9jZXNzUmVxdWVzdCA6PSB0cnVlCmRlZmF1bHQgR2V0TWV0cmljc1JlcXVlc3QgOj0gdHJ1ZQpkZWZhdWx0IEdldE9PTUV2ZW50UmVxdWVzdCA6PSB0cnVlCmRlZmF1bHQgR3Vlc3REZXRhaWxzUmVxdWVzdCA6PSB0cnVlCmRlZmF1bHQgTGlzdEludGVyZmFjZXNSZXF1ZXN0IDo9IHRydWUKZGVmYXVsdCBMaXN0Um91dGVzUmVxdWVzdCA6PSB0cnVlCmRlZmF1bHQgTWVtSG90cGx1Z0J5UHJvYmVSZXF1ZXN0IDo9IHRydWUKZGVmYXVsdCBPbmxpbmVDUFVNZW1SZXF1ZXN0IDo9IHRydWUKZGVmYXVsdCBQYXVzZUNvbnRhaW5lclJlcXVlc3QgOj0gdHJ1ZQpkZWZhdWx0IFB1bGxJbWFnZVJlcXVlc3QgOj0gdHJ1ZQpkZWZhdWx0IFJlYWRTdHJlYW1SZXF1ZXN0IDo9IHRydWUKZGVmYXVsdCBSZW1vdmVDb250YWluZXJSZXF1ZXN0IDo9IHRydWUKZGVmYXVsdCBSZW1vdmVTdGFsZVZpcnRpb2ZzU2hhcmVNb3VudHNSZXF1ZXN0IDo9IHRydWUKZGVmYXVsdCBSZXNlZWRSYW5kb21EZXZSZXF1ZXN0IDo9IHRydWUKZGVmYXVsdCBSZXN1bWVDb250YWluZXJSZXF1ZXN0IDo9IHRydWUKZGVmYXVsdCBTZXRHdWVzdERhdGVUaW1lUmVxdWVzdCA6PSB0cnVlCmRlZmF1bHQgU2V0UG9saWN5UmVxdWVzdCA6PSB0cnVlCmRlZmF1bHQgU2lnbmFsUHJvY2Vzc1JlcXVlc3QgOj0gdHJ1ZQpkZWZhdWx0IFN0YXJ0Q29udGFpbmVyUmVxdWVzdCA6PSB0cnVlCmRlZmF1bHQgU3RhcnRUcmFjaW5nUmVxdWVzdCA6PSB0cnVlCmRlZmF1bHQgU3RhdHNDb250YWluZXJSZXF1ZXN0IDo9IHRydWUKZGVmYXVsdCBTdG9wVHJhY2luZ1JlcXVlc3QgOj0gdHJ1ZQpkZWZhdWx0IFR0eVdpblJlc2l6ZVJlcXVlc3QgOj0gdHJ1ZQpkZWZhdWx0IFVwZGF0ZUNvbnRhaW5lclJlcXVlc3QgOj0gdHJ1ZQpkZWZhdWx0IFVwZGF0ZUVwaGVtZXJhbE1vdW50c1JlcXVlc3QgOj0gdHJ1ZQpkZWZhdWx0IFVwZGF0ZUludGVyZmFjZVJlcXVlc3QgOj0gdHJ1ZQpkZWZhdWx0IFVwZGF0ZVJvdXRlc1JlcXVlc3QgOj0gdHJ1ZQpkZWZhdWx0IFdhaXRQcm9jZXNzUmVxdWVzdCA6PSB0cnVlCmRlZmF1bHQgV3JpdGVTdHJlYW1SZXF1ZXN0IDo9IHRydWUKJycnCglvbiA9ICIwLjEuMCIKYWxnb3JpdGhtID0gInNoYTI1NiIKW2RhdGFdCgoiYWEudG9tbCIg")
+
+	if _, err = rw.Write(content); err != nil {
+		t.Fatal(err)
+	}
+
+	sqs, ok := fs.(*squashfs.FileSystem)
+	if !ok {
+		t.Fatal("not a squashfs filesystem")
+	}
+	if err = sqs.Finalize(squashfs.FinalizeOptions{
+		NoCompressInodes:    true,
+		NoCompressData:      true,
+		NoCompressFragments: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	di, err := diskfs.Open(initdataImagePath, diskfs.WithSectorSize(4096))
+	if err != nil {
+		t.Fatal(err)
+	}
+	fsr, err := di.GetFilesystem(0) // assuming it is the whole disk, so partition = 0
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	f, err := fsr.OpenFile("/test", os.O_RDONLY)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	b, err := io.ReadAll(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	diff, diffString := testhelper.DumpByteSlicesWithDiffs(b, content, 32, false, true, true)
+	if diff {
+		t.Errorf("groupdescriptor.toBytes() mismatched, actual then expected\n%s", diffString)
+	}
 }
