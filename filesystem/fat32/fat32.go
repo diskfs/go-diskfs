@@ -489,6 +489,11 @@ func (fs *FileSystem) writeFat() error {
 // interface guard
 var _ filesystem.FileSystem = (*FileSystem)(nil)
 
+// Do cleaning job for fat32. Note that fat32 does not have side-effects so we do not do anything.
+func (fs *FileSystem) Close() error {
+	return nil
+}
+
 // Type returns the type code for the filesystem. Always returns filesystem.TypeFat32
 func (fs *FileSystem) Type() filesystem.Type {
 	return filesystem.TypeFat32

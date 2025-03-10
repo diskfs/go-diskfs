@@ -289,6 +289,14 @@ func Read(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) 
 // interface guard
 var _ filesystem.FileSystem = (*FileSystem)(nil)
 
+// Delete the temporary directory created during the iso9660 image creation
+func (fsm *FileSystem) Close() error {
+	if fsm.workspace != "" {
+		return os.RemoveAll(fsm.workspace)
+	}
+	return nil
+}
+
 // Type returns the type code for the filesystem. Always returns filesystem.TypeFat32
 func (fsm *FileSystem) Type() filesystem.Type {
 	return filesystem.TypeISO9660
