@@ -183,8 +183,8 @@ func volumeDescriptorFromBytes(b []byte) (volumeDescriptor, error) {
 	}
 	// validate the version
 	version := b[6]
-	if version != isoVersion {
-		return nil, fmt.Errorf("mismatched ISO version in Volume Descriptor. Found %x expected %x", version, isoVersion)
+	if volumeDescriptorType(b[0]) == volumeDescriptorPrimary && version != isoVersion {
+		return nil, fmt.Errorf("mismatched ISO version in Primary Volume Descriptor. Found %x expected %x", version, isoVersion)
 	}
 	// get the type and data - later we will be more intelligent about this and read actual primary volume info
 	vdType := volumeDescriptorType(b[0])
