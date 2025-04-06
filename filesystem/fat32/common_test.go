@@ -250,6 +250,7 @@ func testGetValidDirectoryEntriesFromFile(dirFilePath, dirEntryPattern string, f
 	// ignore entries for . and ..
 	dirEntriesSubset := dirEntries
 	for {
+		//nolint:staticcheck // could lift into for loop, but this is easier to read
 		if len(dirEntriesSubset) == 0 || (dirEntriesSubset[0].filenameShort != "." && dirEntriesSubset[0].filenameShort != "..") {
 			break
 		}

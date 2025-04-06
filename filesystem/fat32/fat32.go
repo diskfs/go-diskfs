@@ -44,7 +44,7 @@ const (
 	maxCharsLongFilename int        = 13
 )
 
-//nolint:deadcode,varcheck,unused // we need these references in the future
+//nolint:unused // we need these references in the future
 const (
 	minClusterSize int = 128
 	maxClusterSize int = 65529

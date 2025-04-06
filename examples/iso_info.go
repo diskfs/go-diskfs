@@ -48,7 +48,11 @@ func fileInfoFor(path string, fs filesystem.FileSystem) error {
 			continue
 		}
 
-		myFile := isoFile.(*iso9660.File)
+		myFile, ok := isoFile.(*iso9660.File)
+		if !ok {
+			fmt.Printf("Failed to cast to iso9660.File for %s\n", fullPath)
+			continue
+		}
 		fmt.Printf("%s\n Size: %d\n Location: %d\n\n", fullPath, file.Size(), myFile.Location())
 	}
 	return nil

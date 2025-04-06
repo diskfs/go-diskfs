@@ -14,14 +14,13 @@ import (
 )
 
 func CreateEfi(diskImg string) {
-
 	var (
-		espSize          int64 = 100 * 1024 * 1024     // 100 MB
-		diskSize         int64 = espSize + 4*1024*1024 // 104 MB
+		espSize          int64 = 100 * 1024 * 1024 // 100 MB
 		blkSize          int64 = 512
 		partitionStart   int64 = 2048
-		partitionSectors int64 = espSize / blkSize
-		partitionEnd     int64 = partitionSectors - partitionStart + 1
+		diskSize               = espSize + 4*1024*1024 // 104 MB
+		partitionSectors       = espSize / blkSize
+		partitionEnd           = partitionSectors - partitionStart + 1
 	)
 
 	// create a disk image
@@ -32,23 +31,37 @@ func CreateEfi(diskImg string) {
 	// create a partition table
 	table := &gpt.Table{
 		Partitions: []*gpt.Partition{
-			&gpt.Partition{Start: uint64(partitionStart), End: uint64(partitionEnd), Type: gpt.EFISystemPartition, Name: "EFI System"},
+			{Start: uint64(partitionStart), End: uint64(partitionEnd), Type: gpt.EFISystemPartition, Name: "EFI System"},
 		},
 	}
 	// apply the partition table
 	err = disk.Partition(table)
+	if err != nil {
+		log.Panic(err)
+	}
 
 	/*
 	 * create an ESP partition with some contents
 	 */
 	kernel, err := os.ReadFile("/some/kernel/file")
+	if err != nil {
+		log.Panic(err)
+	}
 
 	spec := diskpkg.FilesystemSpec{Partition: 1, FSType: filesystem.TypeFat32}
 	fs, err := disk.CreateFilesystem(spec)
+	if err != nil {
+		log.Panic(err)
+	}
 
 	// make our directories
-	err = fs.Mkdir("/EFI/BOOT")
+	if err = fs.Mkdir("/EFI/BOOT"); err != nil {
+		log.Panic(err)
+	}
 	rw, err := fs.OpenFile("/EFI/BOOT/BOOTX64.EFI", os.O_CREATE|os.O_RDWR)
+	if err != nil {
+		log.Panic(err)
+	}
 
 	n, err := rw.Write(kernel)
 	if err != nil {

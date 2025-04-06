@@ -86,7 +86,7 @@ func primaryVolumeDescriptorsBytesNullDate(a []byte) []byte {
 	return a1
 }
 
-//nolint:deadcode,unused // this is unused, but is useful for understanding structures
+//nolint:unused // this is unused, but is useful for understanding structures
 func getValidVolumeDescriptors() ([]volumeDescriptor, []byte, error) {
 	blocksize := uint16(2048)
 	// read correct bytes off of disk

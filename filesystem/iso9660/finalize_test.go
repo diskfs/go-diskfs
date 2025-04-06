@@ -560,7 +560,7 @@ func validateElTorito(t *testing.T, f *os.File) {
 	// look for El Torito line
 	re := regexp.MustCompile(`El Torito VD version 1 found, boot catalog is in sector (\d+)\n`)
 	matches := re.FindStringSubmatch(outString)
-	if matches == nil || len(matches) < 1 {
+	if len(matches) < 1 {
 		t.Fatalf("unable to match El Torito information")
 	}
 	// what sector should it be in?

@@ -15,7 +15,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/diskfs/go-diskfs"
+	diskfs "github.com/diskfs/go-diskfs"
 	"github.com/diskfs/go-diskfs/backend/file"
 	"github.com/diskfs/go-diskfs/disk"
 	"github.com/diskfs/go-diskfs/filesystem"

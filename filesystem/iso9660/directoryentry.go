@@ -400,7 +400,7 @@ func (de *directoryEntry) getLocation(p string) (location, size uint32, err erro
 						return 0, 0, fmt.Errorf("extension %s count not find a filename property: %v", e.ID(), err2)
 					default:
 						checkFilename = filename
-						//nolint:gosimple // redundant break, but we want this explicit
+						//nolint:staticcheck // redundant break, but we want this explicit
 						break
 					}
 				}
@@ -459,7 +459,7 @@ func (de *directoryEntry) Name() string {
 				continue
 			default:
 				name = filename
-				//nolint:gosimple // redundant break, but we want this explicit
+				//nolint:staticcheck // redundant break, but we want this explicit
 				break
 			}
 		}
