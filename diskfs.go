@@ -128,12 +128,14 @@ func initDisk(b backend.Storage, sectorSize SectorSize) (*disk.Disk, error) {
 			return nil, backend.ErrNotSuitable
 		}
 
+		//nolint:revive // revive thinks we can drop the 'else' statement, but we need it to capture the size
 		if size, err := getBlockDeviceSize(osFile); err != nil {
 			return nil, fmt.Errorf("error getting block device %s size: %s", devInfo.Name(), err)
 		} else {
 			newDisk.Size = size
 		}
 
+		//nolint:revive // revive thinks we can drop the 'else' statement, but we need it to capture the size
 		if lblksize, pblksize, err = getSectorSizes(osFile); err != nil {
 			return nil, fmt.Errorf("unable to get block sizes for device %s: %v", devInfo.Name(), err)
 		} else {

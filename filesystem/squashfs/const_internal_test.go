@@ -131,7 +131,7 @@ var (
 	testFirstInodeEnd     = testFirstInodeStart + 0x38
 )
 
-//nolint:deadcode,varcheck,unused // we need these references in the future
+//nolint:unused // we need these references in the future
 var (
 	testIDTableStart       = 0x5092c8 + 2 - testMetaOffset
 	testIDTableEnd         = 0x5092d6 - testMetaOffset
@@ -207,7 +207,6 @@ func testGetInodeMetabytes() (inodeBytes []byte, err error) {
 	return b[testFs.superblock.inodeTableStart+2:], nil
 }
 
-//nolint:deadcode // we need these references in the future
 func testGetFilesystemRoot() []*directoryEntry {
 	/*
 		isSubdirectory bool

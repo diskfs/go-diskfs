@@ -52,8 +52,6 @@ type FinalizeOptions struct {
 //	Nlink() uint32         // number of hardlinks, if supported
 //	Uid()   uint32         // uid, if supported
 //	Gid()   uint32         // gid, if supported
-//
-//nolint:structcheck // keep unused members so that we can know their references
 type finalizeFileInfo struct {
 	path               string
 	target             string

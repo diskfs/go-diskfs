@@ -242,15 +242,15 @@ func TestReadBlock(t *testing.T) {
 	data := []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}
 	testFile := &testhelper.FileImpl{
 		Reader: func(b []byte, offset int64) (int, error) {
-			switch {
-			case offset == location:
+			switch offset {
+			case location:
 				copy(b, data)
 				count := len(data)
 				if len(b) < len(data) {
 					count = len(b)
 				}
 				return count, io.EOF
-			case offset == smallLocation:
+			case smallLocation:
 				copy(b, data[:10])
 				return 10, nil
 			default:

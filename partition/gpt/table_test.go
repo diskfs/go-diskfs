@@ -75,7 +75,7 @@ func compareProtectiveMBRBytes(b1, b2 []byte) bool {
 		bytes.Equal(b1[16:], b2[16:])
 }
 
-//nolint:deadcode,unused // useful function for internal tests
+//nolint:unused // useful function for internal tests
 func compareGPTBytes(b1, b2 []byte) bool {
 	sizeMatch := len(b1) == len(b2)
 	// everything before the MBR partition entries is ignored

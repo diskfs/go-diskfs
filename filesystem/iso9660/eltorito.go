@@ -10,7 +10,7 @@ import (
 	"github.com/diskfs/go-diskfs/util"
 )
 
-//nolint:deadcode,varcheck,unused // we need these references in the future
+//nolint:unused // we need these references in the future
 const (
 	elToritoSector        = 0x11
 	elToritoDefaultBlocks = 4

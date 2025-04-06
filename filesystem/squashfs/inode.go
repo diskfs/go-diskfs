@@ -863,7 +863,7 @@ type extendedSocket struct {
 
 // idTable is an indexed table of IDs
 //
-//nolint:deadcode // we need these references in the future
+// we need these references in the future
 type idTable []uint32
 
 // parseInodeBody parse the body of an inode. This only parses the non-variable size part,

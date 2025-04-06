@@ -63,7 +63,6 @@ type bootVolumeDescriptor struct {
 type terminatorVolumeDescriptor struct {
 }
 
-//nolint:structcheck // we accept some unused fields as useful for reference
 type supplementaryVolumeDescriptor struct {
 	volumeFlags                uint8
 	systemIdentifier           string // length 32 bytes

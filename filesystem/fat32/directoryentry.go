@@ -23,8 +23,6 @@ const (
 var validShortNameCharacters, _ = asciiset.MakeASCIISet("!#$%&'()-0123456789@ABCDEFGHIJKLMNOPQRSTUVWXYZ^_`{}~")
 
 // directoryEntry is a single directory entry
-//
-//nolint:structcheck // we are willing to leave unused elements here so that we can know their reference
 type directoryEntry struct {
 	filenameShort      string
 	fileExtension      string
