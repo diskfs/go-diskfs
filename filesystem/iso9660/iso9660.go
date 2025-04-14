@@ -160,7 +160,7 @@ func Read(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) 
 	// we do not do anything with the system area for now
 
 	// next read the volume descriptors, one at a time, until we hit the terminator
-	vds := make([]volumeDescriptor, 2)
+	vds := make([]volumeDescriptor, 0, 128)
 	terminated := false
 	var (
 		pvd *primaryVolumeDescriptor
