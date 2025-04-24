@@ -47,6 +47,37 @@ func dos331BPBFromBytes(b []byte) (*dos331BPB, error) {
 	return &bpb, nil
 }
 
+func (bpb *dos331BPB) clusterCount() uint32 {
+	fatStartSector := bpb.dos20BPB.reservedSectors
+	fatSectors := uint32(bpb.dos20BPB.sectorsPerFat) * uint32(bpb.dos20BPB.fatCount)
+
+	rootDirStartSector := uint32(fatStartSector) + fatSectors
+	rootDirSectors := (uint32(bpb.dos20BPB.rootDirectoryEntries)*32 + uint32(bpb.dos20BPB.bytesPerSector) - 1) / uint32(bpb.dos20BPB.bytesPerSector)
+
+	dataStartSector := rootDirStartSector + rootDirSectors
+	totalSectors := uint32(bpb.dos20BPB.totalSectors)
+	if totalSectors == 0 {
+		totalSectors = bpb.totalSectors
+	}
+	dataSectors := totalSectors - dataStartSector
+
+	return dataSectors / uint32(bpb.dos20BPB.sectorsPerCluster)
+}
+
+// FatType returns the type of FAT filesystem based on the number of clusters
+// http://elm-chan.org/docs/fat_e.html#fat_determination
+func (bpb *dos331BPB) FatType() int {
+	clusterCount := bpb.clusterCount()
+	switch {
+	case clusterCount <= 4085:
+		return 12
+	case clusterCount <= 65525:
+		return 16
+	default:
+		return 32
+	}
+}
+
 // ToBytes returns the bytes for a DOS 3.31 BIOS Parameter Block, ready to be written to disk
 func (bpb *dos331BPB) toBytes() []byte {
 	b := make([]byte, 25)

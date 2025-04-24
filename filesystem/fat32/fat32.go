@@ -52,8 +52,9 @@ const (
 
 // FileSystem implememnts the FileSystem interface
 type FileSystem struct {
+	fatType         int
 	bootSector      msDosBootSector
-	fsis            FSInformationSector
+	fsis            *FSInformationSector
 	table           table
 	dataStart       uint32
 	bytesPerCluster int
@@ -94,6 +95,8 @@ func (fs *FileSystem) Equal(a *FileSystem) bool {
 // If the provided blocksize is 0, it will use the default of 512 bytes. If it is any number other than 0
 // or 512, it will return an error.
 func Create(b backend.Storage, size, start, blocksize int64, volumeLabel string) (*FileSystem, error) {
+	// TODO: support different FAT types here (12/16)
+
 	// blocksize must be <=0 or exactly SectorSize512 or error
 	if blocksize != int64(SectorSize512) && blocksize > 0 {
 		return nil, fmt.Errorf("blocksize for FAT32 must be either 512 bytes or 0, not %d", blocksize)
@@ -220,7 +223,7 @@ func Create(b backend.Storage, size, start, blocksize int64, volumeLabel string)
 	}
 
 	// create and allocate FAT32 FSInformationSector
-	fsis := FSInformationSector{
+	fsis := &FSInformationSector{
 		lastAllocatedCluster:  0xffffffff,
 		freeDataClustersCount: 0xffffffff,
 	}
@@ -351,12 +354,19 @@ func Read(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) 
 		return nil, fmt.Errorf("only could read %d bytes from file", n)
 	}
 	bs, err := msDosBootSectorFromBytes(bsb)
-
 	if err != nil {
 		return nil, fmt.Errorf("error reading MS-DOS Boot Sector: %w", err)
 	}
 
-	sectorsPerFat := bs.biosParameterBlock.sectorsPerFat
+	fatType := bs.biosParameterBlock.dos331BPB.FatType()
+
+	var sectorsPerFat uint32
+	if fatType == 32 {
+		sectorsPerFat = bs.biosParameterBlock.sectorsPerFat
+	} else {
+		sectorsPerFat = uint32(bs.biosParameterBlock.dos331BPB.dos20BPB.sectorsPerFat)
+	}
+
 	fatSize := sectorsPerFat * uint32(SectorSize512)
 	reservedSectors := bs.biosParameterBlock.dos331BPB.dos20BPB.reservedSectors
 	sectorsPerCluster := bs.biosParameterBlock.dos331BPB.dos20BPB.sectorsPerCluster
@@ -371,25 +381,30 @@ func Read(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) 
 	if read != 512 {
 		return nil, fmt.Errorf("read %d bytes instead of expected %d for FS Information Sector", read, 512)
 	}
-	fsis, err := fsInformationSectorFromBytes(fsisBytes)
-	if err != nil {
-		return nil, fmt.Errorf("error reading FileSystem Information Sector: %w", err)
+
+	var fsis *FSInformationSector
+	if bs.biosParameterBlock.dos331BPB.FatType() == 32 {
+		fsis, err = fsInformationSectorFromBytes(fsisBytes)
+		if err != nil {
+			return nil, fmt.Errorf("error reading FileSystem Information Sector: %w", err)
+		}
 	}
 
 	partitionTableBytes := make([]byte, fatSize)
 	_, _ = b.ReadAt(partitionTableBytes, int64(fatPrimaryStart)+start)
-	fat := tableFromBytes(partitionTableBytes)
+	fat := tableFromBytes(partitionTableBytes, fatType)
 
 	_, _ = b.ReadAt(partitionTableBytes, int64(fatSecondaryStart)+start)
-	fat2 := tableFromBytes(partitionTableBytes)
+	fat2 := tableFromBytes(partitionTableBytes, fatType)
 	if !fat.equal(fat2) {
 		return nil, errors.New("fat tables did not match")
 	}
 	dataStart := uint32(fatSecondaryStart) + fat.size
 
 	return &FileSystem{
+		fatType:         fatType,
 		bootSector:      *bs,
-		fsis:            *fsis,
+		fsis:            fsis,
 		table:           *fat,
 		dataStart:       dataStart,
 		bytesPerCluster: int(sectorsPerCluster) * int(SectorSize512),
@@ -469,7 +484,7 @@ func (fs *FileSystem) writeFat() error {
 	fatPrimaryStart := uint64(reservedSectors) * uint64(SectorSize512)
 	fatSecondaryStart := fatPrimaryStart + uint64(fs.table.size)
 
-	fatBytes := fs.table.bytes()
+	fatBytes := fs.table.bytes(fs.fatType)
 	writableFile, err := fs.backend.Writable()
 	if err != nil {
 		return err
@@ -883,7 +898,7 @@ func (fs *FileSystem) getClusterList(firstCluster uint32) ([]uint32, error) {
 		newCluster := fs.table.clusters[cluster]
 		// if it is EOC, we are done
 		switch {
-		case fs.table.isEoc(newCluster):
+		case fs.table.isEoc(newCluster, fs.fatType):
 			complete = true
 		case newCluster > fs.table.maxCluster:
 			return nil, fmt.Errorf("invalid cluster chain at %d", newCluster)
@@ -892,6 +907,7 @@ func (fs *FileSystem) getClusterList(firstCluster uint32) ([]uint32, error) {
 		}
 		cluster = newCluster
 	}
+
 	return clusterList, nil
 }
 

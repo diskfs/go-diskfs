@@ -77,7 +77,7 @@ func getValidFat32FSSmall() *FileSystem {
 				return len(b), nil
 			},
 		}, false),
-		fsis: FSInformationSector{},
+		fsis: &FSInformationSector{},
 		bootSector: msDosBootSector{
 			biosParameterBlock: &dos71EBPB{
 				fsInformationSector: 2,

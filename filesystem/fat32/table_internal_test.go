@@ -32,7 +32,7 @@ func TestFat32TableFromBytes(t *testing.T) {
 			t.Fatalf("error reading test fixture data from %s: %v", Fat32File, err)
 		}
 		b := input[fsInfo.firstFAT : fsInfo.firstFAT+fsInfo.sectorsPerFAT*fsInfo.bytesPerSector]
-		result := tableFromBytes(b)
+		result := tableFromBytes(b, 32)
 		if result == nil {
 			t.Fatalf("returned FAT32 Table was nil unexpectedly")
 		}
@@ -48,7 +48,7 @@ func TestFat32TableFromBytes(t *testing.T) {
 func TestFat32TableToBytes(t *testing.T) {
 	t.Run("valid FAT32 table", func(t *testing.T) {
 		table := getValidFat32Table()
-		b := table.bytes()
+		b := table.bytes(32)
 		if b == nil {
 			t.Fatal("b was nil unexpectedly")
 		}
@@ -85,7 +85,7 @@ func TestFat32TableIsEoc(t *testing.T) {
 	}
 	tab := table{}
 	for _, tt := range tests {
-		eoc := tab.isEoc(tt.cluster)
+		eoc := tab.isEoc(tt.cluster, 32)
 		if eoc != tt.eoc {
 			t.Errorf("isEoc(%x): actual %t instead of expected %t", tt.cluster, eoc, tt.eoc)
 		}
