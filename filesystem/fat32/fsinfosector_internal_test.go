@@ -10,8 +10,8 @@ import (
 
 func getValidFSInfoSector() *FSInformationSector {
 	return &FSInformationSector{
-		freeDataClustersCount: fsInfo.freeSectorCount,
-		lastAllocatedCluster:  fsInfo.nextFreeSector,
+		freeDataClustersCount: fsInfo32.freeSectorCount,
+		lastAllocatedCluster:  fsInfo32.nextFreeSector,
 	}
 }
 
@@ -45,9 +45,9 @@ func TestFsInformationSectorFromBytes(t *testing.T) {
 		}
 	})
 	t.Run("invalid start signature", func(t *testing.T) {
-		input, err := os.ReadFile(Fat32File)
+		input, err := os.ReadFile(GetFatDiskImagePath(32))
 		if err != nil {
-			t.Fatalf("error reading test fixture data from %s: %v", Fat32File, err)
+			t.Fatalf("error reading test fixture data from %s: %v", GetFatDiskImagePath(32), err)
 		}
 		b := input[512:1024]
 		// now to pervert one key byte
@@ -65,9 +65,9 @@ func TestFsInformationSectorFromBytes(t *testing.T) {
 		}
 	})
 	t.Run("invalid middle signature", func(t *testing.T) {
-		input, err := os.ReadFile(Fat32File)
+		input, err := os.ReadFile(GetFatDiskImagePath(32))
 		if err != nil {
-			t.Fatalf("error reading test fixture data from %s: %v", Fat32File, err)
+			t.Fatalf("error reading test fixture data from %s: %v", GetFatDiskImagePath(32), err)
 		}
 		b := input[512:1024]
 		// now to pervert one key byte
@@ -85,9 +85,9 @@ func TestFsInformationSectorFromBytes(t *testing.T) {
 		}
 	})
 	t.Run("invalid end signature", func(t *testing.T) {
-		input, err := os.ReadFile(Fat32File)
+		input, err := os.ReadFile(GetFatDiskImagePath(32))
 		if err != nil {
-			t.Fatalf("error reading test fixture data from %s: %v", Fat32File, err)
+			t.Fatalf("error reading test fixture data from %s: %v", GetFatDiskImagePath(32), err)
 		}
 		b := input[512:1024]
 		// now to pervert one key byte
@@ -105,9 +105,9 @@ func TestFsInformationSectorFromBytes(t *testing.T) {
 		}
 	})
 	t.Run("valid FS Information Sector", func(t *testing.T) {
-		input, err := os.ReadFile(Fat32File)
+		input, err := os.ReadFile(GetFatDiskImagePath(32))
 		if err != nil {
-			t.Fatalf("error reading test fixture data from %s: %v", Fat32File, err)
+			t.Fatalf("error reading test fixture data from %s: %v", GetFatDiskImagePath(32), err)
 		}
 		b := input[512:1024]
 		fsis, err := fsInformationSectorFromBytes(b)
@@ -133,9 +133,9 @@ func TestInformationSectorToBytes(t *testing.T) {
 		if b == nil {
 			t.Fatal("b was nil unexpectedly")
 		}
-		valid, err := os.ReadFile(Fat32File)
+		valid, err := os.ReadFile(GetFatDiskImagePath(32))
 		if err != nil {
-			t.Fatalf("error reading test fixture data from %s: %v", Fat32File, err)
+			t.Fatalf("error reading test fixture data from %s: %v", GetFatDiskImagePath(32), err)
 		}
 		validBytes := valid[512:1024]
 		if !bytes.Equal(validBytes, b) {

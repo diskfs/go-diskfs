@@ -74,12 +74,13 @@ func tableFromBytes16(b []byte) *table {
 	maxCluster := uint32(len(b) / 2)
 
 	t := table{
-		fatID:          uint32(binary.LittleEndian.Uint16(b[0:2])),
-		eocMarker:      uint32(binary.LittleEndian.Uint16(b[2:4])),
-		size:           uint32(len(b)),
-		clusters:       make([]uint32, maxCluster+1),
-		maxCluster:     maxCluster,
-		rootDirCluster: 2,
+		fatID:      uint32(binary.LittleEndian.Uint16(b[0:2])),
+		eocMarker:  uint32(binary.LittleEndian.Uint16(b[2:4])),
+		size:       uint32(len(b)),
+		clusters:   make([]uint32, maxCluster+1),
+		maxCluster: maxCluster,
+		// for fat16 the root dir is stored in a separate location
+		rootDirCluster: 0,
 	}
 
 	// Parse clusters starting from 2
@@ -100,12 +101,13 @@ func tableFromBytes12(b []byte) *table {
 	maxCluster := uint32(len(b) * 2 / 3) // 1.5 bytes (12 bits) per entry
 
 	t := table{
-		fatID:          uint32(getFAT12Entry(b, 0)),
-		eocMarker:      uint32(getFAT12Entry(b, 1)),
-		size:           uint32(len(b)),
-		clusters:       make([]uint32, maxCluster+1),
-		maxCluster:     maxCluster,
-		rootDirCluster: 2,
+		fatID:      uint32(getFAT12Entry(b, 0)),
+		eocMarker:  uint32(getFAT12Entry(b, 1)),
+		size:       uint32(len(b)),
+		clusters:   make([]uint32, maxCluster+1),
+		maxCluster: maxCluster,
+		// for fat12 the root dir is stored in a separate location
+		rootDirCluster: 0,
 	}
 
 	// Parse clusters starting from 2

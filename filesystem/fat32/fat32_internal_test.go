@@ -27,16 +27,51 @@ func clustersFromMap(m map[uint32]uint32, maxCluster uint32) []uint32 {
 	return clusters
 }
 
-func getValidFat32FSFull() *FileSystem {
-	fs := getValidFat32FSSmall()
-	fs.table = *getValidFat32Table()
+func getValidFatFsFull(t *testing.T, fatType int) *FileSystem {
+	t.Helper()
+	testFile, err := os.Open(GetFatDiskImagePath(fatType))
+	if err != nil {
+		t.Fatalf("could not open file %s to read: %v", GetFatDiskImagePath(fatType), err)
+	}
+	t.Cleanup(func() {
+		testFile.Close()
+	})
+
+	fsInfo := GetFsInfo(fatType)
+	fs := &FileSystem{
+		fatType: fatType,
+		bootSector: msDosBootSector{
+			biosParameterBlock: &dos71EBPB{
+				sectorsPerFat: fsInfo.sectorsPerFAT,
+				dos331BPB: &dos331BPB{
+					dos20BPB: &dos20BPB{
+						fatCount:             uint8(fsInfo.numFATs),
+						reservedSectors:      uint16(fsInfo.reservedSectors),
+						bytesPerSector:       SectorSize(fsInfo.bytesPerSector),
+						sectorsPerCluster:    4,
+						rootDirectoryEntries: uint16(fsInfo.rootDirEntryCount),
+					},
+				},
+			},
+		},
+		table:           *getValidFatTable(fatType),
+		backend:         file.New(testFile, false),
+		bytesPerCluster: int(fsInfo.bytesPerCluster),
+		dataStart:       fsInfo.dataStartBytes,
+	}
+
+	if fsInfo.fatType == 32 {
+		fs.fsis = &FSInformationSector{}
+	}
+
 	return fs
 }
 
-func getValidFat32FSSmall() *FileSystem {
+func getValidFat32FSSmall(fatType int) *FileSystem {
 	eoc := uint32(0xffffffff)
 	maxCluster := uint32(128)
 	fs := &FileSystem{
+		fatType: 32,
 		table: table{
 			rootDirCluster: 2,
 			size:           512,
@@ -70,7 +105,7 @@ func getValidFat32FSSmall() *FileSystem {
 			}, maxCluster),
 		},
 		bytesPerCluster: 512,
-		dataStart:       178176,
+		dataStart:       565248,
 		backend: file.New(&testhelper.FileImpl{
 			//nolint:revive // unused parameter, keeping name makes it easier to use in the future
 			Writer: func(b []byte, offset int64) (int, error) {
@@ -95,7 +130,7 @@ func getValidFat32FSSmall() *FileSystem {
 }
 
 func TestFat32GetClusterList(t *testing.T) {
-	fs := getValidFat32FSSmall()
+	fs := getValidFat32FSSmall(32)
 
 	tests := []struct {
 		firstCluster uint32
@@ -127,55 +162,68 @@ func TestFat32GetClusterList(t *testing.T) {
 }
 
 func TestFat32ReadDirectory(t *testing.T) {
-	// will use the fat32.img fixture to test an actual directory
-	// \ (root directory) should be in one cluster
-	// \foo should be in two clusters
-	testFile, err := os.Open(Fat32File)
-	if err != nil {
-		t.Fatalf("could not open file %s to read: %v", Fat32File, err)
+	getFooDirectoryEntries := func(fatType int) (entries []*directoryEntry, b []byte, err error) {
+		entries, b, err = GetValidDirectoryEntriesExtended("/foo", fatType)
+		return entries, b, err
 	}
-	defer testFile.Close()
-	fs := &FileSystem{
-		table:           *getValidFat32Table(),
-		backend:         file.New(testFile, false),
-		bytesPerCluster: int(fsInfo.bytesPerCluster),
-		dataStart:       fsInfo.dataStartBytes,
-	}
-	validDe, _, err := GetValidDirectoryEntries()
-	if err != nil {
-		t.Fatalf("unable to read valid directory entries: %v", err)
-	}
-	validDeExtended, _, err := GetValidDirectoryEntriesExtended("/foo")
-	if err != nil {
-		t.Fatalf("unable to read valid directory entries extended: %v", err)
-	}
+
 	tests := []struct {
-		path    string
-		cluster uint32
-		entries []*directoryEntry
+		fatType    int
+		path       string
+		cluster    uint32
+		isRoot     bool
+		getEntries func(fatType int) (entries []*directoryEntry, b []byte, err error)
 	}{
-		{"\\", 2, validDe},
-		{"/", 2, validDe},
-		{"\\foo", 3, validDeExtended},
-		{"/foo", 3, validDeExtended},
+		{12, "\\", 0, true, GetValidDirectoryEntries},
+		{12, "/", 0, true, GetValidDirectoryEntries},
+		{12, "\\foo", 2, false, getFooDirectoryEntries},
+		{12, "/foo", 2, false, getFooDirectoryEntries},
+
+		{16, "\\", 0, true, GetValidDirectoryEntries},
+		{16, "/", 0, true, GetValidDirectoryEntries},
+		{16, "\\foo", 2, false, getFooDirectoryEntries},
+		{16, "/foo", 2, false, getFooDirectoryEntries},
+
+		{32, "\\", 2, true, GetValidDirectoryEntries},
+		{32, "/", 2, true, GetValidDirectoryEntries},
+		{32, "\\foo", 3, false, getFooDirectoryEntries},
+		{32, "/foo", 3, false, getFooDirectoryEntries},
 	}
+
 	for _, tt := range tests {
+		// will use the fatN/disk.img fixture to test an actual directory
+		// \ (root directory) should be in one cluster
+		// \foo should be in two clusters
+		testFile, err := os.Open(GetFatDiskImagePath(tt.fatType))
+		if err != nil {
+			t.Fatalf("could not open file %s to read: %v", GetFatDiskImagePath(tt.fatType), err)
+		}
+		defer testFile.Close()
+
+		fs := getValidFatFsFull(t, tt.fatType)
+
+		expectedEntries, _, err := tt.getEntries(tt.fatType)
+		if err != nil {
+			t.Fatalf("unable to get valid directory entries: %v", err)
+		}
+
 		dir := &Directory{
 			directoryEntry: directoryEntry{
 				clusterLocation: tt.cluster,
 			},
 		}
-		entries, err := fs.readDirectory(dir)
+
+		entries, err := fs.readDirectory(dir, tt.isRoot)
 		switch {
 		case err != nil:
-			t.Errorf("fs.readDirectory(%s): unexpected nil error: %v", tt.path, err)
-		case len(entries) != len(tt.entries):
-			t.Errorf("fs.readDirectory(%s): number of entries do not match, actual %d expected %d", tt.path, len(entries), len(tt.entries))
+			t.Errorf("fs.readDirectory(%s): FAT%d unexpected nil error: %v", tt.path, tt.fatType, err)
+		case len(entries) != len(expectedEntries):
+			t.Errorf("fs.readDirectory(%s): FAT%d number of entries do not match, actual %d expected %d", tt.path, tt.fatType, len(entries), len(expectedEntries))
 		default:
 			for i, entry := range entries {
-				if !compareDirectoryEntriesIgnoreDates(entry, tt.entries[i]) {
-					t.Errorf("fs.readDirectory(%s) %d: entries do not match, actual then expected", tt.path, i)
-					t.Log(cmp.Diff(*entry, *tt.entries[i], cmp.AllowUnexported(directoryEntry{})))
+				if !compareDirectoryEntriesIgnoreDates(entry, expectedEntries[i]) {
+					t.Errorf("fs.readDirectory(%s) FAT%d %d: entries do not match, actual then expected", tt.path, tt.fatType, i)
+					t.Log(cmp.Diff(*entry, *expectedEntries[i], cmp.AllowUnexported(directoryEntry{})))
 				}
 			}
 		}
@@ -212,7 +260,7 @@ func TestFat32AllocateSpace(t *testing.T) {
 	}
 	for _, tt := range tests {
 		// reset for each test
-		fs := getValidFat32FSSmall()
+		fs := getValidFat32FSSmall(32)
 		output, err := fs.allocateSpace(tt.size, tt.previous)
 		switch {
 		case (err == nil && tt.err != nil) || (err != nil && tt.err == nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
@@ -228,7 +276,7 @@ func TestFat32AllocateSpace(t *testing.T) {
 }
 
 func TestFat32MkSubdir(t *testing.T) {
-	fs := getValidFat32FSSmall()
+	fs := getValidFat32FSSmall(32)
 	d := &Directory{
 		entries: []*directoryEntry{},
 	}
@@ -255,7 +303,7 @@ func TestFat32MkSubdir(t *testing.T) {
 }
 
 func TestFat32MkFile(t *testing.T) {
-	fs := getValidFat32FSSmall()
+	fs := getValidFat32FSSmall(32)
 	d := &Directory{
 		entries: []*directoryEntry{},
 	}
@@ -287,16 +335,16 @@ func TestFat32MkFile(t *testing.T) {
 }
 
 func TestFat32ReadDirWithMkdir(t *testing.T) {
-	fs := getValidFat32FSFull()
-	datab, err := os.ReadFile(Fat32File)
+	fs := getValidFatFsFull(t, 32)
+	datab, err := os.ReadFile(GetFatDiskImagePath(32))
 	if err != nil {
-		t.Fatalf("unable to read data from file %s: %v", Fat32File, err)
+		t.Fatalf("unable to read data from file %s: %v", GetFatDiskImagePath(32), err)
 	}
-	validDe, _, err := GetValidDirectoryEntries()
+	validDe, _, err := GetValidDirectoryEntries(32)
 	if err != nil {
 		t.Fatalf("unable to read valid directory entries: %v", err)
 	}
-	validDeLong, _, err := GetValidDirectoryEntriesExtended("/foo")
+	validDeLong, _, err := GetValidDirectoryEntriesExtended("/foo", 32)
 	if err != nil {
 		t.Fatalf("unable to read valid directory entries extended: %v", err)
 	}

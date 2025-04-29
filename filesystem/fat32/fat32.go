@@ -367,10 +367,11 @@ func Read(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) 
 		sectorsPerFat = uint32(bs.biosParameterBlock.dos331BPB.dos20BPB.sectorsPerFat)
 	}
 
-	fatSize := sectorsPerFat * uint32(SectorSize512)
+	bytesPerSector := int(bs.biosParameterBlock.dos331BPB.dos20BPB.bytesPerSector)
+	fatSize := sectorsPerFat * uint32(bytesPerSector)
 	reservedSectors := bs.biosParameterBlock.dos331BPB.dos20BPB.reservedSectors
 	sectorsPerCluster := bs.biosParameterBlock.dos331BPB.dos20BPB.sectorsPerCluster
-	fatPrimaryStart := uint64(reservedSectors) * uint64(SectorSize512)
+	fatPrimaryStart := uint64(reservedSectors) * uint64(bytesPerSector)
 	fatSecondaryStart := fatPrimaryStart + uint64(fatSize)
 
 	fsisBytes := make([]byte, 512)
@@ -407,7 +408,7 @@ func Read(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) 
 		fsis:            fsis,
 		table:           *fat,
 		dataStart:       dataStart,
-		bytesPerCluster: int(sectorsPerCluster) * int(SectorSize512),
+		bytesPerCluster: int(sectorsPerCluster) * bytesPerSector,
 		start:           start,
 		size:            size,
 		backend:         b,
@@ -511,7 +512,14 @@ func (fs *FileSystem) Close() error {
 
 // Type returns the type code for the filesystem. Always returns filesystem.TypeFat32
 func (fs *FileSystem) Type() filesystem.Type {
-	return filesystem.TypeFat32
+	switch fs.fatType {
+	case 12:
+		return filesystem.TypeFat12
+	case 16:
+		return filesystem.TypeFat16
+	default:
+		return filesystem.TypeFat32
+	}
 }
 
 // Mkdir make a directory at the given path. It is equivalent to `mkdir -p`, i.e. idempotent, in that:
@@ -911,12 +919,12 @@ func (fs *FileSystem) getClusterList(firstCluster uint32) ([]uint32, error) {
 	return clusterList, nil
 }
 
-// read directory entries for a given cluster
-func (fs *FileSystem) readDirectory(dir *Directory) ([]*directoryEntry, error) {
-	clusterList, err := fs.getClusterList(dir.clusterLocation)
+func (fs *FileSystem) getDirectoryBytes(clusterLocation uint32) ([]byte, error) {
+	clusterList, err := fs.getClusterList(clusterLocation)
 	if err != nil {
 		return nil, fmt.Errorf("could not read cluster list: %w", err)
 	}
+
 	// read the data from all of the cluster entries in the list
 	byteCount := len(clusterList) * fs.bytesPerCluster
 	b := make([]byte, 0, byteCount)
@@ -929,8 +937,43 @@ func (fs *FileSystem) readDirectory(dir *Directory) ([]*directoryEntry, error) {
 		_, _ = fs.backend.ReadAt(tmpb, clusterStart)
 		b = append(b, tmpb...)
 	}
+
+	return b, nil
+}
+
+func (fs *FileSystem) getRootDirectoryBytes() ([]byte, error) {
+	sectorsPerFat := fs.bootSector.biosParameterBlock.sectorsPerFat
+	dos20BPB := fs.bootSector.biosParameterBlock.dos331BPB.dos20BPB
+
+	fatRegionSize := sectorsPerFat * uint32(dos20BPB.fatCount)
+	rootDirStartSector := uint32(dos20BPB.reservedSectors) + fatRegionSize
+	start := rootDirStartSector * uint32(dos20BPB.bytesPerSector)
+
+	rootDirSize := dos20BPB.rootDirectoryEntries * 32
+	b := make([]byte, rootDirSize)
+	_, err := fs.backend.ReadAt(b, int64(start))
+	if err != nil {
+		return nil, fmt.Errorf("could not read root directory bytes: %w", err)
+	}
+
+	return b, nil
+}
+
+// read directory entries for a given cluster
+func (fs *FileSystem) readDirectory(dir *Directory, isRoot bool) ([]*directoryEntry, error) {
+	var b []byte
+	var err error
+	if fs.fatType == 32 || !isRoot {
+		b, err = fs.getDirectoryBytes(dir.clusterLocation)
+	} else {
+		b, err = fs.getRootDirectoryBytes()
+	}
+	if err != nil {
+		return nil, fmt.Errorf("could not read directory bytes: %w", err)
+	}
+
 	// get the directory
-	if err := dir.entriesFromBytes(b); err != nil {
+	if err := dir.entriesFromBytes(b, fs.fatType); err != nil {
 		return nil, err
 	}
 	return dir.entries, nil
@@ -949,7 +992,8 @@ func (fs *FileSystem) mkSubdir(parent *Directory, name string) (*directoryEntry,
 
 func (fs *FileSystem) writeDirectoryEntries(dir *Directory) error {
 	// we need to save the entries of the parent
-	b, err := dir.entriesToBytes(fs.bytesPerCluster)
+	rootDirectoryEntries := fs.bootSector.biosParameterBlock.dos331BPB.dos20BPB.rootDirectoryEntries
+	b, err := dir.entriesToBytes(fs.bytesPerCluster, fs.fatType, rootDirectoryEntries)
 	if err != nil {
 		return fmt.Errorf("could not create a valid byte stream for a FAT32 Entries: %w", err)
 	}
@@ -1024,7 +1068,7 @@ func (fs *FileSystem) readDirWithMkdir(p string, doMake bool) (*Directory, []*di
 			filesystem:      fs,
 		},
 	}
-	entries, err = fs.readDirectory(currentDir)
+	entries, err = fs.readDirectory(currentDir, len(paths) == 1)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to read directory %s: %w", "/", err)
 	}
@@ -1110,7 +1154,7 @@ func (fs *FileSystem) readDirWithMkdir(p string, doMake bool) (*Directory, []*di
 			}
 		}
 		// get all of the entries in this directory
-		entries, err = fs.readDirectory(currentDir)
+		entries, err = fs.readDirectory(currentDir, false)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to read directory %s: %w", "/"+strings.Join(paths[0:i+1], "/"), err)
 		}

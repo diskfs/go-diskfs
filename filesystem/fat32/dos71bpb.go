@@ -128,8 +128,8 @@ func dos71EBPBFromBytes(b []byte) (*dos71EBPB, int, error) {
 	switch bpb.extendedBootSignature {
 	case shortDos71EBPB:
 		size = 60
-		bpb.volumeLabel = re.ReplaceAllString(string(b[32:43]), "")
-		bpb.fileSystemType = re.ReplaceAllString(string(b[43:51]), "")
+		// bpb.volumeLabel = re.ReplaceAllString(string(b[32:43]), "")
+		// bpb.fileSystemType = re.ReplaceAllString(string(b[43:51]), "")
 	case longDos71EBPB:
 		size = 79
 		bpb.volumeLabel = re.ReplaceAllString(string(b[60:71]), "")
