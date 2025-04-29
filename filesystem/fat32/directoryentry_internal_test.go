@@ -266,35 +266,37 @@ func TestDirectoryEntryUCaseValid(t *testing.T) {
 }
 
 func TestDirectoryEntryParseDirEntries(t *testing.T) {
-	validDe, b, err := GetValidDirectoryEntries()
-	if err != nil {
-		t.Fatal(err)
-	}
-	tests := []struct {
-		de  []*directoryEntry
-		b   []byte
-		err error
-	}{
-		{validDe, b, nil},
-	}
+	for _, fatType := range FatTypes {
+		validDe, b, err := GetValidDirectoryEntries(fatType)
+		if err != nil {
+			t.Fatal(err)
+		}
+		tests := []struct {
+			de  []*directoryEntry
+			b   []byte
+			err error
+		}{
+			{validDe, b, nil},
+		}
 
-	for _, tt := range tests {
-		output, err := parseDirEntries(tt.b)
-		switch {
-		case (err != nil && tt.err == nil) || (err == nil && tt.err != nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
-			t.Log(err)
-			t.Log(tt.err)
-			t.Errorf("mismatched err expected, actual: %v, %v", tt.err, err)
-		case (output == nil && tt.de != nil) || (tt.de == nil && output != nil):
-			t.Errorf("parseDirEntries() DirectoryEntry mismatched nil actual, expected %v %v", output, tt.de)
-		case len(output) != len(tt.de):
-			t.Errorf("parseDirEntries() DirectoryEntry mismatched length actual, expected %d %d", len(output), len(tt.de))
-		default:
-			for i, de := range output {
-				if *de != *tt.de[i] {
-					t.Errorf("%d: parseDirEntries() DirectoryEntry mismatch, actual then valid:", i)
-					t.Log(de)
-					t.Log(tt.de[i])
+		for _, tt := range tests {
+			output, err := parseDirEntries(tt.b, fatType)
+			switch {
+			case (err != nil && tt.err == nil) || (err == nil && tt.err != nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
+				t.Log(err)
+				t.Log(tt.err)
+				t.Errorf("mismatched err expected, actual: %v, %v", tt.err, err)
+			case (output == nil && tt.de != nil) || (tt.de == nil && output != nil):
+				t.Errorf("parseDirEntries() DirectoryEntry mismatched nil actual, expected %v %v", output, tt.de)
+			case len(output) != len(tt.de):
+				t.Errorf("parseDirEntries() DirectoryEntry mismatched length actual, expected %d %d", len(output), len(tt.de))
+			default:
+				for i, de := range output {
+					if *de != *tt.de[i] {
+						t.Errorf("%d: parseDirEntries() DirectoryEntry mismatch, actual then valid:", i)
+						t.Log(de)
+						t.Log(tt.de[i])
+					}
 				}
 			}
 		}
@@ -302,23 +304,25 @@ func TestDirectoryEntryParseDirEntries(t *testing.T) {
 }
 
 func TestDirectoryEntryToBytes(t *testing.T) {
-	validDe, validBytes, err := GetValidDirectoryEntries()
-	if err != nil {
-		t.Fatal(err)
-	}
-	i := 0
-	for _, de := range validDe {
-		b, err := de.toBytes()
-		expected := validBytes[i*32 : (i+1+de.longFilenameSlots)*32]
+	for _, fatType := range FatTypes {
+		validDe, validBytes, err := GetValidDirectoryEntries(fatType)
 		if err != nil {
-			t.Errorf("error converting directory entry to bytes: %v", err)
-			t.Logf("%v", de)
-		} else {
-			diff, diffString := util.DumpByteSlicesWithDiffs(b, expected, 32, false, true, true)
-			if diff {
-				t.Errorf("directory.toBytes() %s mismatched, actual then expected\n%s", de.filenameShort, diffString)
-			}
+			t.Fatal(err)
 		}
-		i += de.longFilenameSlots + 1
+		i := 0
+		for _, de := range validDe {
+			b, err := de.toBytes(fatType)
+			expected := validBytes[i*32 : (i+1+de.longFilenameSlots)*32]
+			if err != nil {
+				t.Errorf("error converting directory entry to bytes: %v", err)
+				t.Logf("%v", de)
+			} else {
+				diff, diffString := util.DumpByteSlicesWithDiffs(b, expected, 32, false, true, true)
+				if diff {
+					t.Errorf("directory.toBytes() %s mismatched, actual then expected\n%s", de.filenameShort, diffString)
+				}
+			}
+			i += de.longFilenameSlots + 1
+		}
 	}
 }
