@@ -675,8 +675,10 @@ func (fsm *FileSystem) Finalize(options FinalizeOptions) error {
 		if err != nil {
 			return fmt.Errorf("could not convert directory to bytes: %v", err)
 		}
-		for i, e := range p {
-			_, _ = f.WriteAt(e, writeAt+int64(i*blocksize))
+		var pos int64
+		for _, e := range p {
+			_, _ = f.WriteAt(e, writeAt+pos)
+			pos += int64(len(e))
 		}
 	}
 
