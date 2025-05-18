@@ -16,7 +16,7 @@ func getValidDos20BPB() *dos20BPB {
 		reservedSectors:      32,
 		fatCount:             2,
 		rootDirectoryEntries: 0,
-		totalSectors:         0x5000,
+		totalSectors:         0,
 		mediaType:            0xf8,
 		sectorsPerFat:        0,
 	}
@@ -54,9 +54,9 @@ func TestDos20BPBFromBytes(t *testing.T) {
 		}
 	})
 	t.Run("valid data", func(t *testing.T) {
-		input, err := os.ReadFile(Fat32File)
+		input, err := os.ReadFile(GetFatDiskImagePath(32))
 		if err != nil {
-			t.Fatalf("error reading test fixture data from %s: %v", Fat32File, err)
+			t.Fatalf("error reading test fixture data from %s: %v", GetFatDiskImagePath(32), err)
 		}
 		inputBytes := input[11:24]
 		bpb, err := dos20BPBFromBytes(inputBytes)
@@ -81,9 +81,9 @@ func TestDos20BPBToBytes(t *testing.T) {
 	if b == nil {
 		t.Fatal("b was nil unexpectedly")
 	}
-	valid, err := os.ReadFile(Fat32File)
+	valid, err := os.ReadFile(GetFatDiskImagePath(32))
 	if err != nil {
-		t.Fatalf("error reading test fixture data from %s: %v", Fat32File, err)
+		t.Fatalf("error reading test fixture data from %s: %v", GetFatDiskImagePath(32), err)
 	}
 	validBytes := valid[11:24]
 	if !bytes.Equal(validBytes, b) {

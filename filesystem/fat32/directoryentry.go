@@ -47,7 +47,7 @@ type directoryEntry struct {
 	isNew              bool
 }
 
-func (de *directoryEntry) toBytes() ([]byte, error) {
+func (de *directoryEntry) toBytes(fatType int) ([]byte, error) {
 	b := make([]byte, 0, bytesPerSlot)
 
 	// do we have a long filename?
@@ -86,8 +86,10 @@ func (de *directoryEntry) toBytes() ([]byte, error) {
 	binary.LittleEndian.PutUint32(clusterLocation, de.clusterLocation)
 	dosBytes[26] = clusterLocation[0]
 	dosBytes[27] = clusterLocation[1]
-	dosBytes[20] = clusterLocation[2]
-	dosBytes[21] = clusterLocation[3]
+	if fatType == 32 {
+		dosBytes[20] = clusterLocation[2]
+		dosBytes[21] = clusterLocation[3]
+	}
 
 	// set the flags
 	if de.isVolumeLabel {
@@ -115,9 +117,9 @@ func (de *directoryEntry) toBytes() ([]byte, error) {
 // parseDirEntries takes all of the bytes in a special file (i.e. a directory)
 // and gets all of the DirectoryEntry for that directory
 // this is, essentially, the equivalent of `ls -l` or if you prefer `dir`
-func parseDirEntries(b []byte) ([]*directoryEntry, error) {
+func parseDirEntries(b []byte, fatType int) ([]*directoryEntry, error) {
 	dirEntries := make([]*directoryEntry, 0, 20)
-	// parse the data into Fat32DirectoryEntry
+	// parse the data into FatDirectoryEntry
 	lfn := ""
 	// this should be used to count the LFN entries and that they make sense
 	//     lfnCount := 0
@@ -161,13 +163,19 @@ byteLoop:
 		lowercaseShortname := b[i+12]&0x08 == 0x08
 		lowercaseExtension := b[i+12]&0x10 == 0x10
 
+		clusterLocation := uint32(binary.LittleEndian.Uint16(b[i+26 : i+28]))
+		if fatType == 32 {
+			highBits := binary.LittleEndian.Uint16(b[i+20 : i+22])
+			clusterLocation = clusterLocation | (uint32(highBits) << 16)
+		}
+
 		entry := directoryEntry{
 			filenameLong:       lfn,
 			longFilenameSlots:  calculateSlots(lfn),
 			filenameShort:      sfn,
 			fileExtension:      extension,
 			fileSize:           binary.LittleEndian.Uint32(b[i+28 : i+32]),
-			clusterLocation:    binary.LittleEndian.Uint32(append(b[i+26:i+28], b[i+20:i+22]...)),
+			clusterLocation:    clusterLocation,
 			createTime:         dateTimeToTime(createDate, createTime),
 			modifyTime:         dateTimeToTime(modifyDate, modifyTime),
 			accessTime:         dateTimeToTime(accessDate, 0),
@@ -180,6 +188,7 @@ byteLoop:
 		lfn = ""
 		dirEntries = append(dirEntries, &entry)
 	}
+
 	return dirEntries, nil
 }
 
