@@ -272,3 +272,33 @@ func (fl *File) Close() error {
 	fl.filesystem = nil
 	return nil
 }
+
+func (fl *File) SetSystem(on bool) error {
+	fs := fl.filesystem
+	fl.isSystem = on
+	return fs.writeDirectoryEntries(fl.parent)
+}
+
+func (fl *File) IsSystem() bool {
+	return fl.isSystem
+}
+
+func (fl *File) SetHidden(on bool) error {
+	fs := fl.filesystem
+	fl.isHidden = on
+	return fs.writeDirectoryEntries(fl.parent)
+}
+
+func (fl *File) IsHidden() bool {
+	return fl.isHidden
+}
+
+func (fl *File) SetReadOnly(on bool) error {
+	fs := fl.filesystem
+	fl.isReadOnly = on
+	return fs.writeDirectoryEntries(fl.parent)
+}
+
+func (fl *File) IsReadOnly() bool {
+	return fl.isReadOnly
+}
