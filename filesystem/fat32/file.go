@@ -279,7 +279,7 @@ func (fl *File) SetSystem(on bool) error {
 	return fs.writeDirectoryEntries(fl.parent)
 }
 
-func (fl *File) IsSystem(on bool) bool {
+func (fl *File) IsSystem() bool {
 	return fl.isSystem
 }
 
@@ -289,7 +289,7 @@ func (fl *File) SetHidden(on bool) error {
 	return fs.writeDirectoryEntries(fl.parent)
 }
 
-func (fl *File) IsHidden(on bool) bool {
+func (fl *File) IsHidden() bool {
 	return fl.isHidden
 }
 
@@ -299,6 +299,6 @@ func (fl *File) SetReadOnly(on bool) error {
 	return fs.writeDirectoryEntries(fl.parent)
 }
 
-func (fl *File) IsReadOnly(on bool) bool {
+func (fl *File) IsReadOnly() bool {
 	return fl.isReadOnly
 }
