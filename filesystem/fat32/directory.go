@@ -12,8 +12,8 @@ type Directory struct {
 }
 
 // dirEntriesFromBytes loads the directory entries from the raw bytes
-func (d *Directory) entriesFromBytes(b []byte) error {
-	entries, err := parseDirEntries(b)
+func (d *Directory) entriesFromBytes(b []byte, fatType int) error {
+	entries, err := parseDirEntries(b, fatType)
 	if err != nil {
 		return err
 	}
@@ -22,15 +22,26 @@ func (d *Directory) entriesFromBytes(b []byte) error {
 }
 
 // entriesToBytes convert our entries to raw bytes
-func (d *Directory) entriesToBytes(bytesPerCluster int) ([]byte, error) {
+func (d *Directory) entriesToBytes(bytesPerCluster int, fatType int, rootDirectoryEntries uint16) ([]byte, error) {
 	b := make([]byte, 0)
 	for _, de := range d.entries {
-		b2, err := de.toBytes()
+		b2, err := de.toBytes(fatType)
 		if err != nil {
 			return nil, err
 		}
 		b = append(b, b2...)
 	}
+
+	if fatType == 12 || fatType == 16 {
+		minLength := int(rootDirectoryEntries) * 32
+		if len(b) < minLength {
+			padding := make([]byte, minLength-len(b))
+			b = append(b, padding...)
+		}
+
+		return b, nil
+	}
+
 	remainder := len(b) % bytesPerCluster
 	extra := bytesPerCluster - remainder
 	zeroes := make([]byte, extra)
