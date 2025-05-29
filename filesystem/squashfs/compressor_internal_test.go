@@ -16,7 +16,7 @@ func TestNewCompressor(t *testing.T) {
 	}{
 		{compressionGzip, &CompressorGzip{}, nil},
 		{compressionLzma, &CompressorLzma{}, nil},
-		{compressionLzo, nil, fmt.Errorf("LZO compression not yet supported")},
+		{compressionLzo, &CompressorLzo{}, nil},
 		{compressionXz, &CompressorXz{}, nil},
 		{compressionLz4, &CompressorLz4{}, nil},
 		{compressionZstd, &CompressorZstd{}, nil},
@@ -55,21 +55,52 @@ var testCompressUncompressed = []byte{
 
 //nolint:thelper // this is not a helper function
 func testCompressAndDecompress(t *testing.T, c Compressor, compressed []byte) {
+	testDecompress(t, c, compressed, "")
+	testCompress(t, c, "")
+}
+
+//nolint:thelper // this is not a helper function
+func testDecompress(t *testing.T, c Compressor, compressed []byte, errorStr string) {
 	t.Run("decompress", func(t *testing.T) {
 		out, err := c.decompress(compressed)
 		switch {
+		case errorStr != "" && err == nil:
+			t.Errorf("expected error %q, got nil", errorStr)
 		case err != nil:
-			t.Errorf("unexpected error: %v", err)
+			if errorStr == "" {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !strings.Contains(err.Error(), errorStr) {
+				t.Errorf("expected error %q, got %v", errorStr, err)
+			}
+			if out != nil {
+				t.Errorf("compression should not have succeeded, got % x", out)
+			}
 		case !bytes.Equal(out, testCompressUncompressed):
 			t.Errorf("Mismatched decompressed, actual then expected")
 			t.Logf("% x", out)
 			t.Logf("% x", testCompressUncompressed)
 		}
 	})
+}
+
+//nolint:thelper // this is not a helper function
+func testCompress(t *testing.T, c Compressor, errorStr string) {
 	t.Run("compress", func(t *testing.T) {
 		out, err := c.compress(testCompressUncompressed)
-		if err != nil {
-			t.Errorf("unexpected error: %v", err)
+		switch {
+		case errorStr != "" && err == nil:
+			t.Errorf("expected error %q, got nil", errorStr)
+		case err != nil:
+			if errorStr == "" {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !strings.Contains(err.Error(), errorStr) {
+				t.Errorf("expected error %q, got %v", errorStr, err)
+			}
+			if out != nil {
+				t.Errorf("compression should not have succeeded, got % x", out)
+			}
 			return
 		}
 		decompressed, err := c.decompress(out)
@@ -168,4 +199,21 @@ func TestCompressionZstd(t *testing.T) {
 	}
 	c := CompressorZstd{}
 	testCompressAndDecompress(t, &c, compressed)
+}
+
+func TestCompressionLzo(t *testing.T) {
+	compressed := []byte{
+		0x75, 0xde, 0xc9, 0x4e, 0xd0, 0xef, 0x19, 0xdb, 0x0a, 0x6a, 0x35, 0x26,
+		0x61, 0x86, 0x2d, 0xa0, 0x42, 0x18, 0xa8, 0x89, 0xe9, 0xc4, 0x7b, 0x1a,
+		0xc7, 0x85, 0x8e, 0xd6, 0x36, 0xd6, 0x83, 0x84, 0x21, 0xf4, 0x06, 0x38,
+		0x07, 0x7b, 0x33, 0x3f, 0x72, 0x4c, 0xae, 0xcd, 0xfd, 0xa0, 0xb0, 0x71,
+		0x2f, 0x64, 0x62, 0x62, 0x2f, 0xc3, 0x5f, 0xa1, 0x21, 0xc6, 0xbf, 0x2c,
+		0x39, 0xef, 0x56, 0x23, 0x61, 0xb0, 0x98, 0x84, 0xcd, 0x24, 0xc4, 0xbf,
+		0x30, 0xae, 0xd9, 0x9e, 0xb0, 0x7b, 0xc5, 0xa3, 0x8d, 0xf7, 0x4f, 0xb8,
+		0xdd, 0x7b, 0x77, 0xb6, 0x8c, 0x5a, 0x10, 0xa4, 0xce, 0xc2, 0x0a, 0x3d,
+		0x51, 0x23, 0x8c, 0x10, 0x1a, 0x11, 0x00, 0x00,
+	}
+	c := CompressorLzo{}
+	testDecompress(t, &c, compressed, "")
+	testCompress(t, &c, "LZO compression not yet supported")
 }
