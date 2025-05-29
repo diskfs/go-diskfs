@@ -1,8 +1,9 @@
 module github.com/diskfs/go-diskfs
 
-go 1.22
+go 1.24.0
 
 require (
+	github.com/anchore/go-lzo v0.1.0
 	github.com/djherbis/times v1.6.0
 	github.com/elliotwutingfeng/asciiset v0.0.0-20230602022725-51bbb787efab
 	github.com/go-test/deep v1.0.8

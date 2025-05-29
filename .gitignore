@@ -13,6 +13,9 @@
 *.so
 *.dylib
 
+# IDE specific files
+.idea/
+
 # Test binary, built with `go test -c`
 *.test
 
