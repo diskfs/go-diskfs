@@ -69,7 +69,7 @@ func TestFileRead(t *testing.T) {
 		// stub the file reader
 		f, err := squashfs.GetTestFileBig(fileImpl, nil)
 		if err != nil {
-			t.Fatalf("unable to get small test file: %v", err)
+			t.Fatalf("unable to get big test file: %v", err)
 		}
 
 		filesize := blocksize + 5
@@ -84,6 +84,27 @@ func TestFileRead(t *testing.T) {
 		bString := string(b[:read])
 		if !bytes.Equal(b[:read], contentLong) {
 			t.Errorf("Mismatched content:\nActual: '%s...'\nExpected: '%s...'", bString[:20], contentLong[:20])
+		}
+	})
+	t.Run("sparse blocks", func(t *testing.T) {
+		// stub the file reader
+		f, err := squashfs.GetTestSparseFile(fileImpl, nil)
+		if err != nil {
+			t.Fatalf("unable to get sparse test file: %v", err)
+		}
+		contentSparse := append(make([]byte, blocksize), contentLong[:7]...)
+
+		filesize := blocksize + 7
+		b := make([]byte, filesize)
+		read, err := f.Read(b)
+		if err != nil && err != io.EOF {
+			t.Errorf("received unexpected error when reading: %v", err)
+		}
+		if read != len(contentSparse) {
+			t.Errorf("read %d bytes instead of expected %d", read, len(contentSparse))
+		}
+		if !bytes.Equal(b[:read], contentSparse) {
+			t.Errorf("Mismatched content:\nActual: '%s'\nExpected: '%s'", b[:read], contentSparse[:read])
 		}
 	})
 }

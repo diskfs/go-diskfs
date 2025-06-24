@@ -20,6 +20,7 @@ type File struct {
 	offset        int64
 	filesystem    *FileSystem
 	blockLocation int64  // the position of the last block decompressed
+	blockSize     uint32 // the size of the last block decompressed, needed for sparse files
 	block         []byte // the actual last block decompressed
 }
 
@@ -104,7 +105,8 @@ func (fl *File) Read(b []byte) (int, error) {
 				return read, fmt.Errorf("unexpected block.size=%d > fs.blocksize=%d", block.size, fs.blocksize)
 			}
 			var input []byte
-			if fl.blockLocation == location && fl.block != nil {
+			// check location and size, location can be the same for sparse files but with a size of 0
+			if fl.blockLocation == location && fl.blockSize == block.size && fl.block != nil {
 				// Read last block from cache
 				input = fl.block
 			} else {
@@ -116,6 +118,7 @@ func (fl *File) Read(b []byte) (int, error) {
 				// Cache the last block
 				fl.blockLocation = location
 				fl.block = input
+				fl.blockSize = block.size
 			}
 			outputBlock(input)
 		}
