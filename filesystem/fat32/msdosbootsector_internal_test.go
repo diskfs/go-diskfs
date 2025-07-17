@@ -75,9 +75,9 @@ func TestMsDosBootSectorFromBytes(t *testing.T) {
 		}
 	})
 	t.Run("invalid Dos71EBPB", func(t *testing.T) {
-		input, err := os.ReadFile(Fat32File)
+		input, err := os.ReadFile(GetFatDiskImagePath(32))
 		if err != nil {
-			t.Fatalf("error reading test fixture data from %s: %v", Fat32File, err)
+			t.Fatalf("error reading test fixture data from %s: %v", GetFatDiskImagePath(32), err)
 		}
 		b := input[0:512]
 		// now to pervert one key byte
@@ -96,9 +96,9 @@ func TestMsDosBootSectorFromBytes(t *testing.T) {
 		}
 	})
 	t.Run("invalid signature", func(t *testing.T) {
-		input, err := os.ReadFile(Fat32File)
+		input, err := os.ReadFile(GetFatDiskImagePath(32))
 		if err != nil {
-			t.Fatalf("error reading test fixture data from %s: %v", Fat32File, err)
+			t.Fatalf("error reading test fixture data from %s: %v", GetFatDiskImagePath(32), err)
 		}
 		b := input[0:512]
 		b[510] = 0x5e
@@ -115,9 +115,9 @@ func TestMsDosBootSectorFromBytes(t *testing.T) {
 		}
 	})
 	t.Run("valid MsDosBootSector", func(t *testing.T) {
-		input, err := os.ReadFile(Fat32File)
+		input, err := os.ReadFile(GetFatDiskImagePath(32))
 		if err != nil {
-			t.Fatalf("error reading test fixture data from %s: %v", Fat32File, err)
+			t.Fatalf("error reading test fixture data from %s: %v", GetFatDiskImagePath(32), err)
 		}
 		b := input[0:512]
 		bs, err := msDosBootSectorFromBytes(b)
@@ -233,9 +233,9 @@ func TestMsDosBootSectorToBytes(t *testing.T) {
 		if b == nil {
 			t.Fatal("b was nil unexpectedly")
 		}
-		valid, err := os.ReadFile(Fat32File)
+		valid, err := os.ReadFile(GetFatDiskImagePath(32))
 		if err != nil {
-			t.Fatalf("error reading test fixture data from %s: %v", Fat32File, err)
+			t.Fatalf("error reading test fixture data from %s: %v", GetFatDiskImagePath(32), err)
 		}
 		validBytes := valid[:512]
 		if !bytes.Equal(validBytes, b) {
