@@ -288,3 +288,33 @@ func GetTestFileBig(f fs.File, c Compressor) (*File, error) {
 		filesystem:   testFs,
 	}, nil
 }
+
+// GetTestSparseFile get a *squashfs.File to a usable and known test file
+func GetTestSparseFile(f fs.File, c Compressor) (*File, error) {
+	testFs, _, err := testGetFilesystem(f)
+	if err != nil {
+		return nil, err
+	}
+	testFs.compressor = c
+	ef := &extendedFile{
+		blocksStart:        superblockSize,
+		fileSize:           uint64(7 + testFs.blocksize),
+		sparse:             uint64(testFs.blocksize),
+		links:              0,
+		fragmentBlockIndex: 0,
+		fragmentOffset:     0,
+		xAttrIndex:         0,
+		blockSizes: []*blockData{
+			{size: 0, compressed: false}, // sparse block
+			{size: 7, compressed: false},
+		},
+	}
+	// inode 0, offset 0, name "README.md", type basic file
+	return &File{
+		extendedFile: ef,
+		isReadWrite:  false,
+		isAppend:     false,
+		offset:       0,
+		filesystem:   testFs,
+	}, nil
+}
