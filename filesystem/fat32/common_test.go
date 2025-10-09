@@ -102,8 +102,6 @@ func TestMain(m *testing.M) {
 }
 
 // GetValidDirectoryEntries get directory entries for the root directory
-//
-//nolint:revive // yes we are returning an exported type, but that is ok for the tests
 func GetValidDirectoryEntries() (entries []*directoryEntry, b []byte, err error) {
 	// read correct bytes off of disk
 
@@ -141,8 +139,6 @@ func GetValidDirectoryEntries() (entries []*directoryEntry, b []byte, err error)
 // getValidDirectoryEntriesExtended get directory entries for a directory where there are so many,
 // it has to use the extended structure. Will look for the provided dir,
 // but only one step down from root. If you want more, look for it elsewhere.
-//
-//nolint:revive // yes we are returning an exported type, but that is ok for the tests
 func GetValidDirectoryEntriesExtended(dir string) (entries []*directoryEntry, b []byte, err error) {
 	// read correct bytes off of disk
 

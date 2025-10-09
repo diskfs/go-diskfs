@@ -6,7 +6,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/diskfs/go-diskfs/util"
+	"github.com/diskfs/go-diskfs/util/printer"
 	"github.com/google/go-cmp/cmp"
 )
 
@@ -58,7 +58,7 @@ func TestFat32TableToBytes(t *testing.T) {
 		}
 		validBytes := valid[fsInfo.firstFAT : fsInfo.firstFAT+fsInfo.sectorsPerFAT*fsInfo.bytesPerSector]
 		if !bytes.Equal(validBytes, b) {
-			_, diffString := util.DumpByteSlicesWithDiffs(validBytes, b, 32, false, true, true)
+			_, diffString := printer.DumpByteSlicesWithDiffs(validBytes, b, 32, false, true, true)
 			t.Errorf("directory.toBytes() mismatched, actual then expected\n%s", diffString)
 		}
 	})

@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/diskfs/go-diskfs/backend"
-	"github.com/diskfs/go-diskfs/util"
+	"github.com/diskfs/go-diskfs/version"
 	"github.com/djherbis/times"
 )
 
@@ -786,7 +786,7 @@ func (fsm *FileSystem) Finalize(options FinalizeOptions) error {
 		pathTableMOptionalLocation: 0,
 		volumeSetIdentifier:        "",
 		publisherIdentifier:        "",
-		preparerIdentifier:         util.AppNameVersion,
+		preparerIdentifier:         version.AppName,
 		applicationIdentifier:      "",
 		copyrightFile:              "", // 37 bytes
 		abstractFile:               "", // 37 bytes

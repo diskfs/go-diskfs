@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/diskfs/go-diskfs/filesystem/ext4/crc"
-	"github.com/diskfs/go-diskfs/util"
+	"github.com/diskfs/go-diskfs/util/slices"
 	"github.com/google/uuid"
 )
 
@@ -735,7 +735,7 @@ func calculateBackupSuperblockGroups(bgs int64) []int64 {
 		backupGroups = append(backupGroups, bg)
 	}
 	// sort the backup groups
-	uniqBackupGroups := util.Uniqify[int64](backupGroups)
+	uniqBackupGroups := slices.Uniqify[int64](backupGroups)
 	sort.Slice(uniqBackupGroups, func(i, j int) bool {
 		return uniqBackupGroups[i] < uniqBackupGroups[j]
 	})
