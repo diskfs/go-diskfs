@@ -11,7 +11,7 @@ import (
 func getValidDos71EBPB() *dos71EBPB {
 	return &dos71EBPB{
 		dos331BPB:             getValidDos331BPB(),
-		sectorsPerFat:         fsInfo.sectorsPerFAT,
+		sectorsPerFat:         fsInfo32.sectorsPerFAT,
 		mirrorFlags:           0,
 		version:               0,
 		rootDirectoryCluster:  2,
@@ -21,8 +21,8 @@ func getValidDos71EBPB() *dos71EBPB {
 		driveNumber:           128,
 		reservedFlags:         0x00,
 		extendedBootSignature: 0x29,
-		volumeSerialNumber:    fsInfo.serial,
-		volumeLabel:           fsInfo.label,
+		volumeSerialNumber:    fsInfo32.serial,
+		volumeLabel:           fsInfo32.label,
 		fileSystemType:        "FAT32",
 	}
 }
@@ -96,9 +96,9 @@ func TestDos71EBPBFromBytes(t *testing.T) {
 		}
 	})
 	t.Run("valid short ebpb", func(t *testing.T) {
-		input, err := os.ReadFile(Fat32File)
+		input, err := os.ReadFile(GetFatDiskImagePath(32))
 		if err != nil {
-			t.Fatalf("error reading test fixture data from %s: %v", Fat32File, err)
+			t.Fatalf("error reading test fixture data from %s: %v", GetFatDiskImagePath(32), err)
 		}
 		inputBytes := input[11:71]
 		inputBytes[55] = 0x28
@@ -123,10 +123,11 @@ func TestDos71EBPBFromBytes(t *testing.T) {
 			t.Fatalf("Mismatched BPB")
 		}
 	})
+
 	t.Run("valid long ebpb", func(t *testing.T) {
-		input, err := os.ReadFile(Fat32File)
+		input, err := os.ReadFile(GetFatDiskImagePath(32))
 		if err != nil {
-			t.Fatalf("error reading test fixture data from %s: %v", Fat32File, err)
+			t.Fatalf("error reading test fixture data from %s: %v", GetFatDiskImagePath(32), err)
 		}
 		inputBytes := input[11:90]
 		bpb, size, err := dos71EBPBFromBytes(inputBytes)
@@ -258,9 +259,9 @@ func TestDos71EBPBToBytes(t *testing.T) {
 		if b == nil {
 			t.Fatal("b was nil unexpectedly")
 		}
-		valid, err := os.ReadFile(Fat32File)
+		valid, err := os.ReadFile(GetFatDiskImagePath(32))
 		if err != nil {
-			t.Fatalf("error reading test fixture data from %s: %v", Fat32File, err)
+			t.Fatalf("error reading test fixture data from %s: %v", GetFatDiskImagePath(32), err)
 		}
 		validBytes := valid[11:90]
 		if !bytes.Equal(validBytes, b) {

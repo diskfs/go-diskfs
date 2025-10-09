@@ -92,36 +92,50 @@ func dos71EBPBFromBytes(b []byte) (*dos71EBPB, int, error) {
 	}
 	bpb.dos331BPB = dos331bpb
 
-	bpb.sectorsPerFat = binary.LittleEndian.Uint32(b[25:29])
-	bpb.mirrorFlags = binary.LittleEndian.Uint16(b[29:31])
-	version := binary.LittleEndian.Uint16(b[31:33])
-	if version != uint16(fatVersion0) {
-		return nil, size, fmt.Errorf("invalid FAT32 version found: %v", version)
+	// Always 0 on FAT32 volumes
+	// http://elm-chan.org/docs/fat_e.html#bpb
+	if dos331bpb.dos20BPB.sectorsPerFat == 0 {
+		bpb.sectorsPerFat = binary.LittleEndian.Uint32(b[25:29])
 	}
-	bpb.version = fatVersion0
-	bpb.rootDirectoryCluster = binary.LittleEndian.Uint32(b[33:37])
-	bpb.fsInformationSector = binary.LittleEndian.Uint16(b[37:39])
-	bpb.backupBootSector = binary.LittleEndian.Uint16(b[39:41])
-	bootFileName := b[41:53]
-	copy(bpb.bootFileName[:], bootFileName)
-	bpb.driveNumber = b[53]
-	bpb.reservedFlags = b[54]
-	extendedSignature := b[55]
-	bpb.extendedBootSignature = extendedSignature
-	// is this a longer or shorter one
-	bpb.volumeSerialNumber = binary.BigEndian.Uint32(b[56:60])
 
-	switch extendedSignature {
+	// If FAT32 read the following fields from different places
+	if dos331bpb.FatType() == 32 {
+		bpb.mirrorFlags = binary.LittleEndian.Uint16(b[29:31])
+		version := binary.LittleEndian.Uint16(b[31:33])
+		if version != uint16(fatVersion0) {
+			return nil, size, fmt.Errorf("invalid FAT32 version found: %v", version)
+		}
+		bpb.version = fatVersion0
+		bpb.rootDirectoryCluster = binary.LittleEndian.Uint32(b[33:37])
+		bpb.fsInformationSector = binary.LittleEndian.Uint16(b[37:39])
+		bpb.backupBootSector = binary.LittleEndian.Uint16(b[39:41])
+		bootFileName := b[41:53]
+		copy(bpb.bootFileName[:], bootFileName)
+		bpb.driveNumber = b[53]
+		bpb.reservedFlags = b[54]
+		extendedSignature := b[55]
+		bpb.extendedBootSignature = extendedSignature
+		// is this a longer or shorter one
+		bpb.volumeSerialNumber = binary.BigEndian.Uint32(b[56:60])
+	} else {
+		bpb.driveNumber = b[25]
+		bpb.reservedFlags = b[26]
+		bpb.extendedBootSignature = b[27]
+		bpb.volumeSerialNumber = binary.BigEndian.Uint32(b[28:32])
+	}
+
+	re := regexp.MustCompile(" +$")
+	switch bpb.extendedBootSignature {
 	case shortDos71EBPB:
 		size = 60
+		// bpb.volumeLabel = re.ReplaceAllString(string(b[32:43]), "")
+		// bpb.fileSystemType = re.ReplaceAllString(string(b[43:51]), "")
 	case longDos71EBPB:
 		size = 79
-		// remove padding from each
-		re := regexp.MustCompile(" +$")
 		bpb.volumeLabel = re.ReplaceAllString(string(b[60:71]), "")
 		bpb.fileSystemType = re.ReplaceAllString(string(b[71:79]), "")
 	default:
-		return nil, size, fmt.Errorf("unknown DOS 7.1 EBPB Signature: %v", extendedSignature)
+		return nil, size, fmt.Errorf("unknown DOS 7.1 EBPB Signature: %v", bpb.extendedBootSignature)
 	}
 
 	return &bpb, size, nil

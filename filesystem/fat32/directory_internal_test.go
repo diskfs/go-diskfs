@@ -13,59 +13,68 @@ import (
 // TestDirectoryEntriesFromBytes largely a duplicate of TestdirectoryEntryParseDirEntries
 // it just loads it into the Directory structure
 func TestDirectoryEntriesFromBytes(t *testing.T) {
-	validDe, b, err := GetValidDirectoryEntries()
-	if err != nil {
-		t.Fatal(err)
-	}
+	for _, fatType := range FatTypes {
+		validDe, b, err := GetValidDirectoryEntries(fatType)
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	d := &Directory{}
-	err = d.entriesFromBytes(b)
-	switch {
-	case err != nil:
-		t.Errorf("unexpected non-nil error: %v", err)
-	case d.entries == nil:
-		t.Errorf("unexpected nil entries")
-	case len(d.entries) != len(validDe):
-		t.Errorf("mismatched entries length actual %d vs expected %d", len(d.entries), len(validDe))
-	default:
-		// run through them and see that they match
-		for i, de := range d.entries {
-			if *de != *validDe[i] {
-				t.Errorf("%d: directoryEntry mismatch, actual then valid:", i)
-				t.Log(cmp.Diff(*de, *validDe[i], cmp.AllowUnexported(directoryEntry{})))
+		d := &Directory{}
+		err = d.entriesFromBytes(b, fatType)
+		switch {
+		case err != nil:
+			t.Errorf("unexpected non-nil error: %v", err)
+		case d.entries == nil:
+			t.Errorf("unexpected nil entries")
+		case len(d.entries) != len(validDe):
+			t.Errorf("mismatched entries length (Fat%d) actual %d vs expected %d", fatType, len(d.entries), len(validDe))
+		default:
+			// run through them and see that they match
+			for i, de := range d.entries {
+				if *de != *validDe[i] {
+					fmt.Println("fatType: ", fatType)
+					fmt.Println("n: ", de.filenameShort, validDe[i].filenameShort)
+					fmt.Println("@: ", de.clusterLocation, validDe[i].clusterLocation)
+					fmt.Println("s: ", de.fileSize, validDe[i].fileSize)
+					t.Errorf("%d: directoryEntry mismatch, actual then valid:", i)
+					t.Log(cmp.Diff(*de, *validDe[i], cmp.AllowUnexported(directoryEntry{})))
+				}
 			}
 		}
 	}
 }
 
 func TestDirectoryEntriesToBytes(t *testing.T) {
-	validDe, b, err := GetValidDirectoryEntries()
-	bytesPerCluster := 512
-	if err != nil {
-		t.Fatal(err)
-	}
-	d := &Directory{
-		entries: validDe,
-		directoryEntry: directoryEntry{
-			filesystem: &FileSystem{
-				bytesPerCluster: bytesPerCluster,
+	for _, fatType := range FatTypes {
+		fsInfo := GetFsInfo(fatType)
+		validDe, b, err := GetValidDirectoryEntries(fatType)
+		bytesPerCluster := 512
+		if err != nil {
+			t.Fatal(err)
+		}
+		d := &Directory{
+			entries: validDe,
+			directoryEntry: directoryEntry{
+				filesystem: &FileSystem{
+					bytesPerCluster: bytesPerCluster,
+				},
 			},
-		},
-	}
-	output, err := d.entriesToBytes(bytesPerCluster)
-	switch {
-	case err != nil:
-		t.Errorf("unexpected non-nil error: %v", err)
-	case output == nil:
-		t.Errorf("unexpected nil bytes")
-	case len(output) == 0:
-		t.Errorf("unexpected 0 length byte slice")
-	case len(output) != len(b):
-		t.Errorf("mismatched byte slice length actual %d, expected %d", len(output), len(b))
-	case !bytes.Equal(output, b):
-		diff, diffString := util.DumpByteSlicesWithDiffs(output, b, 32, false, true, true)
-		if diff {
-			t.Errorf("directory.toBytes() mismatched, actual then expected\n%s", diffString)
+		}
+		output, err := d.entriesToBytes(bytesPerCluster, fatType, uint16(fsInfo.rootDirEntryCount))
+		switch {
+		case err != nil:
+			t.Errorf("unexpected non-nil error: %v", err)
+		case output == nil:
+			t.Errorf("unexpected nil bytes")
+		case len(output) == 0:
+			t.Errorf("unexpected 0 length byte slice")
+		case len(output) != len(b):
+			t.Errorf("mismatched byte slice length actual %d, expected %d", len(output), len(b))
+		case !bytes.Equal(output, b):
+			diff, diffString := util.DumpByteSlicesWithDiffs(output, b, 32, false, true, true)
+			if diff {
+				t.Errorf("directory.toBytes() mismatched, actual then expected\n%s", diffString)
+			}
 		}
 	}
 }

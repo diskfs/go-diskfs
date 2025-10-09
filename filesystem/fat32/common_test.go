@@ -13,34 +13,25 @@ import (
 	"time"
 )
 
-const (
-	Fat32File           = "./testdata/dist/fat32.img"
-	fsckFile            = "./testdata/dist/fsck.txt"
-	rootdirFile         = "./testdata/dist/root_dir.txt"
-	rootdirFileFLS      = "./testdata/dist/root_dir_fls.txt"
-	rootdirEntryPattern = "./testdata/dist/root_dir_istat_%d.txt"
-	foodirFile          = "./testdata/dist/foo_dir.txt"
-	foodirEntryPattern  = "./testdata/dist/foo_dir_istat_%d.txt"
-	serialFile          = "./testdata/dist/serial.txt"
-	fsstatFile          = "./testdata/dist/fsstat.txt"
-)
-
 type testFSInfo struct {
-	bytesPerCluster uint32
-	dataStartBytes  uint32
-	dataStartSector uint32
-	bytesPerSector  uint32
-	reservedSectors uint32
-	sectorsPerFAT   uint32
-	label           string
-	serial          uint32
-	sectorsPerTrack uint32
-	heads           uint32
-	hiddenSectors   uint32
-	freeSectorCount uint32
-	nextFreeSector  uint32
-	firstFAT        uint32
-	table           *table
+	fatType           int
+	bytesPerCluster   uint32
+	dataStartBytes    uint32
+	dataStartSector   uint32
+	bytesPerSector    uint32
+	reservedSectors   uint32
+	sectorsPerFAT     uint32
+	label             string
+	serial            uint32
+	sectorsPerTrack   uint32
+	heads             uint32
+	hiddenSectors     uint32
+	freeSectorCount   uint32
+	nextFreeSector    uint32
+	firstFAT          uint32
+	numFATs           uint32
+	rootDirEntryCount uint32
+	table             *table
 }
 
 var (
@@ -59,20 +50,55 @@ var (
 	testFSCKHeadsSectors        = regexp.MustCompile(`^\s*(\d+) sectors/track, (\d+) heads\s*$`)
 	testFSCKHiddenSectors       = regexp.MustCompile(`^\s*(\d+) hidden sectors\s*$`)
 	testFSCKFirstFAT            = regexp.MustCompile(`^\s*First FAT starts at byte (\d+) \(sector (\d+)\)\s*$`)
+	testFSCKNumFATs             = regexp.MustCompile(`^\s*(\d+) FATs, (\d+) bit entries\s*$`)
 	testFSCKFATSize             = regexp.MustCompile(`^\s*(\d+) bytes per FAT \(= (\d+) sectors\)\s*$`)
+	testFSCKRootDirEntryCount   = regexp.MustCompile(`^\s*(\d+) root directory entries\s*$`)
 	testFLSEntryPattern         = regexp.MustCompile(`d/d (\d+):\s+(\S+)\s*.*$`)
 	testFSSTATFreeSectorCountRE = regexp.MustCompile(`^\s*Free Sector Count.*: (\d+)\s*$`)
 	testFSSTATNextFreeSectorRE  = regexp.MustCompile(`^\s*Next Free Sector.*: (\d+)\s*`)
 	testFSSTATClustersStartRE   = regexp.MustCompile(`\s*FAT CONTENTS \(in sectors\)\s*$`)
 	testFSSTATClusterLineRE     = regexp.MustCompile(`\s*(\d+)-(\d+) \((\d+)\)\s+->\s+(\S+)\s*$`)
 
-	fsInfo *testFSInfo
+	FatTypes = []int{12, 16, 32}
+	fsInfo12 *testFSInfo
+	fsInfo16 *testFSInfo
+	fsInfo32 *testFSInfo
 )
+
+func GetFsInfo(fatType int) *testFSInfo {
+	switch fatType {
+	case 12:
+		return fsInfo12
+	case 16:
+		return fsInfo16
+	case 32:
+		return fsInfo32
+	default:
+		panic(fmt.Sprintf("Invalid FAT type: %d", fatType))
+	}
+}
+
+func getTestFile(fileName string, fatType int) string {
+	pattern := fmt.Sprintf("./testdata/dist/fat%d/%s", fatType, fileName)
+	if _, err := os.Stat(pattern); os.IsNotExist(err) {
+		panic(fmt.Sprintf("Fat%d %s file not found: %s", fatType, fileName, pattern))
+	}
+
+	return pattern
+}
+
+func getTestPattern(pattern string, fatType int) string {
+	return fmt.Sprintf("./testdata/dist/fat%d/%s", fatType, pattern)
+}
+
+func GetFatDiskImagePath(fatType int) string {
+	return getTestFile("disk.img", fatType)
+}
 
 // TestMain sets up the test environment and runs the tests
 func TestMain(m *testing.M) {
 	// Check and generate artifacts if necessary
-	if _, err := os.Stat(Fat32File); os.IsNotExist(err) {
+	if _, err := os.Stat(GetFatDiskImagePath(32)); os.IsNotExist(err) {
 		// Run the genartifacts.sh script
 		cmd := exec.Command("sh", "mkfat32.sh")
 		cmd.Stdout = os.Stdout
@@ -88,11 +114,18 @@ func TestMain(m *testing.M) {
 
 	// common info
 	var err error
-	fsInfo, err = testReadFilesystemData()
-	if err != nil {
-		println("Error reading fsck file", err)
-		os.Exit(1)
+	handleErr := func(err error) {
+		if err != nil {
+			println("Error reading fsck file", err)
+			os.Exit(1)
+		}
 	}
+	fsInfo12, err = testReadFilesystemData(12)
+	handleErr(err)
+	fsInfo16, err = testReadFilesystemData(16)
+	handleErr(err)
+	fsInfo32, err = testReadFilesystemData(32)
+	handleErr(err)
 
 	// Run the tests
 	code := m.Run()
@@ -101,22 +134,44 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+func getRootDirectoryBytes(fatType int, fatDiskImageBytes []byte) []byte {
+	fsInfo := GetFsInfo(fatType)
+
+	var b []byte
+	switch fatType {
+	case 12, 16:
+		// start of the root directory in fat12/16
+		fatRegionSize := fsInfo.sectorsPerFAT * fsInfo.numFATs
+		rootDirStartSector := fsInfo.reservedSectors + fatRegionSize
+		start := rootDirStartSector * fsInfo.bytesPerSector
+
+		rootDirSize := fsInfo.rootDirEntryCount * 32
+		b = make([]byte, rootDirSize)
+		copy(b, fatDiskImageBytes[start:start+rootDirSize])
+	default:
+		// start of root directory in FAT32
+		start := fsInfo.dataStartBytes
+		b = make([]byte, fsInfo.bytesPerCluster)
+		copy(b, fatDiskImageBytes[start:start+fsInfo.bytesPerCluster])
+	}
+
+	return b
+}
+
 // GetValidDirectoryEntries get directory entries for the root directory
 //
 //nolint:revive // yes we are returning an exported type, but that is ok for the tests
-func GetValidDirectoryEntries() (entries []*directoryEntry, b []byte, err error) {
+func GetValidDirectoryEntries(fatType int) (entries []*directoryEntry, b []byte, err error) {
 	// read correct bytes off of disk
-
-	input, err := os.ReadFile(Fat32File)
+	input, err := os.ReadFile(GetFatDiskImagePath(fatType))
 	if err != nil {
-		return nil, nil, fmt.Errorf("error reading data from fat32 test fixture %s: %v", Fat32File, err)
+		return nil, nil, fmt.Errorf("error reading data from fat32 test fixture %s: %v", GetFatDiskImagePath(fatType), err)
 	}
-	start := fsInfo.dataStartBytes // start of root directory in fat32.img
-	// we only have 9 actual 32-byte entries, of which 4 are real and 3 are VFAT extensionBytes
-	//   the rest are all 0s (as they should be), so we will include to exercise it
-	b = make([]byte, fsInfo.bytesPerCluster)
-	copy(b, input[start:start+fsInfo.bytesPerCluster])
+	fsInfo := GetFsInfo(fatType)
+	b = getRootDirectoryBytes(fatType, input)
 
+	rootdirFile := getTestFile("root_dir.txt", fatType)
+	rootdirEntryPattern := getTestPattern("root_dir_istat_%d.txt", fatType)
 	entries, err = testGetValidDirectoryEntriesFromFile(rootdirFile, rootdirEntryPattern, fsInfo)
 
 	// in the root directory, add the label entry
@@ -143,7 +198,7 @@ func GetValidDirectoryEntries() (entries []*directoryEntry, b []byte, err error)
 // but only one step down from root. If you want more, look for it elsewhere.
 //
 //nolint:revive // yes we are returning an exported type, but that is ok for the tests
-func GetValidDirectoryEntriesExtended(dir string) (entries []*directoryEntry, b []byte, err error) {
+func GetValidDirectoryEntriesExtended(dir string, fatType int) (entries []*directoryEntry, b []byte, err error) {
 	// read correct bytes off of disk
 
 	// find the cluster for the given directory
@@ -152,6 +207,7 @@ func GetValidDirectoryEntriesExtended(dir string) (entries []*directoryEntry, b 
 	dir = strings.TrimSuffix(dir, "/")
 	dir = strings.TrimSuffix(dir, "\\")
 
+	rootdirFileFLS := getTestFile("root_dir_fls.txt", fatType)
 	flsData, err := os.ReadFile(rootdirFileFLS)
 	if err != nil {
 		return nil, nil, fmt.Errorf("error reading fls data from %s: %w", rootdirFileFLS, err)
@@ -168,20 +224,38 @@ func GetValidDirectoryEntriesExtended(dir string) (entries []*directoryEntry, b 
 		if err != nil {
 			return nil, nil, fmt.Errorf("error parsing cluster number %s: %w", match[1], err)
 		}
+
+		// Sleuthkit seems to always report the root directory as cluster 2 and thus this /foo
+		// directory as cluster 3 regardless of the FAT type. This is not correct for FAT12/16 since
+		// the root directory is not in cluster but rather in a reserved sector.
+		if fatType != 32 {
+			cluster--
+		}
+
 		break
 	}
 
-	input, err := os.ReadFile(Fat32File)
+	input, err := os.ReadFile(GetFatDiskImagePath(fatType))
 	if err != nil {
-		return nil, nil, fmt.Errorf("error reading data from fat32 test fixture %s: %v", Fat32File, err)
+		return nil, nil, fmt.Errorf("error reading data from fat32 test fixture %s: %v", GetFatDiskImagePath(fatType), err)
 	}
-	start := fsInfo.dataStartBytes + 1 // start of foo directory in fat32.img
+	fsInfo := GetFsInfo(fatType)
+
+	start := fsInfo.dataStartBytes
+	// in fat32, the root is located in the data section, so we need to adjust it
+	// in fat12/16, the root directory is located in the reserved sectors
+	if fatType == 32 {
+		start++
+	}
 	// we only have 9 actual 32-byte entries, of which 4 are real and 3 are VFAT extensionBytes
 	//   the rest are all 0s (as they should be), so we will include to exercise it
 	b = make([]byte, fsInfo.bytesPerCluster)
 	copy(b, input[start:start+fsInfo.bytesPerCluster])
 
+	foodirFile := getTestFile("foo_dir.txt", fatType)
+	foodirEntryPattern := getTestPattern("foo_dir_istat_%d.txt", fatType)
 	entries, err = testGetValidDirectoryEntriesFromFile(foodirFile, foodirEntryPattern, fsInfo)
+
 	// handle . and ..
 	if len(entries) > 0 && entries[0].filenameShort == "." {
 		entries[0].clusterLocation = uint32(cluster)
@@ -266,6 +340,8 @@ func testGetValidDirectoryEntriesFromFile(dirFilePath, dirEntryPattern string, f
 }
 
 func testPopulateDirectoryEntryFromIstatFile(de *directoryEntry, filename string, fsInfo *testFSInfo) error {
+	sectorsPerCluster := fsInfo.bytesPerCluster / fsInfo.bytesPerSector
+
 	dirInfo, err := os.ReadFile(filename)
 	if err != nil {
 		return fmt.Errorf("error opening directory entry info file %s: %w", filename, err)
@@ -290,7 +366,13 @@ func testPopulateDirectoryEntryFromIstatFile(de *directoryEntry, filename string
 				if err != nil {
 					return fmt.Errorf("error parsing sector number %s: %w", sector, err)
 				}
-				de.clusterLocation = uint32(sectorNum) - fsInfo.dataStartSector + 2
+
+				if fsInfo.fatType == 32 {
+					de.clusterLocation = uint32(sectorNum) - fsInfo.dataStartSector + 2
+				} else {
+					de.clusterLocation = (uint32(sectorNum)-fsInfo.dataStartSector)/sectorsPerCluster + 2
+				}
+
 				break
 			}
 		case len(sectorStartMatch) > 0:
@@ -319,8 +401,12 @@ func testPopulateDirectoryEntryFromIstatFile(de *directoryEntry, filename string
 }
 
 //nolint:gocyclo // we need to call this function from the test, do not care that it is too complex
-func testReadFilesystemData() (info *testFSInfo, err error) {
-	info = &testFSInfo{}
+func testReadFilesystemData(fatType int) (info *testFSInfo, err error) {
+	info = &testFSInfo{
+		fatType: fatType,
+	}
+	eoc, eocMin := getEoc(fatType)
+	fsckFile := getTestFile("fsck.txt", fatType)
 	fsckInfo, err := os.ReadFile(fsckFile)
 	if err != nil {
 		return nil, fmt.Errorf("error opening fsck info file %s: %v", fsckFile, err)
@@ -336,7 +422,15 @@ func testReadFilesystemData() (info *testFSInfo, err error) {
 		headsSectorMatch := testFSCKHeadsSectors.FindStringSubmatch(text)
 		hiddenSectorsMatch := testFSCKHiddenSectors.FindStringSubmatch(text)
 		firstFATMatch := testFSCKFirstFAT.FindStringSubmatch(text)
+		numFATsMatch := testFSCKNumFATs.FindStringSubmatch(text)
+		rootDirEntryCountMatch := testFSCKRootDirEntryCount.FindStringSubmatch(text)
 		switch {
+		case len(rootDirEntryCountMatch) == 2:
+			count, err := strconv.Atoi(rootDirEntryCountMatch[1])
+			if err != nil {
+				return nil, fmt.Errorf("error parsing root directory entry count %s: %v", rootDirEntryCountMatch[1], err)
+			}
+			info.rootDirEntryCount = uint32(count)
 		case len(headsSectorMatch) == 3:
 			sectorsPerTrack, err := strconv.Atoi(headsSectorMatch[1])
 			if err != nil {
@@ -396,10 +490,17 @@ func testReadFilesystemData() (info *testFSInfo, err error) {
 				return nil, fmt.Errorf("error parsing first FAT byte %s: %v", firstFATMatch[1], err)
 			}
 			info.firstFAT = uint32(firstFAT)
+		case len(numFATsMatch) == 3:
+			numFATs, err := strconv.Atoi(numFATsMatch[1])
+			if err != nil {
+				return nil, fmt.Errorf("error parsing number of FATs %s: %v", numFATsMatch[1], err)
+			}
+			info.numFATs = uint32(numFATs)
 		}
 	}
 
 	// get the filesystem label
+	rootdirFile := getTestFile("root_dir.txt", fatType)
 	dirInfo, err := os.ReadFile(rootdirFile)
 	if err != nil {
 		println("Error opening directory info file", rootdirFile, err)
@@ -416,6 +517,7 @@ func testReadFilesystemData() (info *testFSInfo, err error) {
 		}
 	}
 
+	serialFile := getTestFile("serial.txt", fatType)
 	serial, err := os.ReadFile(serialFile)
 	if err != nil {
 		println("Error reading serial file", serialFile, err)
@@ -428,6 +530,7 @@ func testReadFilesystemData() (info *testFSInfo, err error) {
 	}
 	info.serial = uint32(decimal)
 
+	fsstatFile := getTestFile("fsstat.txt", fatType)
 	fsstat, err := os.ReadFile(fsstatFile)
 	if err != nil {
 		println("Error reading fsstat file", fsstatFile, err)
@@ -462,10 +565,16 @@ func testReadFilesystemData() (info *testFSInfo, err error) {
 			sectorsPerFat := info.sectorsPerFAT
 			sizeInBytes := sectorsPerFat * info.bytesPerSector
 			numClusters := sizeInBytes / 4
+
+			rootDirCluster := uint32(0)
+			if fatType == 32 {
+				rootDirCluster = 2
+			}
+
 			info.table = &table{
-				fatID:          268435448, // 0x0ffffff8
-				eocMarker:      eoc,       // 0x0fffffff
-				rootDirCluster: 2,         // root is at cluster 2
+				fatID:          268435448,
+				eocMarker:      eoc,
+				rootDirCluster: rootDirCluster,
 				size:           sizeInBytes,
 				maxCluster:     numClusters,
 				clusters:       make([]uint32, numClusters+1),
@@ -481,6 +590,12 @@ func testReadFilesystemData() (info *testFSInfo, err error) {
 				println("Error parsing cluster end", clusterLineMatch[2], err)
 				os.Exit(1)
 			}
+
+			sectorsPerCluster := (int(info.bytesPerCluster) / int(info.bytesPerSector))
+			sectorToCluster := func(sector int) uint32 {
+				return (uint32(sector)-info.dataStartSector)/uint32(sectorsPerCluster) + 2
+			}
+
 			var target uint32
 			if clusterLineMatch[4] == "EOF" {
 				target = eoc
@@ -490,21 +605,20 @@ func testReadFilesystemData() (info *testFSInfo, err error) {
 					println("Error parsing cluster target", clusterLineMatch[4], err)
 					os.Exit(1)
 				}
-				target = uint32(targetInt) - info.dataStartSector + 2
+				target = sectorToCluster(targetInt)
 			}
-			// 2 is a special case that fsstat does not handle well
-			// the start and end might be the same, or it might be a continual chain,
-			// with only the last pointing at the target
+
 			for i := start; i < end; i++ {
-				startCluster := uint32(i) - info.dataStartSector + 2
+				startCluster := sectorToCluster(i)
 				info.table.clusters[startCluster] = startCluster + 1
 			}
-			endCluster := uint32(end) - info.dataStartSector + 2
-			if endCluster == 2 {
+			endCluster := sectorToCluster(end)
+			if fatType == 32 && endCluster == 2 {
 				target = eocMin
 			}
 			info.table.clusters[endCluster] = target
 		}
 	}
+
 	return info, err
 }

@@ -62,4 +62,8 @@ const (
 	TypeSquashfs
 	// TypeExt4 is an ext4 compatible filesystem
 	TypeExt4
+	// TypeFat12 is a FAT12 compatible filesystem
+	TypeFat12
+	// TypeFat16 is a FAT16 compatible filesystem
+	TypeFat16
 )
