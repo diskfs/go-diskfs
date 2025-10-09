@@ -13,7 +13,7 @@ require (
 	github.com/pierrec/lz4/v4 v4.1.17
 	github.com/pkg/xattr v0.4.9
 	github.com/sirupsen/logrus v1.9.4-0.20230606125235-dd1b4c2e81af
-	github.com/ulikunitz/xz v0.5.11
+	github.com/ulikunitz/xz v0.5.15
 	golang.org/x/sys v0.19.0
 )
 
