@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/diskfs/go-diskfs/partition/mbr"
-	"github.com/diskfs/go-diskfs/util"
+	"github.com/diskfs/go-diskfs/version"
 )
 
 func TestElToritoGenerateCatalog(t *testing.T) {
@@ -50,7 +50,7 @@ func TestElToritoValidationEntry(t *testing.T) {
 	e := make([]byte, 0x20)
 	e[0] = 0x1
 	e[1] = 0xef
-	copy(e[4:0x1c], util.AppNameVersion)
+	copy(e[4:0x1c], version.AppName)
 	e[0x1e] = 0x55
 	e[0x1f] = 0xaa
 

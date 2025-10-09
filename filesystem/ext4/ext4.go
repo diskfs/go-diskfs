@@ -16,7 +16,7 @@ import (
 	"github.com/diskfs/go-diskfs/backend"
 	"github.com/diskfs/go-diskfs/filesystem"
 	"github.com/diskfs/go-diskfs/filesystem/ext4/crc"
-	"github.com/diskfs/go-diskfs/util"
+	"github.com/diskfs/go-diskfs/util/bitmap"
 	"github.com/google/uuid"
 )
 
@@ -925,7 +925,7 @@ func (fs *FileSystem) Remove(p string) error {
 	}
 	// clear up the blocks from the block bitmap. We are not clearing the block content, just the bitmap.
 	// keep a cache of bitmaps, so we do not have to read them again and again
-	blockBitmaps := make(map[int]*util.Bitmap)
+	blockBitmaps := make(map[int]*bitmap.Bitmap)
 	for _, e := range extents {
 		for i := e.startingBlock; i < e.startingBlock+uint64(e.count); i++ {
 			// determine what block group this block is in, and read the bitmap for that blockgroup
@@ -1645,7 +1645,7 @@ func (fs *FileSystem) allocateExtents(size uint64, previous *extents) (*extents,
 	// TODO: instead of starting with BG 0, should start with BG where the inode for this file/dir is located
 	var (
 		newExtents       []extent
-		datablockBitmaps = map[int]*util.Bitmap{}
+		datablockBitmaps = map[int]*bitmap.Bitmap{}
 		blocksPerGroup   = fs.superblock.blocksPerGroup
 	)
 
@@ -1738,7 +1738,7 @@ func (fs *FileSystem) allocateExtents(size uint64, previous *extents) (*extents,
 // readInodeBitmap read the inode bitmap off the disk.
 // This would be more efficient if we just read one group descriptor's bitmap
 // but for now we are about functionality, not efficiency, so it will read the whole thing.
-func (fs *FileSystem) readInodeBitmap(group int) (*util.Bitmap, error) {
+func (fs *FileSystem) readInodeBitmap(group int) (*bitmap.Bitmap, error) {
 	if group >= len(fs.groupDescriptors.descriptors) {
 		return nil, fmt.Errorf("block group %d does not exist", group)
 	}
@@ -1757,13 +1757,13 @@ func (fs *FileSystem) readInodeBitmap(group int) (*util.Bitmap, error) {
 	// only take bytes corresponding to the number of inodes per group
 
 	// create a bitmap
-	bs := util.NewBitmap(int(fs.superblock.blockSize) * len(fs.groupDescriptors.descriptors))
+	bs := bitmap.New(int(fs.superblock.blockSize) * len(fs.groupDescriptors.descriptors))
 	bs.FromBytes(b)
 	return bs, nil
 }
 
 // writeInodeBitmap write the inode bitmap to the disk.
-func (fs *FileSystem) writeInodeBitmap(bm *util.Bitmap, group int) error {
+func (fs *FileSystem) writeInodeBitmap(bm *bitmap.Bitmap, group int) error {
 	if group >= len(fs.groupDescriptors.descriptors) {
 		return fmt.Errorf("block group %d does not exist", group)
 	}
@@ -1787,7 +1787,7 @@ func (fs *FileSystem) writeInodeBitmap(bm *util.Bitmap, group int) error {
 	return nil
 }
 
-func (fs *FileSystem) readBlockBitmap(group int) (*util.Bitmap, error) {
+func (fs *FileSystem) readBlockBitmap(group int) (*bitmap.Bitmap, error) {
 	if group >= len(fs.groupDescriptors.descriptors) {
 		return nil, fmt.Errorf("block group %d does not exist", group)
 	}
@@ -1803,13 +1803,13 @@ func (fs *FileSystem) readBlockBitmap(group int) (*util.Bitmap, error) {
 		return nil, fmt.Errorf("Read %d bytes instead of expected %d for block bitmap of block group %d", read, fs.superblock.blockSize, gd.number)
 	}
 	// create a bitmap
-	bs := util.NewBitmap(int(fs.superblock.blockSize) * len(fs.groupDescriptors.descriptors))
+	bs := bitmap.New(int(fs.superblock.blockSize) * len(fs.groupDescriptors.descriptors))
 	bs.FromBytes(b)
 	return bs, nil
 }
 
 // writeBlockBitmap write the inode bitmap to the disk.
-func (fs *FileSystem) writeBlockBitmap(bm *util.Bitmap, group int) error {
+func (fs *FileSystem) writeBlockBitmap(bm *bitmap.Bitmap, group int) error {
 	if group >= len(fs.groupDescriptors.descriptors) {
 		return fmt.Errorf("block group %d does not exist", group)
 	}

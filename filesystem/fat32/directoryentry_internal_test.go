@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/diskfs/go-diskfs/util"
+	"github.com/diskfs/go-diskfs/util/printer"
 )
 
 var (
@@ -314,7 +314,7 @@ func TestDirectoryEntryToBytes(t *testing.T) {
 			t.Errorf("error converting directory entry to bytes: %v", err)
 			t.Logf("%v", de)
 		} else {
-			diff, diffString := util.DumpByteSlicesWithDiffs(b, expected, 32, false, true, true)
+			diff, diffString := printer.DumpByteSlicesWithDiffs(b, expected, 32, false, true, true)
 			if diff {
 				t.Errorf("directory.toBytes() %s mismatched, actual then expected\n%s", de.filenameShort, diffString)
 			}
