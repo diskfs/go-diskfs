@@ -257,7 +257,7 @@ func TestReadPartitionContents(t *testing.T) {
 		partitionSize := uint64(1000)
 		table := &gpt.Table{
 			Partitions: []*gpt.Partition{
-				{Start: partitionStart, Size: partitionSize * 512},
+				{Start: partitionStart, Size: partitionSize * 512, Type: gpt.LinuxFilesystem},
 			},
 			LogicalSectorSize: 512,
 		}

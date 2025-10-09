@@ -86,6 +86,7 @@ func ExampleCreate_gpt() {
 			{
 				Start: 1 * 1024 * 1024 / 512,
 				Size:  10 * 1024 * 1024,
+				Type:  gpt.MBRPartitionScheme,
 			},
 		},
 	}
