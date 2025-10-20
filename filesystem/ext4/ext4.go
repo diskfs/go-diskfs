@@ -538,20 +538,26 @@ func Create(b backend.Storage, size, start, sectorsize int64, p *Params) (*FileS
 		projectQuotaInode:            projectQuotaInode,
 		logGroupsPerFlex:             uint64(logGroupsPerFlex),
 	}
-	gdt := groupDescriptors{}
+	gdt := buildGroupDescriptorsFromSuperblock(&sb)
+	// allocate root in the first group descriptor
+	bg0 := &gdt.descriptors[0]
+	bg0.usedDirectories++
+	bg0.freeInodes--
+	g := gdt.toBytes(gdtChecksumType, sb.checksumSeed)
 
 	superblockBytes, err := sb.toBytes()
 	if err != nil {
 		return nil, fmt.Errorf("error converting Superblock to bytes: %v", err)
 	}
 
-	g := gdt.toBytes(gdtChecksumType, sb.checksumSeed)
 	// how big should the GDT be?
-	gdSize = groupDescriptorSize
+	gdSize = groupDescriptorSize // size of a single group descriptor
 	if sb.features.fs64Bit {
 		gdSize = groupDescriptorSize64Bit
 	}
-	gdtSize := int64(gdSize) * numblocks
+	// now calculate how many there should be in total
+	groupCount := sb.blockGroupCount()
+	gdtSize := uint64(gdSize) * groupCount
 	// write the superblock and GDT to the various locations on disk
 	for _, bg := range backupSuperblocks {
 		block := bg * int64(blocksPerGroup)
@@ -1850,4 +1856,101 @@ func blockGroupForInode(inodeNumber int, inodesPerGroup uint32) int {
 }
 func blockGroupForBlock(blockNumber int, blocksPerGroup uint32) int {
 	return (blockNumber - 1) / int(blocksPerGroup)
+}
+
+// given the superblock, build the group descriptors
+func buildGroupDescriptorsFromSuperblock(sb *superblock) groupDescriptors {
+	blocksPerGroup := uint64(sb.blocksPerGroup)
+	inodesPerGroup := sb.inodesPerGroup
+	inodeTableBlocks := (uint64(inodesPerGroup)*uint64(sb.inodeSize) + uint64(sb.blockSize) - 1) / uint64(sb.blockSize)
+	groups := int((sb.blockCount + blocksPerGroup - 1) / blocksPerGroup)
+	descSize := sb.groupDescriptorSize
+
+	useMetaBg := sb.features.metaBlockGroups
+	firstMetaBg := uint64(sb.firstMetablockGroup)
+
+	useFlexBg := sb.features.flexBlockGroups
+	flexSize := uint64(1)
+	if useFlexBg {
+		flexSize = 1 << sb.logGroupsPerFlex
+	}
+
+	descs := make([]groupDescriptor, groups)
+
+	for g := 0; g < groups; g++ {
+		var d groupDescriptor
+		d.number = uint16(g)
+		d.size = descSize
+
+		firstBlockOfGroup := uint64(g) * blocksPerGroup
+		// Determine if this group holds a SB+GDT backup.
+		hasSuperBackup := false
+		if useMetaBg {
+			hasSuperBackup = uint64(g) >= firstMetaBg && (uint64(g)%firstMetaBg) == 0
+		} else {
+			hasSuperBackup = checkSuperBackup(uint64(g))
+		}
+
+		// Metadata overhead in this group.
+		metaBlocks := uint64(0)
+		if hasSuperBackup {
+			gdtBlocks :=
+				(uint64(groups)*uint64(descSize) + uint64(sb.blockSize) - 1) /
+					uint64(sb.blockSize)
+			metaBlocks = 1 + gdtBlocks
+		}
+
+		// flex_bg owner group
+		flexOwner := (uint64(g) / flexSize) * flexSize
+
+		// Base block numbers
+		bitmapBase := flexOwner*blocksPerGroup + metaBlocks
+
+		if useFlexBg {
+			// all groups in a flex share the same bitmap/table set
+			d.blockBitmapLocation = bitmapBase
+			d.inodeBitmapLocation = bitmapBase + 1
+			d.inodeTableLocation = bitmapBase + 2
+		} else {
+			d.blockBitmapLocation = firstBlockOfGroup + metaBlocks
+			d.inodeBitmapLocation = d.blockBitmapLocation + 1
+			d.inodeTableLocation = d.inodeBitmapLocation + 1
+		}
+
+		// Free blocks accounting
+		overhead := metaBlocks
+		if !useFlexBg || uint64(g) == flexOwner {
+			overhead += 1 + 1 + inodeTableBlocks
+		}
+		if overhead > blocksPerGroup {
+			overhead = blocksPerGroup
+		}
+
+		d.freeBlocks = uint32(blocksPerGroup - overhead)
+		d.freeInodes = inodesPerGroup
+		d.usedDirectories = 0
+		d.flags = blockGroupFlags{}
+		d.unusedInodes = 0
+		d.blockBitmapChecksum = 0
+		d.inodeBitmapChecksum = 0
+		d.snapshotExclusionBitmapLocation = 0
+
+		descs[g] = d
+	}
+
+	return groupDescriptors{descriptors: descs}
+}
+
+func checkSuperBackup(g uint64) bool {
+	if g == 0 {
+		return true
+	}
+	for _, n := range []uint64{3, 5, 7} {
+		for x := n; x <= g; x *= n {
+			if x == g {
+				return true
+			}
+		}
+	}
+	return false
 }

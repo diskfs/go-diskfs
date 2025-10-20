@@ -7,7 +7,7 @@ This directory contains test fixtures for GUID Partition Table. Specifically, it
 To generate these files:
 
 ```
-$ docker run -it --rm -v $PWD:/data alpine:3.6
+$ docker run -it --rm -v $PWD:/data alpine:3.22
 # apk --update add sgdisk
 # dd if=/dev/zero of=/data/gpt.img bs=1M count=10
 # sgdisk --clear --new 1:2048:3048 --typecode=1:ef00 --change-name=1:'EFI System' --partition-guid=1:5ca3360b-5de6-4fcf-b4ce-419cee433b51 /data/gpt.img

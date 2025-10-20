@@ -184,6 +184,23 @@ func testCreateImgCopy(t *testing.T) string {
 	return outfile
 }
 
+func testCreateEmptyFile(t *testing.T, size int64) *os.File {
+	t.Helper()
+	dir := t.TempDir()
+	outfile := filepath.Join(dir, "ext4.img")
+	f, err := os.Create(outfile)
+	if err != nil {
+		t.Fatalf("Error creating empty image file: %v", err)
+	}
+
+	// Truncate to size
+	err = f.Truncate(size)
+	if err != nil {
+		t.Fatalf("Error truncating image file: %v", err)
+	}
+	return f
+}
+
 func TestWriteFile(t *testing.T) {
 	var newFile = "newlygeneratedfile.dat"
 	tests := []struct {
@@ -427,5 +444,16 @@ func TestMkdir(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestCreate(t *testing.T) {
+	f := testCreateEmptyFile(t, 100*MB)
+	fs, err := Create(file.New(f, false), 100*MB, 0, 512, &Params{})
+	if err != nil {
+		t.Fatalf("Error creating ext4 filesystem: %v", err)
+	}
+	if fs == nil {
+		t.Fatalf("Expected non-nil filesystem after creation")
 	}
 }

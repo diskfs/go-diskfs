@@ -1,6 +1,6 @@
 #!/bin/sh
 set -e
-cat << "EOF" | docker run -i --rm -v $PWD:/data alpine:3.8
+cat << "EOF" | docker run -i --rm -v $PWD:/data alpine:3.22
 set -e
 apk --update add xorriso
 mkdir -p /build

@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 mkdir -p dist
-cat << "EOF" | docker run -i --rm -v $PWD/dist:/data -w /data --privileged alpine:3.20
+cat << "EOF" | docker run -i --rm -v $PWD/dist:/data -w /data --privileged alpine:3.22
 set -e
 set -x
 apk --update add e2fsprogs e2fsprogs-extra
