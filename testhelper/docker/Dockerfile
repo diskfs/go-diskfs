@@ -1,4 +1,4 @@
-FROM alpine:3.11
+FROM alpine:3.22
 
 # just install the tools we need
 RUN apk --update add dosfstools mtools sgdisk sfdisk gptfdisk p7zip cdrkit squashfs-tools

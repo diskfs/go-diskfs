@@ -2,7 +2,7 @@
 set -e
 rm -f file.sqs file_uncompressed.sqs list.txt
 
-cat << "EOF" | docker run -i --rm -v $PWD:/data alpine:3.11
+cat << "EOF" | docker run -i --rm -v $PWD:/data alpine:3.22
 set -e
 apk --update add squashfs-tools coreutils attr
 mkdir -p /build
@@ -37,7 +37,7 @@ rm -f read_test.sqs read_test.md5sums
 # We use a newer alpine here because mksquashfs has a bug which is
 # triggered in 3.11!
 
-cat << "EOF" | docker run -i --rm -v $PWD:/data alpine:3.19
+cat << "EOF" | docker run -i --rm -v $PWD:/data alpine:3.22
 set -e
 apk --update add squashfs-tools coreutils attr
 mkdir -p /build
@@ -86,7 +86,7 @@ rm -f dir_read.sqs
 # It also tests corner cases in the xattr parsing code!
 #
 # See: TestSquashfsReadDirCornerCases
-cat << "EOF" | docker run -i --rm -v $PWD:/data alpine:3.19
+cat << "EOF" | docker run -i --rm -v $PWD:/data alpine:3.22
 set -e
 apk --update add squashfs-tools coreutils attr
 mkdir -p /build

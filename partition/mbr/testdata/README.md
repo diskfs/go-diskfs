@@ -7,7 +7,7 @@ This directory contains test fixtures for Master boot Record. Specifically, it c
 To generate these files:
 
 ```
-$ docker run -it --rm -v $PWD:/data alpine:3.6
+$ docker run -it --rm -v $PWD:/data alpine:3.22
 # apk --update add sfdisk dosfstools
 # dd if=/dev/zero of=/data/mbr.img bs=1M count=20
 # echo '2048,20480,;' | sfdisk /data/mbr.img

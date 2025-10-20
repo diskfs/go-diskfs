@@ -9,7 +9,7 @@ if [ -z "$INSTALLDIR" ]; then
 fi
 
 mkdir -p $INSTALLDIR/dist
-cat <<"EOF" | docker run -i --rm -v $INSTALLDIR/dist:/data alpine:3.20
+cat <<"EOF" | docker run -i --rm -v $INSTALLDIR/dist:/data alpine:3.22
 set -e
 set -x
 
