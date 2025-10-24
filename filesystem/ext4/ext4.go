@@ -883,7 +883,13 @@ func (fs *FileSystem) Rm(p string) error {
 // If path is a file, it will remove the file.
 // Will not remove any parents.
 // Error if the file does not exist or is not an empty directory
+//
+//nolint:gocyclo // yes, this has high cyclomatic complexity, but we can accept it
 func (fs *FileSystem) Remove(p string) error {
+	gdtBlock := 1
+	if fs.superblock.blockSize == 1024 {
+		gdtBlock = 2
+	}
 	parentDir, entry, err := fs.getEntryAndParent(p)
 	if err != nil {
 		return err
@@ -923,15 +929,12 @@ func (fs *FileSystem) Remove(p string) error {
 	if err != nil {
 		return fmt.Errorf("could not read extents for inode %d for %s: %v", entry.inode, p, err)
 	}
-	// clear the inode from the inode bitmap
-	inodeBG := blockGroupForInode(int(entry.inode), fs.superblock.inodesPerGroup)
-	inodeBitmap, err := fs.readInodeBitmap(inodeBG)
-	if err != nil {
-		return fmt.Errorf("could not read inode bitmap: %v", err)
-	}
 	// clear up the blocks from the block bitmap. We are not clearing the block content, just the bitmap.
 	// keep a cache of bitmaps, so we do not have to read them again and again
 	blockBitmaps := make(map[int]*bitmap.Bitmap)
+	freedByBG := make(map[int]uint32)
+	var totalFreed uint64
+
 	for _, e := range extents {
 		for i := e.startingBlock; i < e.startingBlock+uint64(e.count); i++ {
 			// determine what block group this block is in, and read the bitmap for that blockgroup
@@ -949,11 +952,21 @@ func (fs *FileSystem) Remove(p string) error {
 			if err := dataBlockBitmap.Clear(blockInBG); err != nil {
 				return fmt.Errorf("could not clear block bitmap for block %d: %v", i, err)
 			}
+			freedByBG[bg]++
+			totalFreed++
 		}
 	}
 	for bg, dataBlockBitmap := range blockBitmaps {
 		if err := fs.writeBlockBitmap(dataBlockBitmap, bg); err != nil {
 			return fmt.Errorf("could not write block bitmap back to disk: %v", err)
+		}
+		gd := fs.groupDescriptors.descriptors[bg]
+		// Increment free blocks by actual filesystem blocks we just cleared in THIS group
+		gd.freeBlocks += freedByBG[bg]
+		gd.blockBitmapChecksum = bitmapChecksum(dataBlockBitmap.ToBytes(), fs.superblock.checksumSeed)
+		gdBytes := gd.toBytes(fs.superblock.gdtChecksumType(), fs.superblock.checksumSeed)
+		if _, err := writableFile.WriteAt(gdBytes, fs.start+int64(gdtBlock)*int64(fs.superblock.blockSize)+int64(gd.number)*int64(fs.superblock.groupDescriptorSize)); err != nil {
+			return fmt.Errorf("could not write Group Descriptor bytes to file: %v", err)
 		}
 	}
 
@@ -967,7 +980,10 @@ func (fs *FileSystem) Remove(p string) error {
 	}
 	parentDir.entries = newEntries
 	// write the parent directory back
-	dirBytes := parentDir.toBytes(fs.superblock.blockSize, directoryChecksumAppender(fs.superblock.checksumSeed, parentDir.inode, 0))
+	dirBytes := parentDir.toBytes(
+		fs.superblock.blockSize,
+		directoryChecksumAppender(fs.superblock.checksumSeed, parentDir.inode, 0),
+	)
 	parentInode, err := fs.readInode(parentDir.inode)
 	if err != nil {
 		return fmt.Errorf("could not read inode %d for %s: %v", entry.inode, path.Base(p), err)
@@ -976,13 +992,42 @@ func (fs *FileSystem) Remove(p string) error {
 	if err != nil {
 		return fmt.Errorf("could not read extents for inode %d for %s: %v", entry.inode, path.Base(p), err)
 	}
+	// write the directory bytes back to the blocks, ensure block-aligned
+	bs := int(fs.superblock.blockSize)
+	written := 0
 	for _, e := range extents {
 		for i := 0; i < int(e.count); i++ {
-			b := dirBytes[i:fs.superblock.blockSize]
-			if _, err := writableFile.WriteAt(b, (int64(i)+int64(e.startingBlock))*int64(fs.superblock.blockSize)); err != nil {
+			if written >= len(dirBytes) {
+				break
+			}
+			start := written
+			end := start + bs
+			if end > len(dirBytes) {
+				end = len(dirBytes)
+			}
+			b := dirBytes[start:end]
+
+			fileOff := fs.start + (int64(e.startingBlock)+int64(i))*int64(bs)
+
+			if _, err := writableFile.WriteAt(b, fileOff); err != nil {
 				return fmt.Errorf("could not write inode bitmap back to disk: %v", err)
 			}
+			// If the last block is short, zero-pad the remainder up to block size
+			if len(b) < bs {
+				zeros := make([]byte, bs-len(b))
+				if _, err := writableFile.WriteAt(zeros, fileOff+int64(len(b))); err != nil {
+					return fmt.Errorf("could not pad directory block: %w", err)
+				}
+			}
+			written += bs
 		}
+	}
+
+	// clear the inode from the inode bitmap
+	inodeBG := blockGroupForInode(int(entry.inode), fs.superblock.inodesPerGroup)
+	inodeBitmap, err := fs.readInodeBitmap(inodeBG)
+	if err != nil {
+		return fmt.Errorf("could not read inode bitmap: %v", err)
 	}
 
 	// remove the inode from the bitmap and write the inode bitmap back
@@ -991,23 +1036,24 @@ func (fs *FileSystem) Remove(p string) error {
 	if err := inodeBitmap.Clear(inodeInBG); err != nil {
 		return fmt.Errorf("could not clear inode bitmap for inode %d: %v", entry.inode, err)
 	}
-
 	// write the inode bitmap back
 	if err := fs.writeInodeBitmap(inodeBitmap, inodeBG); err != nil {
 		return fmt.Errorf("could not write inode bitmap back to disk: %v", err)
 	}
-	// update the group descriptor
+
+	// Update the group descriptor: free inode count, free block count, used directory count; recompute checksums, and write GD
 	gd := fs.groupDescriptors.descriptors[inodeBG]
 
 	// update the group descriptor inodes and blocks
 	gd.freeInodes++
 	gd.freeBlocks += uint32(removedInode.blocks)
-	// write the group descriptor back
-	gdBytes := gd.toBytes(fs.superblock.gdtChecksumType(), fs.superblock.uuid.ID())
-	gdtBlock := 1
-	if fs.superblock.blockSize == 1024 {
-		gdtBlock = 2
+	if entry.fileType == dirFileTypeDirectory {
+		gd.usedDirectories--
 	}
+	gd.inodeBitmapChecksum = bitmapChecksum(inodeBitmap.ToBytes(), fs.superblock.checksumSeed)
+
+	// write the group descriptor back
+	gdBytes := gd.toBytes(fs.superblock.gdtChecksumType(), fs.superblock.checksumSeed)
 	if _, err := writableFile.WriteAt(gdBytes, fs.start+int64(gdtBlock)*int64(fs.superblock.blockSize)+int64(gd.number)*int64(fs.superblock.groupDescriptorSize)); err != nil {
 		return fmt.Errorf("could not write Group Descriptor bytes to file: %v", err)
 	}
@@ -1594,7 +1640,7 @@ func (fs *FileSystem) allocateInode(parent uint32) (uint32, error) {
 	gd.freeInodes--
 
 	// get the group descriptor as bytes
-	gdBytes := gd.toBytes(fs.superblock.gdtChecksumType(), fs.superblock.uuid.ID())
+	gdBytes := gd.toBytes(fs.superblock.gdtChecksumType(), fs.superblock.checksumSeed)
 
 	// write the group descriptor bytes
 	// gdt starts in block 1 of any redundant copies, specifically in BG 0
