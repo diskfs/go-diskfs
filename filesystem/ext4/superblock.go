@@ -347,7 +347,10 @@ func superblockFromBytes(b []byte) (*superblock, error) {
 
 	sb.hashVersion = hashAlgorithm(b[0xfc])
 
-	sb.groupDescriptorSize = binary.LittleEndian.Uint16(b[0xfe:0x100])
+	sb.groupDescriptorSize = 32
+	if sb.features.fs64Bit {
+		sb.groupDescriptorSize = binary.LittleEndian.Uint16(b[0xfe:0x100])
+	}
 
 	sb.defaultMountOptions = parseMountOptions(binary.LittleEndian.Uint32(b[0x100:0x104]))
 	sb.firstMetablockGroup = binary.LittleEndian.Uint32(b[0x104:0x108])

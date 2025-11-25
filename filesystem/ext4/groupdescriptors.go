@@ -87,6 +87,9 @@ func (gds *groupDescriptors) equal(a *groupDescriptors) bool {
 
 // groupDescriptorsFromBytes create a groupDescriptors struct from bytes
 func groupDescriptorsFromBytes(b []byte, gdSize uint16, hashSeed uint32, checksumType gdtChecksumType) (*groupDescriptors, error) {
+	if gdSize == 0 {
+		return nil, fmt.Errorf("group descriptor size cannot be zero")
+	}
 	gds := groupDescriptors{}
 	gdSlice := make([]groupDescriptor, 0, 10)
 

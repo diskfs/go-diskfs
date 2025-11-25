@@ -663,6 +663,10 @@ func Read(b backend.Storage, size, start, sectorsize int64) (*FileSystem, error)
 	// how big should the GDT be?
 	gdtSize := uint64(sb.groupDescriptorSize) * sb.blockGroupCount()
 
+	if gdtSize == 0 {
+		return nil, errors.New("calculated Group Descriptor Table size is zero")
+	}
+
 	gdtBytes := make([]byte, gdtSize)
 	// where do we find the GDT?
 	// - if blocksize is 1024, then 1024 padding for BootSector is block 0, 1024 for superblock is block 1
