@@ -631,10 +631,13 @@ func Read(b backend.Storage, size, start, sectorsize int64) (*FileSystem, error)
 		return nil, fmt.Errorf("requested size is smaller than minimum allowed ext4 size %d", Ext4MinSize)
 	}
 
+	// Make SubStorage Backend
+	fsBackend := backend.Sub(b, start, size)
+
 	// load the information from the disk
 	// read boot sector code
 	bs := make([]byte, BootSectorSize)
-	n, err := b.ReadAt(bs, start)
+	n, err := fsBackend.ReadAt(bs, 0)
 	if err != nil {
 		return nil, fmt.Errorf("could not read boot sector bytes from file: %v", err)
 	}
@@ -645,7 +648,7 @@ func Read(b backend.Storage, size, start, sectorsize int64) (*FileSystem, error)
 	// read the superblock
 	// the superblock is one minimal block, i.e. 2 sectors
 	superblockBytes := make([]byte, SuperblockSize)
-	n, err = b.ReadAt(superblockBytes, start+int64(BootSectorSize))
+	n, err = fsBackend.ReadAt(superblockBytes, int64(BootSectorSize))
 	if err != nil {
 		return nil, fmt.Errorf("could not read superblock bytes from file: %v", err)
 	}
@@ -677,7 +680,7 @@ func Read(b backend.Storage, size, start, sectorsize int64) (*FileSystem, error)
 	if sb.blockSize == 1024 {
 		gdtBlock = 2
 	}
-	n, err = b.ReadAt(gdtBytes, start+int64(gdtBlock)*int64(sb.blockSize))
+	n, err = fsBackend.ReadAt(gdtBytes, int64(gdtBlock)*int64(sb.blockSize))
 	if err != nil {
 		return nil, fmt.Errorf("could not read Group Descriptor Table bytes from file: %v", err)
 	}
@@ -696,7 +699,7 @@ func Read(b backend.Storage, size, start, sectorsize int64) (*FileSystem, error)
 		blockGroups:      int64(sb.blockGroupCount()),
 		size:             size,
 		start:            start,
-		backend:          b,
+		backend:          fsBackend,
 	}, nil
 }
 
