@@ -44,4 +44,10 @@ dd if=ext4.img of=superblock.bin bs=1024 count=1 skip=1
 dd if=superblock.bin bs=1 skip=208 count=16 2>/dev/null | hexdump -e '16/1 "%02x" "\n"' > journaluuid.txt
 dd if=superblock.bin   bs=1 skip=$((0x10c)) count=$((15 * 4)) | hexdump -e '15/4 "0x%08x, " "\n"' > journalinodex.txt
 dd if=superblock.bin count=2 skip=376 bs=1 2>/dev/null| hexdump -e '1/2 "%u"' > lifetime_kb.txt
+ 
+# create a second image that has the ext4 filesystem starting at byte 1024
+# first, create a 1024-byte zero prefix
+dd if=/dev/zero of=ext4-offset.img bs=1024 count=1
+# then write the original image starting at offset 1024
+dd if=ext4.img of=ext4-offset.img bs=1 seek=1024 conv=notrunc
 EOF
