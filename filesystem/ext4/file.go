@@ -61,7 +61,7 @@ func (fl *File) Read(b []byte) (int, error) {
 		// read those bytes
 		startPosOnDisk := e.startingBlock*blocksize + uint64(startPositionInExtent)
 		b2 := make([]byte, toReadInOffset)
-		read, err := fl.filesystem.backend.ReadAt(b2, int64(startPosOnDisk))
+		read, err := fl.filesystem.backend.ReadAt(b2, fl.filesystem.start+int64(startPosOnDisk))
 		if err != nil {
 			return int(readBytes), fmt.Errorf("failed to read bytes: %v", err)
 		}
@@ -170,7 +170,7 @@ func (fl *File) Write(b []byte) (int, error) {
 		startPosOnDisk := e.startingBlock*blocksize + uint64(startPositionInExtent)
 		b2 := make([]byte, toWriteInOffset)
 		copy(b2, b[writtenBytes:])
-		written, err := writableFile.WriteAt(b2, int64(startPosOnDisk))
+		written, err := writableFile.WriteAt(b2, fl.filesystem.start+int64(startPosOnDisk))
 		if err != nil {
 			return int(writtenBytes), fmt.Errorf("failed to read bytes: %v", err)
 		}
