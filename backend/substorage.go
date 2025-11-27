@@ -37,7 +37,6 @@ func (s SubStorage) ReadAt(p []byte, off int64) (n int, err error) {
 }
 
 func (s SubStorage) Seek(offset int64, whence int) (int64, error) {
-
 	var (
 		pos int64
 		err error
