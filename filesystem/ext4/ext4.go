@@ -559,6 +559,10 @@ func Create(b backend.Storage, size, start, sectorsize int64, p *Params) (*FileS
 	groupCount := sb.blockGroupCount()
 	gdtSize := uint64(gdSize) * groupCount
 	// write the superblock and GDT to the various locations on disk
+
+	// Make SubStorage Backend
+	fsBackend := backend.Sub(b, start, size)
+
 	for _, bg := range backupSuperblocks {
 		block := bg * int64(blocksPerGroup)
 		blockStart := block * int64(blocksize)
@@ -568,13 +572,13 @@ func Create(b backend.Storage, size, start, sectorsize int64, p *Params) (*FileS
 			incr = int64(SectorSize512) * 2
 		}
 
-		writable, err := b.Writable()
+		writable, err := fsBackend.Writable()
 		if err != nil {
 			return nil, err
 		}
 
 		// write the superblock
-		count, err := writable.WriteAt(superblockBytes, incr+blockStart+start)
+		count, err := writable.WriteAt(superblockBytes, incr+blockStart)
 		if err != nil {
 			return nil, fmt.Errorf("error writing Superblock for block %d to disk: %v", block, err)
 		}
@@ -583,7 +587,7 @@ func Create(b backend.Storage, size, start, sectorsize int64, p *Params) (*FileS
 		}
 
 		// write the GDT
-		count, err = writable.WriteAt(g, incr+blockStart+int64(SuperblockSize)+start)
+		count, err = writable.WriteAt(g, incr+blockStart+int64(SuperblockSize))
 		if err != nil {
 			return nil, fmt.Errorf("error writing GDT for block %d to disk: %v", block, err)
 		}
@@ -601,7 +605,7 @@ func Create(b backend.Storage, size, start, sectorsize int64, p *Params) (*FileS
 		blockGroups:      blockGroups,
 		size:             size,
 		start:            start,
-		backend:          b,
+		backend:          fsBackend,
 	}, nil
 }
 
@@ -972,7 +976,7 @@ func (fs *FileSystem) Remove(p string) error {
 		gd.freeBlocks += freedByBG[bg]
 		gd.blockBitmapChecksum = bitmapChecksum(dataBlockBitmap.ToBytes(), fs.superblock.checksumSeed)
 		gdBytes := gd.toBytes(fs.superblock.gdtChecksumType(), fs.superblock.checksumSeed)
-		if _, err := writableFile.WriteAt(gdBytes, fs.start+int64(gdtBlock)*int64(fs.superblock.blockSize)+int64(gd.number)*int64(fs.superblock.groupDescriptorSize)); err != nil {
+		if _, err := writableFile.WriteAt(gdBytes, int64(gdtBlock)*int64(fs.superblock.blockSize)+int64(gd.number)*int64(fs.superblock.groupDescriptorSize)); err != nil {
 			return fmt.Errorf("could not write Group Descriptor bytes to file: %v", err)
 		}
 	}
@@ -1014,7 +1018,7 @@ func (fs *FileSystem) Remove(p string) error {
 			}
 			b := dirBytes[start:end]
 
-			fileOff := fs.start + (int64(e.startingBlock)+int64(i))*int64(bs)
+			fileOff := (int64(e.startingBlock) + int64(i)) * int64(bs)
 
 			if _, err := writableFile.WriteAt(b, fileOff); err != nil {
 				return fmt.Errorf("could not write inode bitmap back to disk: %v", err)
@@ -1061,7 +1065,7 @@ func (fs *FileSystem) Remove(p string) error {
 
 	// write the group descriptor back
 	gdBytes := gd.toBytes(fs.superblock.gdtChecksumType(), fs.superblock.checksumSeed)
-	if _, err := writableFile.WriteAt(gdBytes, fs.start+int64(gdtBlock)*int64(fs.superblock.blockSize)+int64(gd.number)*int64(fs.superblock.groupDescriptorSize)); err != nil {
+	if _, err := writableFile.WriteAt(gdBytes, int64(gdtBlock)*int64(fs.superblock.blockSize)+int64(gd.number)*int64(fs.superblock.groupDescriptorSize)); err != nil {
 		return fmt.Errorf("could not write Group Descriptor bytes to file: %v", err)
 	}
 
@@ -1653,7 +1657,7 @@ func (fs *FileSystem) allocateInode(parent uint32) (uint32, error) {
 	// gdt starts in block 1 of any redundant copies, specifically in BG 0
 	gdtBlock := 1
 	blockByteLocation := gdtBlock * int(fs.superblock.blockSize)
-	gdOffset := fs.start + int64(blockByteLocation) + int64(bg)*int64(fs.superblock.groupDescriptorSize)
+	gdOffset := int64(blockByteLocation) + int64(bg)*int64(fs.superblock.groupDescriptorSize)
 	wrote, err := writableFile.WriteAt(gdBytes, gdOffset)
 	if err != nil {
 		return 0, fmt.Errorf("unable to write group descriptor bytes for blockgroup %d: %v", bg, err)
@@ -1805,7 +1809,7 @@ func (fs *FileSystem) readInodeBitmap(group int) (*bitmap.Bitmap, error) {
 	bitmapLocation := gd.inodeBitmapLocation
 	bitmapByteCount := fs.superblock.inodesPerGroup / 8
 	b := make([]byte, bitmapByteCount)
-	offset := int64(bitmapLocation*uint64(fs.superblock.blockSize) + uint64(fs.start))
+	offset := int64(bitmapLocation * uint64(fs.superblock.blockSize))
 	read, err := fs.backend.ReadAt(b, offset)
 	if err != nil {
 		return nil, fmt.Errorf("unable to read inode bitmap for blockgroup %d: %w", gd.number, err)
@@ -1834,7 +1838,7 @@ func (fs *FileSystem) writeInodeBitmap(bm *bitmap.Bitmap, group int) error {
 	gd := fs.groupDescriptors.descriptors[group]
 	bitmapByteCount := fs.superblock.inodesPerGroup / 8
 	bitmapLocation := gd.inodeBitmapLocation
-	offset := int64(bitmapLocation*uint64(fs.superblock.blockSize) + uint64(fs.start))
+	offset := int64(bitmapLocation * uint64(fs.superblock.blockSize))
 	wrote, err := writableFile.WriteAt(b, offset)
 	if err != nil {
 		return fmt.Errorf("unable to write inode bitmap for blockgroup %d: %w", gd.number, err)
@@ -1853,7 +1857,7 @@ func (fs *FileSystem) readBlockBitmap(group int) (*bitmap.Bitmap, error) {
 	gd := fs.groupDescriptors.descriptors[group]
 	bitmapLocation := gd.blockBitmapLocation
 	b := make([]byte, fs.superblock.blockSize)
-	offset := int64(bitmapLocation*uint64(fs.superblock.blockSize) + uint64(fs.start))
+	offset := int64(bitmapLocation * uint64(fs.superblock.blockSize))
 	read, err := fs.backend.ReadAt(b, offset)
 	if err != nil {
 		return nil, fmt.Errorf("unable to read block bitmap for blockgroup %d: %w", gd.number, err)
@@ -1879,7 +1883,7 @@ func (fs *FileSystem) writeBlockBitmap(bm *bitmap.Bitmap, group int) error {
 	b := bm.ToBytes()
 	gd := fs.groupDescriptors.descriptors[group]
 	bitmapLocation := gd.blockBitmapLocation
-	offset := int64(bitmapLocation*uint64(fs.superblock.blockSize) + uint64(fs.start))
+	offset := int64(bitmapLocation * uint64(fs.superblock.blockSize))
 	wrote, err := writableFile.WriteAt(b, offset)
 	if err != nil {
 		return fmt.Errorf("unable to write block bitmap for blockgroup %d: %w", gd.number, err)
@@ -1900,7 +1904,7 @@ func (fs *FileSystem) writeSuperblock() error {
 	if err != nil {
 		return fmt.Errorf("could not convert superblock to bytes: %v", err)
 	}
-	_, err = writableFile.WriteAt(superblockBytes, fs.start+int64(BootSectorSize))
+	_, err = writableFile.WriteAt(superblockBytes, int64(BootSectorSize))
 	return err
 }
 
