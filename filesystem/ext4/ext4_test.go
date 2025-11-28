@@ -34,7 +34,7 @@ func TestReadDirectory(t *testing.T) {
 		t.Fatalf("Error reading root directory entries from debugfs: %v", err)
 	}
 
-	tests := []struct {
+	dirTests := []struct {
 		name    string
 		inode   uint32
 		entries []*directoryEntry
@@ -44,36 +44,51 @@ func TestReadDirectory(t *testing.T) {
 		{"root", 2, rootDirEntries, nil},
 		{"foo dir", 13, fooDirEntries, nil},
 	}
-	f, err := os.Open(imgFile)
-	if err != nil {
-		t.Fatalf("Error opening test image: %v", err)
-	}
-	defer f.Close()
 
-	b := file.New(f, true)
-	fs, err := Read(b, 100*MB, 0, 512)
-	if err != nil {
-		t.Fatalf("Error reading filesystem: %v", err)
+	imageTests := []struct {
+		name      string
+		imageFile string
+		fsOffset  int64
+	}{
+		{"no offset", imgFile, 0},
+		{"with offset", imgFileOffset, 1024},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			entries, err := fs.readDirectory(tt.inode)
-			switch {
-			case err != nil && tt.err == nil:
-				t.Fatalf("unexpected error reading directory: %v", err)
-			case err == nil && tt.err != nil:
-				t.Fatalf("expected error reading directory: %v", tt.err)
-			case err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error()):
-				t.Fatalf("mismatched error reading directory, expected '%v' got '%v'", tt.err, err)
-			default:
-				sortFunc := func(a, b *directoryEntry) int {
-					return cmp.Compare(a.filename, b.filename)
-				}
-				slices.SortFunc(entries, sortFunc)
-				slices.SortFunc(tt.entries, sortFunc)
-				if diff := deep.Equal(entries, tt.entries); diff != nil {
-					t.Errorf("directory entries mismatch: %v", diff)
-				}
+
+	for _, it := range imageTests {
+		t.Run(it.name, func(t *testing.T) {
+			f, err := os.Open(it.imageFile)
+			if err != nil {
+				t.Fatalf("Error opening test image: %v", err)
+			}
+			defer f.Close()
+
+			b := file.New(f, true)
+			fs, err := Read(b, 100*MB, it.fsOffset, 512)
+			if err != nil {
+				t.Fatalf("Error reading filesystem: %v", err)
+			}
+
+			for _, tt := range dirTests {
+				t.Run(tt.name, func(t *testing.T) {
+					entries, err := fs.readDirectory(tt.inode)
+					switch {
+					case err != nil && tt.err == nil:
+						t.Fatalf("unexpected error reading directory: %v", err)
+					case err == nil && tt.err != nil:
+						t.Fatalf("expected error reading directory: %v", tt.err)
+					case err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error()):
+						t.Fatalf("mismatched error reading directory, expected '%v' got '%v'", tt.err, err)
+					default:
+						sortFunc := func(a, b *directoryEntry) int {
+							return cmp.Compare(a.filename, b.filename)
+						}
+						slices.SortFunc(entries, sortFunc)
+						slices.SortFunc(tt.entries, sortFunc)
+						if diff := deep.Equal(entries, tt.entries); diff != nil {
+							t.Errorf("directory entries mismatch: %v", diff)
+						}
+					}
+				})
 			}
 		})
 	}
@@ -84,7 +99,8 @@ func TestReadFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error opening random data file %s: %v", randomDataFile, err)
 	}
-	tests := []struct {
+
+	fileTests := []struct {
 		name     string
 		path     string
 		offset   int64
@@ -103,52 +119,67 @@ func TestReadFile(t *testing.T) {
 		{"dead symlink", "/deadlink", 0, 0, true, nil, fmt.Errorf("target file %s does not exist", "/nonexistent")},
 		{"dead long symlink", "/deadlonglink", 0, 0, true, nil, errors.New("could not read directory entries")},
 	}
-	f, err := os.Open(imgFile)
-	if err != nil {
-		t.Fatalf("Error opening test image: %v", err)
-	}
-	defer f.Close()
 
-	b := file.New(f, true)
-	fs, err := Read(b, 100*MB, 0, 512)
-	if err != nil {
-		t.Fatalf("Error reading filesystem: %v", err)
+	imageTests := []struct {
+		name      string
+		imageFile string
+		fsOffset  int64
+	}{
+		{"no offset", imgFile, 0},
+		{"with offset", imgFileOffset, 1024},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			fsFile, err := fs.OpenFile(tt.path, 0o600)
-			switch {
-			case err != nil && tt.err == nil:
-				t.Fatalf("unexpected error opening file: %v", err)
-			case err == nil && tt.err != nil:
-				t.Fatalf("expected error opening file: %v", tt.err)
-			case err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error()):
-				t.Fatalf("mismatched error opening file, expected '%v' got '%v'", tt.err, err)
-			case err == nil:
-				var b []byte
-				if tt.readAll {
-					tt.size = len(tt.expected)
-					b, err = io.ReadAll(fsFile)
-					if err != nil {
-						t.Fatalf("Error reading file: %v", err)
+
+	for _, it := range imageTests {
+		t.Run(it.name, func(t *testing.T) {
+			f, err := os.Open(it.imageFile)
+			if err != nil {
+				t.Fatalf("Error opening test image: %v", err)
+			}
+			defer f.Close()
+
+			b := file.New(f, true)
+			fs, err := Read(b, 100*MB, it.fsOffset, 512)
+			if err != nil {
+				t.Fatalf("Error reading filesystem: %v", err)
+			}
+
+			for _, tt := range fileTests {
+				t.Run(tt.name, func(t *testing.T) {
+					fsFile, err := fs.OpenFile(tt.path, 0o600)
+					switch {
+					case err != nil && tt.err == nil:
+						t.Fatalf("unexpected error opening file: %v", err)
+					case err == nil && tt.err != nil:
+						t.Fatalf("expected error opening file: %v", tt.err)
+					case err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error()):
+						t.Fatalf("mismatched error opening file, expected '%v' got '%v'", tt.err, err)
+					case err == nil:
+						var b []byte
+						if tt.readAll {
+							tt.size = len(tt.expected)
+							b, err = io.ReadAll(fsFile)
+							if err != nil {
+								t.Fatalf("Error reading file: %v", err)
+							}
+						} else {
+							if _, err := fsFile.Seek(tt.offset, io.SeekStart); err != nil {
+								t.Fatalf("Error seeking file: %v", err)
+							}
+							b = make([]byte, tt.size)
+							var n int
+							n, err = fsFile.Read(b)
+							if n != len(b) {
+								t.Fatalf("short read, expected %d bytes got %d", len(b), n)
+							}
+						}
+						if err != nil && !errors.Is(err, io.EOF) {
+							t.Fatalf("Error reading file: %v", err)
+						}
+						if !bytes.Equal(b, tt.expected) {
+							t.Errorf("file data mismatch")
+						}
 					}
-				} else {
-					if _, err := fsFile.Seek(tt.offset, io.SeekStart); err != nil {
-						t.Fatalf("Error seeking file: %v", err)
-					}
-					b = make([]byte, tt.size)
-					var n int
-					n, err = fsFile.Read(b)
-					if n != len(b) {
-						t.Fatalf("short read, expected %d bytes got %d", len(b), n)
-					}
-				}
-				if err != nil && !errors.Is(err, io.EOF) {
-					t.Fatalf("Error reading file: %v", err)
-				}
-				if !bytes.Equal(b, tt.expected) {
-					t.Errorf("file data mismatch")
-				}
+				})
 			}
 		})
 	}
@@ -172,13 +203,13 @@ func testCopyFile(infile, outfile string) error {
 	return nil
 }
 
-// creates a copy of the ready-to-run ext4 img file, so we can manipulate it as desired
+// creates a copy of the provided img file, so we can manipulate it
 // without affecting the original
-func testCreateImgCopy(t *testing.T) string {
+func testCreateImgCopyFrom(t *testing.T, src string) string {
 	t.Helper()
 	dir := t.TempDir()
-	outfile := filepath.Join(dir, path.Base(imgFile))
-	if err := testCopyFile(imgFile, outfile); err != nil {
+	outfile := filepath.Join(dir, path.Base(src))
+	if err := testCopyFile(src, outfile); err != nil {
 		t.Fatalf("Error copying image file: %v", err)
 	}
 	return outfile
@@ -225,54 +256,66 @@ func TestWriteFile(t *testing.T) {
 		{"overwrite exists as directory", "/foo", os.O_RDWR, 0, 0, false, nil, errors.New("cannot open directory /foo as file")},
 		{"overwrite exists as file", "/random.dat", os.O_RDWR, 0, 0, false, nil, nil},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			outfile := testCreateImgCopy(t)
-			f, err := os.OpenFile(outfile, os.O_RDWR, 0)
-			if err != nil {
-				t.Fatalf("Error opening test image: %v", err)
-			}
-			defer f.Close()
+	imageTests := []struct {
+		name      string
+		imageFile string
+		fsOffset  int64
+	}{
+		{"no offset", imgFile, 0},
+		{"with offset", imgFileOffset, 1024},
+	}
+	for _, it := range imageTests {
+		t.Run(it.name, func(t *testing.T) {
+			for _, tt := range tests {
+				t.Run(tt.name, func(t *testing.T) {
+					outfile := testCreateImgCopyFrom(t, it.imageFile)
+					f, err := os.OpenFile(outfile, os.O_RDWR, 0)
+					if err != nil {
+						t.Fatalf("Error opening test image: %v", err)
+					}
+					defer f.Close()
 
-			b := file.New(f, false)
-			fs, err := Read(b, 100*MB, 0, 512)
-			if err != nil {
-				t.Fatalf("Error reading filesystem: %v", err)
-			}
-			ext4File, err := fs.OpenFile(tt.path, tt.flag)
-			switch {
-			case err != nil && tt.err == nil:
-				t.Fatalf("unexpected error opening file: %v", err)
-			case err == nil && tt.err != nil:
-				t.Fatalf("missing expected error opening file: %v", tt.err)
-			case err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error()):
-				t.Fatalf("mismatched error opening file, expected '%v' got '%v'", tt.err, err)
-			case err == nil:
-				if _, err := ext4File.Seek(tt.offset, io.SeekStart); err != nil {
-					t.Fatalf("Error seeking file for write: %v", err)
-				}
-				n, err := ext4File.Write(tt.expected)
-				if err != nil && err != io.EOF {
-					t.Fatalf("Error writing file: %v", err)
-				}
-				if n != len(tt.expected) {
-					t.Fatalf("short write, expected %d bytes got %d", len(tt.expected), n)
-				}
-				// now read from the file and see that it matches what we wrote
-				if _, err := ext4File.Seek(tt.offset, io.SeekStart); err != nil {
-					t.Fatalf("Error seeking file for read: %v", err)
-				}
-				b := make([]byte, len(tt.expected))
-				n, err = ext4File.Read(b)
-				if err != nil && err != io.EOF {
-					t.Fatalf("Error reading file: %v", err)
-				}
-				if n != len(tt.expected) {
-					t.Fatalf("short read, expected %d bytes got %d", len(tt.expected), n)
-				}
-				if !bytes.Equal(b, tt.expected) {
-					t.Errorf("file data mismatch")
-				}
+					b := file.New(f, false)
+					fs, err := Read(b, 100*MB, it.fsOffset, 512)
+					if err != nil {
+						t.Fatalf("Error reading filesystem: %v", err)
+					}
+					ext4File, err := fs.OpenFile(tt.path, tt.flag)
+					switch {
+					case err != nil && tt.err == nil:
+						t.Fatalf("unexpected error opening file: %v", err)
+					case err == nil && tt.err != nil:
+						t.Fatalf("missing expected error opening file: %v", tt.err)
+					case err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error()):
+						t.Fatalf("mismatched error opening file, expected '%v' got '%v'", tt.err, err)
+					case err == nil:
+						if _, err := ext4File.Seek(tt.offset, io.SeekStart); err != nil {
+							t.Fatalf("Error seeking file for write: %v", err)
+						}
+						n, err := ext4File.Write(tt.expected)
+						if err != nil && err != io.EOF {
+							t.Fatalf("Error writing file: %v", err)
+						}
+						if n != len(tt.expected) {
+							t.Fatalf("short write, expected %d bytes got %d", len(tt.expected), n)
+						}
+						// now read from the file and see that it matches what we wrote
+						if _, err := ext4File.Seek(tt.offset, io.SeekStart); err != nil {
+							t.Fatalf("Error seeking file for read: %v", err)
+						}
+						b := make([]byte, len(tt.expected))
+						n, err = ext4File.Read(b)
+						if err != nil && err != io.EOF {
+							t.Fatalf("Error reading file: %v", err)
+						}
+						if n != len(tt.expected) {
+							t.Fatalf("short read, expected %d bytes got %d", len(tt.expected), n)
+						}
+						if !bytes.Equal(b, tt.expected) {
+							t.Errorf("file data mismatch")
+						}
+					}
+				})
 			}
 		})
 	}
@@ -292,34 +335,46 @@ func TestRm(t *testing.T) {
 		{"non-empty dir", "/foo", errors.New("directory not empty")},
 		{"empty dir", "/foo/dir1", nil},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			outfile := testCreateImgCopy(t)
-			f, err := os.OpenFile(outfile, os.O_RDWR, 0)
-			if err != nil {
-				t.Fatalf("Error opening test image: %v", err)
-			}
-			defer f.Close()
+	imageTests := []struct {
+		name      string
+		imageFile string
+		fsOffset  int64
+	}{
+		{"no offset", imgFile, 0},
+		{"with offset", imgFileOffset, 1024},
+	}
+	for _, it := range imageTests {
+		t.Run(it.name, func(t *testing.T) {
+			for _, tt := range tests {
+				t.Run(tt.name, func(t *testing.T) {
+					outfile := testCreateImgCopyFrom(t, it.imageFile)
+					f, err := os.OpenFile(outfile, os.O_RDWR, 0)
+					if err != nil {
+						t.Fatalf("Error opening test image: %v", err)
+					}
+					defer f.Close()
 
-			b := file.New(f, false)
-			fs, err := Read(b, 100*MB, 0, 512)
-			if err != nil {
-				t.Fatalf("Error reading filesystem: %v", err)
-			}
-			err = fs.Rm(tt.path)
-			switch {
-			case err != nil && tt.err == nil:
-				t.Fatalf("unexpected error removing file: %v", err)
-			case err == nil && tt.err != nil:
-				t.Fatalf("missing expected error removing file: %v", tt.err)
-			case err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error()):
-				t.Fatalf("mismatched error removing file, expected '%v' got '%v'", tt.err, err)
-			case err == nil:
-				// make sure the file no longer exists
-				_, err := fs.OpenFile(tt.path, 0)
-				if err == nil {
-					t.Fatalf("expected error opening file after removal")
-				}
+					b := file.New(f, false)
+					fs, err := Read(b, 100*MB, it.fsOffset, 512)
+					if err != nil {
+						t.Fatalf("Error reading filesystem: %v", err)
+					}
+					err = fs.Rm(tt.path)
+					switch {
+					case err != nil && tt.err == nil:
+						t.Fatalf("unexpected error removing file: %v", err)
+					case err == nil && tt.err != nil:
+						t.Fatalf("missing expected error removing file: %v", tt.err)
+					case err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error()):
+						t.Fatalf("mismatched error removing file, expected '%v' got '%v'", tt.err, err)
+					case err == nil:
+						// make sure the file no longer exists
+						_, err := fs.OpenFile(tt.path, 0)
+						if err == nil {
+							t.Fatalf("expected error opening file after removal")
+						}
+					}
+				})
 			}
 		})
 	}
@@ -337,52 +392,64 @@ func TestTruncateFile(t *testing.T) {
 		{"sub dir", "/foo", true, errors.New("cannot truncate directory")},
 		{"valid file", "/random.dat", true, nil},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			outfile := testCreateImgCopy(t)
-			f, err := os.OpenFile(outfile, os.O_RDWR, 0)
-			if err != nil {
-				t.Fatalf("Error opening test image: %v", err)
-			}
-			defer f.Close()
+	imageTests := []struct {
+		name      string
+		imageFile string
+		fsOffset  int64
+	}{
+		{"no offset", imgFile, 0},
+		{"with offset", imgFileOffset, 1024},
+	}
+	for _, it := range imageTests {
+		t.Run(it.name, func(t *testing.T) {
+			for _, tt := range tests {
+				t.Run(tt.name, func(t *testing.T) {
+					outfile := testCreateImgCopyFrom(t, it.imageFile)
+					f, err := os.OpenFile(outfile, os.O_RDWR, 0)
+					if err != nil {
+						t.Fatalf("Error opening test image: %v", err)
+					}
+					defer f.Close()
 
-			b := file.New(f, false)
-			fs, err := Read(b, 100*MB, 0, 512)
-			if err != nil {
-				t.Fatalf("Error reading filesystem: %v", err)
-			}
-			// get the original size of the file
-			var origSize int64
-			if tt.exists {
-				fi, err := fs.Stat(tt.path)
-				if err != nil {
-					t.Fatalf("Error getting file info before truncate: %v", err)
-				}
-				origSize = fi.Size()
-			}
+					b := file.New(f, false)
+					fs, err := Read(b, 100*MB, it.fsOffset, 512)
+					if err != nil {
+						t.Fatalf("Error reading filesystem: %v", err)
+					}
+					// get the original size of the file
+					var origSize int64
+					if tt.exists {
+						fi, err := fs.Stat(tt.path)
+						if err != nil {
+							t.Fatalf("Error getting file info before truncate: %v", err)
+						}
+						origSize = fi.Size()
+					}
 
-			// truncate the file to a random number of bytes
-			targetSize := int64(1000)
-			if origSize == targetSize {
-				targetSize = 2000
-			}
-			err = fs.Truncate(tt.path, targetSize)
-			switch {
-			case err != nil && tt.err == nil:
-				t.Fatalf("unexpected error truncating file: %v", err)
-			case err == nil && tt.err != nil:
-				t.Fatalf("missing expected error truncating file: %v", tt.err)
-			case err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error()):
-				t.Fatalf("mismatched error truncating file, expected '%v' got '%v'", tt.err, err)
-			case err == nil:
-				// make sure the file size is now the target size
-				fi, err := fs.Stat(tt.path)
-				if err != nil {
-					t.Fatalf("Error getting file info after truncate: %v", err)
-				}
-				if fi.Size() != targetSize {
-					t.Errorf("expected file size to be %d, got %d", targetSize, fi.Size())
-				}
+					// truncate the file to a random number of bytes
+					targetSize := int64(1000)
+					if origSize == targetSize {
+						targetSize = 2000
+					}
+					err = fs.Truncate(tt.path, targetSize)
+					switch {
+					case err != nil && tt.err == nil:
+						t.Fatalf("unexpected error truncating file: %v", err)
+					case err == nil && tt.err != nil:
+						t.Fatalf("missing expected error truncating file: %v", tt.err)
+					case err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error()):
+						t.Fatalf("mismatched error truncating file, expected '%v' got '%v'", tt.err, err)
+					case err == nil:
+						// make sure the file size is now the target size
+						fi, err := fs.Stat(tt.path)
+						if err != nil {
+							t.Fatalf("Error getting file info after truncate: %v", err)
+						}
+						if fi.Size() != targetSize {
+							t.Errorf("expected file size to be %d, got %d", targetSize, fi.Size())
+						}
+					}
+				})
 			}
 		})
 	}
@@ -399,49 +466,61 @@ func TestMkdir(t *testing.T) {
 		{"parent is file", "/random.dat/bar", errors.New("cannot create directory at")},
 		{"path exists", "/foo", nil},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			outfile := testCreateImgCopy(t)
-			f, err := os.OpenFile(outfile, os.O_RDWR, 0)
-			if err != nil {
-				t.Fatalf("Error opening test image: %v", err)
-			}
-			defer f.Close()
+	imageTests := []struct {
+		name      string
+		imageFile string
+		fsOffset  int64
+	}{
+		{"no offset", imgFile, 0},
+		{"with offset", imgFileOffset, 1024},
+	}
+	for _, it := range imageTests {
+		t.Run(it.name, func(t *testing.T) {
+			for _, tt := range tests {
+				t.Run(tt.name, func(t *testing.T) {
+					outfile := testCreateImgCopyFrom(t, it.imageFile)
+					f, err := os.OpenFile(outfile, os.O_RDWR, 0)
+					if err != nil {
+						t.Fatalf("Error opening test image: %v", err)
+					}
+					defer f.Close()
 
-			b := file.New(f, false)
-			fs, err := Read(b, 100*MB, 0, 512)
-			if err != nil {
-				t.Fatalf("Error reading filesystem: %v", err)
-			}
-			err = fs.Mkdir(tt.path)
-			switch {
-			case err != nil && tt.err == nil:
-				t.Fatalf("unexpected error creating directory: %v", err)
-			case err == nil && tt.err != nil:
-				t.Fatalf("missing expected error creating directory: %v", tt.err)
-			case err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error()):
-				t.Fatalf("mismatched error creating directory, expected '%v' got '%v'", tt.err, err)
-			case err == nil:
-				// make sure the directory exists
-				entries, err := fs.ReadDir(tt.path)
-				if err != nil {
-					t.Fatalf("Error reading directory: %v", err)
-				}
-				if len(entries) < 2 {
-					t.Fatalf("expected at least 2 entries in directory, for . and .. , got %d", len(entries))
-				}
-				if entries[0].Name() != "." {
-					t.Errorf("expected . entry in directory")
-				}
-				if entries[1].Name() != ".." {
-					t.Errorf("expected .. entry in directory")
-				}
-				if !entries[0].IsDir() {
-					t.Errorf("expected . entry to be a directory")
-				}
-				if !entries[1].IsDir() {
-					t.Errorf("expected .. entry to be a directory")
-				}
+					b := file.New(f, false)
+					fs, err := Read(b, 100*MB, it.fsOffset, 512)
+					if err != nil {
+						t.Fatalf("Error reading filesystem: %v", err)
+					}
+					err = fs.Mkdir(tt.path)
+					switch {
+					case err != nil && tt.err == nil:
+						t.Fatalf("unexpected error creating directory: %v", err)
+					case err == nil && tt.err != nil:
+						t.Fatalf("missing expected error creating directory: %v", tt.err)
+					case err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error()):
+						t.Fatalf("mismatched error creating directory, expected '%v' got '%v'", tt.err, err)
+					case err == nil:
+						// make sure the directory exists
+						entries, err := fs.ReadDir(tt.path)
+						if err != nil {
+							t.Fatalf("Error reading directory: %v", err)
+						}
+						if len(entries) < 2 {
+							t.Fatalf("expected at least 2 entries in directory, for . and .. , got %d", len(entries))
+						}
+						if entries[0].Name() != "." {
+							t.Errorf("expected . entry in directory")
+						}
+						if entries[1].Name() != ".." {
+							t.Errorf("expected .. entry in directory")
+						}
+						if !entries[0].IsDir() {
+							t.Errorf("expected . entry to be a directory")
+						}
+						if !entries[1].IsDir() {
+							t.Errorf("expected .. entry to be a directory")
+						}
+					}
+				})
 			}
 		})
 	}
