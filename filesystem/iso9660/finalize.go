@@ -993,5 +993,17 @@ func calculateShortnameExtension(name string) (shortname, extension string) {
 	shortname = re.ReplaceAllString(shortname, "_")
 	extension = re.ReplaceAllString(extension, "_")
 
+	// Truncate to ISO 9660 Level 1 (8.3 format) for maximum compatibility
+	// This ensures compatibility with tools that expect traditional short names
+	// Extension: max 3 characters
+	if len(extension) > 3 {
+		extension = extension[:3]
+	}
+
+	// Basename: max 8 characters
+	if len(shortname) > 8 {
+		shortname = shortname[:8]
+	}
+
 	return shortname, extension
 }

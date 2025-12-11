@@ -114,6 +114,66 @@ func TestCreatePathTable(t *testing.T) {
 	}
 }
 
+func TestCalculateShortnameExtension(t *testing.T) {
+	tests := []struct {
+		name              string
+		expectedShortname string
+		expectedExtension string
+	}{
+		// Test extension truncation to 3 characters
+		{"kargs.json", "KARGS", "JSO"},
+		{"file.html", "FILE", "HTM"},
+		{"document.markdown", "DOCUMENT", "MAR"},
+		{"archive.tar.gz", "ARCHIVE", "TAR"},
+		// Test extensions that are already 3 characters or less
+		{"test.js", "TEST", "JS"},
+		{"readme.md", "README", "MD"},
+		{"app.css", "APP", "CSS"},
+		{"data.txt", "DATA", "TXT"},
+		// Test files with no extension
+		{"README", "README", ""},
+		{"Makefile", "MAKEFILE", ""},
+		// Test uppercasing
+		{"MyFile.TxT", "MYFILE", "TXT"},
+		{"example.HtMl", "EXAMPLE", "HTM"},
+		// Test illegal character replacement and basename truncation
+		{"my-file.json", "MY_FILE", "JSO"},
+		{"test file.html", "TEST_FIL", "HTM"}, // "test file" = 9 chars after underscore replacement -> truncated to 8
+		{"data@home.xml", "DATA_HOM", "XML"},  // "data@home" = 9 chars after underscore replacement -> truncated to 8
+		// Test basename truncation to 8 characters (ISO 9660 Level 1 - 8.3 format)
+		{"verylongfilenamethatexceedsthirtychars.txt", "VERYLONG", "TXT"},
+		{"anextremelylongbasenamethatgoeswaybeyondlimits.json", "ANEXTREM", "JSO"},
+		{"exactlythirtycharsbasenamehere.log", "EXACTLYT", "LOG"},
+		{"exactlyeightchars.js", "EXACTLYE", "JS"},
+		{"eightchr.txt", "EIGHTCHR", "TXT"},
+		// Test basename-only files that exceed 8 characters
+		{"verylongbasenamethatexceedsthirtycharacterswithnoextension", "VERYLONG", ""},
+		{"exactlythirtycharacterslong12", "EXACTLYT", ""},
+		{"thisfilenameisexactlythirtyone", "THISFILE", ""},
+		{"exactlyeightcharacters", "EXACTLYE", ""},
+		{"eightchr", "EIGHTCHR", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			shortname, extension := calculateShortnameExtension(tt.name)
+			if shortname != tt.expectedShortname {
+				t.Errorf("calculateShortnameExtension(%q) shortname = %q, want %q", tt.name, shortname, tt.expectedShortname)
+			}
+			if extension != tt.expectedExtension {
+				t.Errorf("calculateShortnameExtension(%q) extension = %q, want %q", tt.name, extension, tt.expectedExtension)
+			}
+			// Verify ISO 9660 Level 1 (8.3 format) constraints
+			if len(shortname) > 8 {
+				t.Errorf("calculateShortnameExtension(%q) basename length = %d, exceeds 8 character limit", tt.name, len(shortname))
+			}
+			if len(extension) > 3 {
+				t.Errorf("calculateShortnameExtension(%q) extension length = %d, exceeds 3 character limit", tt.name, len(extension))
+			}
+		})
+	}
+}
+
 func TestCollapseAndSortChildren(t *testing.T) {
 	// we need to build a file tree, and then see that the results are correct and in order
 	// the algorithm uses the following properties of finalizeFileInfo:
