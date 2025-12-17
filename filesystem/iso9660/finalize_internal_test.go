@@ -262,3 +262,98 @@ func TestCollapseAndSortChildren(t *testing.T) {
 		t.Log(output)
 	}
 }
+
+func TestCollisionResolution(t *testing.T) {
+	tests := []struct {
+		name     string
+		files    []string          // filenames to create
+		expected map[string]string // original -> expected short name
+	}{
+		{
+			name:  "two file collision",
+			files: []string{"collision1.txt", "collision2.txt"},
+			expected: map[string]string{
+				"collision1.txt": "COLLISI0.TXT",
+				"collision2.txt": "COLLISI1.TXT",
+			},
+		},
+		{
+			name:  "natural name preserved with collision",
+			files: []string{"filenam1", "filenamelong", "filenamereallylong"},
+			expected: map[string]string{
+				"filenam1":           "FILENAM1",
+				"filenamelong":       "FILENAM0",
+				"filenamereallylong": "FILENAM2",
+			},
+		},
+		{
+			name: "10 files needing 1 digit + natural filenam9",
+			files: []string{
+				"filenam9",
+				"filenamereallylong0", "filenamereallylong1", "filenamereallylong2",
+				"filenamereallylong3", "filenamereallylong4", "filenamereallylong5",
+				"filenamereallylong6", "filenamereallylong7", "filenamereallylong8",
+				"filenamereallylong9",
+			},
+			expected: map[string]string{
+				"filenam9":            "FILENAM9",
+				"filenamereallylong0": "FILENA00",
+				"filenamereallylong1": "FILENA01",
+				"filenamereallylong2": "FILENA02",
+				"filenamereallylong3": "FILENA03",
+				"filenamereallylong4": "FILENA04",
+				"filenamereallylong5": "FILENA05",
+				"filenamereallylong6": "FILENA06",
+				"filenamereallylong7": "FILENA07",
+				"filenamereallylong8": "FILENA08",
+				"filenamereallylong9": "FILENA09",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create temp directory
+			tmpDir, err := os.MkdirTemp("", "collision-test-*")
+			if err != nil {
+				t.Fatalf("Failed to create temp dir: %v", err)
+			}
+			defer os.RemoveAll(tmpDir)
+
+			// Create test files
+			for _, filename := range tt.files {
+				path := tmpDir + "/" + filename
+				if err := os.WriteFile(path, []byte("test"), 0o600); err != nil {
+					t.Fatalf("Failed to create file %s: %v", filename, err)
+				}
+			}
+
+			// Run walkTree which also resolves collisions
+			_, dirList, err := walkTree(tmpDir)
+			if err != nil {
+				t.Fatalf("walkTree failed: %v", err)
+			}
+
+			// Add parent properties
+			root := dirList["."]
+			root.addProperties(1)
+
+			// Check results
+			for _, file := range root.children {
+				expectedShort, ok := tt.expected[file.name]
+				if !ok {
+					continue // not in our test map
+				}
+
+				actualShort := file.shortname
+				if file.extension != "" {
+					actualShort += "." + file.extension
+				}
+
+				if actualShort != expectedShort {
+					t.Errorf("File %s: expected short name %s, got %s", file.name, expectedShort, actualShort)
+				}
+			}
+		})
+	}
+}
