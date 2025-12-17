@@ -114,6 +114,66 @@ func TestCreatePathTable(t *testing.T) {
 	}
 }
 
+func TestCalculateShortnameExtension(t *testing.T) {
+	tests := []struct {
+		name              string
+		expectedShortname string
+		expectedExtension string
+	}{
+		// Test extension truncation to 3 characters
+		{"kargs.json", "KARGS", "JSO"},
+		{"file.html", "FILE", "HTM"},
+		{"document.markdown", "DOCUMENT", "MAR"},
+		{"archive.tar.gz", "ARCHIVE", "TAR"},
+		// Test extensions that are already 3 characters or less
+		{"test.js", "TEST", "JS"},
+		{"readme.md", "README", "MD"},
+		{"app.css", "APP", "CSS"},
+		{"data.txt", "DATA", "TXT"},
+		// Test files with no extension
+		{"README", "README", ""},
+		{"Makefile", "MAKEFILE", ""},
+		// Test uppercasing
+		{"MyFile.TxT", "MYFILE", "TXT"},
+		{"example.HtMl", "EXAMPLE", "HTM"},
+		// Test illegal character replacement and basename truncation
+		{"my-file.json", "MY_FILE", "JSO"},
+		{"test file.html", "TEST_FIL", "HTM"}, // "test file" = 9 chars after underscore replacement -> truncated to 8
+		{"data@home.xml", "DATA_HOM", "XML"},  // "data@home" = 9 chars after underscore replacement -> truncated to 8
+		// Test basename truncation to 8 characters (ISO 9660 Level 1 - 8.3 format)
+		{"verylongfilenamethatexceedsthirtychars.txt", "VERYLONG", "TXT"},
+		{"anextremelylongbasenamethatgoeswaybeyondlimits.json", "ANEXTREM", "JSO"},
+		{"exactlythirtycharsbasenamehere.log", "EXACTLYT", "LOG"},
+		{"exactlyeightchars.js", "EXACTLYE", "JS"},
+		{"eightchr.txt", "EIGHTCHR", "TXT"},
+		// Test basename-only files that exceed 8 characters
+		{"verylongbasenamethatexceedsthirtycharacterswithnoextension", "VERYLONG", ""},
+		{"exactlythirtycharacterslong12", "EXACTLYT", ""},
+		{"thisfilenameisexactlythirtyone", "THISFILE", ""},
+		{"exactlyeightcharacters", "EXACTLYE", ""},
+		{"eightchr", "EIGHTCHR", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			shortname, extension := calculateShortnameExtension(tt.name)
+			if shortname != tt.expectedShortname {
+				t.Errorf("calculateShortnameExtension(%q) shortname = %q, want %q", tt.name, shortname, tt.expectedShortname)
+			}
+			if extension != tt.expectedExtension {
+				t.Errorf("calculateShortnameExtension(%q) extension = %q, want %q", tt.name, extension, tt.expectedExtension)
+			}
+			// Verify ISO 9660 Level 1 (8.3 format) constraints
+			if len(shortname) > 8 {
+				t.Errorf("calculateShortnameExtension(%q) basename length = %d, exceeds 8 character limit", tt.name, len(shortname))
+			}
+			if len(extension) > 3 {
+				t.Errorf("calculateShortnameExtension(%q) extension length = %d, exceeds 3 character limit", tt.name, len(extension))
+			}
+		})
+	}
+}
+
 func TestCollapseAndSortChildren(t *testing.T) {
 	// we need to build a file tree, and then see that the results are correct and in order
 	// the algorithm uses the following properties of finalizeFileInfo:
@@ -200,5 +260,100 @@ func TestCollapseAndSortChildren(t *testing.T) {
 			output = fmt.Sprintf("%s{%s,%v},", output, e.name, e.isDir)
 		}
 		t.Log(output)
+	}
+}
+
+func TestCollisionResolution(t *testing.T) {
+	tests := []struct {
+		name     string
+		files    []string          // filenames to create
+		expected map[string]string // original -> expected short name
+	}{
+		{
+			name:  "two file collision",
+			files: []string{"collision1.txt", "collision2.txt"},
+			expected: map[string]string{
+				"collision1.txt": "COLLISI0.TXT",
+				"collision2.txt": "COLLISI1.TXT",
+			},
+		},
+		{
+			name:  "natural name preserved with collision",
+			files: []string{"filenam1", "filenamelong", "filenamereallylong"},
+			expected: map[string]string{
+				"filenam1":           "FILENAM1",
+				"filenamelong":       "FILENAM0",
+				"filenamereallylong": "FILENAM2",
+			},
+		},
+		{
+			name: "10 files needing 1 digit + natural filenam9",
+			files: []string{
+				"filenam9",
+				"filenamereallylong0", "filenamereallylong1", "filenamereallylong2",
+				"filenamereallylong3", "filenamereallylong4", "filenamereallylong5",
+				"filenamereallylong6", "filenamereallylong7", "filenamereallylong8",
+				"filenamereallylong9",
+			},
+			expected: map[string]string{
+				"filenam9":            "FILENAM9",
+				"filenamereallylong0": "FILENA00",
+				"filenamereallylong1": "FILENA01",
+				"filenamereallylong2": "FILENA02",
+				"filenamereallylong3": "FILENA03",
+				"filenamereallylong4": "FILENA04",
+				"filenamereallylong5": "FILENA05",
+				"filenamereallylong6": "FILENA06",
+				"filenamereallylong7": "FILENA07",
+				"filenamereallylong8": "FILENA08",
+				"filenamereallylong9": "FILENA09",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create temp directory
+			tmpDir, err := os.MkdirTemp("", "collision-test-*")
+			if err != nil {
+				t.Fatalf("Failed to create temp dir: %v", err)
+			}
+			defer os.RemoveAll(tmpDir)
+
+			// Create test files
+			for _, filename := range tt.files {
+				path := tmpDir + "/" + filename
+				if err := os.WriteFile(path, []byte("test"), 0o600); err != nil {
+					t.Fatalf("Failed to create file %s: %v", filename, err)
+				}
+			}
+
+			// Run walkTree which also resolves collisions
+			_, dirList, err := walkTree(tmpDir)
+			if err != nil {
+				t.Fatalf("walkTree failed: %v", err)
+			}
+
+			// Add parent properties
+			root := dirList["."]
+			root.addProperties(1)
+
+			// Check results
+			for _, file := range root.children {
+				expectedShort, ok := tt.expected[file.name]
+				if !ok {
+					continue // not in our test map
+				}
+
+				actualShort := file.shortname
+				if file.extension != "" {
+					actualShort += "." + file.extension
+				}
+
+				if actualShort != expectedShort {
+					t.Errorf("File %s: expected short name %s, got %s", file.name, expectedShort, actualShort)
+				}
+			}
+		})
 	}
 }

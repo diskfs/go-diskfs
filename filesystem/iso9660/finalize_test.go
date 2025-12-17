@@ -196,7 +196,7 @@ func TestFinalize9660(t *testing.T) {
 
 		fooCount := 75
 		for i := 0; i <= fooCount; i++ {
-			filename := fmt.Sprintf("/FOO/FILENAME_%d", i)
+			filename := fmt.Sprintf("/FOO/FILENAME_%02d", i)
 			contents := []byte(fmt.Sprintf("filename_%d\n", i))
 			isofile, err = fs.OpenFile(filename, os.O_CREATE|os.O_RDWR)
 			if err != nil {
@@ -248,9 +248,9 @@ func TestFinalize9660(t *testing.T) {
 
 		// get a few files I expect
 		fileContents := map[string]string{
-			"/README.MD":       "readme\n",
-			"/FOO/FILENAME_50": "filename_50\n",
-			"/FOO/FILENAME_2":  "filename_2\n",
+			"/README.MD":    "readme\n",
+			"/FOO/FILENA50": "filename_50\n",
+			"/FOO/FILENA02": "filename_2\n",
 		}
 
 		for k, v := range fileContents {
