@@ -60,6 +60,7 @@ type FileSystem struct {
 	size            int64
 	start           int64
 	backend         backend.Storage
+	fatDirty        bool // tracks if FAT needs to be flushed
 }
 
 // Equal compare if two filesystems are equal
@@ -351,7 +352,6 @@ func Read(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) 
 		return nil, fmt.Errorf("only could read %d bytes from file", n)
 	}
 	bs, err := msDosBootSectorFromBytes(bsb)
-
 	if err != nil {
 		return nil, fmt.Errorf("error reading MS-DOS Boot Sector: %w", err)
 	}
@@ -994,7 +994,6 @@ func (fs *FileSystem) mkLabel(parent *Directory, name string) (*directoryEntry, 
 // if it does not exist, it may or may not make it
 func (fs *FileSystem) readDirWithMkdir(p string, doMake bool) (*Directory, []*directoryEntry, error) {
 	paths, err := splitPath(p)
-
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1214,17 +1213,138 @@ func (fs *FileSystem) allocateSpace(size uint64, previous uint32) ([]uint32, err
 
 	// update the FSIS
 	fs.fsis.lastAllocatedCluster = lastAllocatedCluster
-	if err := fs.writeFsis(); err != nil {
-		return nil, fmt.Errorf("failed to write the file system information sector: %w", err)
-	}
 
-	// write the FAT tables
-	if err := fs.writeFat(); err != nil {
-		return nil, fmt.Errorf("failed to write the file allocation table: %w", err)
-	}
+	// Mark FAT as dirty so it will be flushed when the file is closed
+	fs.fatDirty = true
 
 	// return all of the clusters
 	return append(clusters, allocated...), nil
+}
+
+// allocateSpaceWithCache is an optimized version of allocateSpace that reuses
+// a cached cluster list to avoid repeated getClusterList calls
+func (fs *FileSystem) allocateSpaceWithCache(size uint64, previous uint32, cachedClusters []uint32) ([]uint32, error) {
+	if previous > fs.table.maxCluster {
+		return nil, fmt.Errorf("invalid cluster chain at %d", previous)
+	}
+
+	var lastAllocatedCluster uint32
+
+	// what is the total count of clusters needed?
+	count := int(size / uint64(fs.bytesPerCluster))
+	if size%uint64(fs.bytesPerCluster) > 0 {
+		count++
+	}
+
+	// Use the cached cluster list
+	clusters := cachedClusters
+	originalClusterCount := len(clusters)
+	extraClusterCount := count - originalClusterCount
+
+	// what if we do not need to change anything?
+	if extraClusterCount == 0 {
+		return clusters, nil
+	}
+
+	// get the last cluster for chaining
+	if previous >= 2 && len(clusters) > 0 {
+		previous = clusters[len(clusters)-1]
+	}
+
+	// get a list of allocated clusters, so we can know which ones are unallocated
+	maxCluster := fs.table.maxCluster
+
+	if extraClusterCount > 0 {
+		// Pre-allocate space for new clusters
+		allocated := make([]uint32, 0, extraClusterCount)
+
+		for i := uint32(2); i < maxCluster && len(allocated) < extraClusterCount; i++ {
+			if fs.table.clusters[i] == 0 {
+				allocated = append(allocated, i)
+			}
+		}
+
+		// did we allocate them all?
+		if len(allocated) < extraClusterCount {
+			return nil, errors.New("no space left on device")
+		}
+
+		// mark last allocated one as EOC
+		lastAlloc := len(allocated) - 1
+
+		// extend the chain and fill them in
+		if previous > 0 {
+			fs.table.clusters[previous] = allocated[0]
+		}
+		for i := 0; i < lastAlloc; i++ {
+			fs.table.clusters[allocated[i]] = allocated[i+1]
+		}
+		fs.table.clusters[allocated[lastAlloc]] = fs.table.eocMarker
+
+		// update the FSIS
+		lastAllocatedCluster = allocated[len(allocated)-1]
+
+		// Extend the cached cluster list in-place if there's capacity
+		if cap(clusters)-len(clusters) >= len(allocated) {
+			// We have capacity, extend the slice
+			clusters = append(clusters, allocated...)
+		} else {
+			// Need to reallocate - use exponential growth strategy
+			// Double capacity or add what we need, whichever is larger
+			newLen := len(clusters) + len(allocated)
+			newCap := max(cap(clusters)*2, newLen)
+			// Add extra capacity for future growth (25% more or at least 1000 clusters)
+			extraGrowth := max(newCap/4, 1000)
+			newCap += extraGrowth
+
+			newClusters := make([]uint32, len(clusters), newCap)
+			copy(newClusters, clusters)
+			newClusters = append(newClusters, allocated...)
+			clusters = newClusters
+		}
+	} else {
+		var (
+			lastAlloc   int
+			deallocated []uint32
+		)
+		toRemove := abs(extraClusterCount)
+		lastAlloc = len(clusters) - toRemove - 1
+		if lastAlloc < 0 {
+			lastAlloc = 0
+		}
+		deallocated = clusters[lastAlloc+1:]
+
+		if uint32(lastAlloc) > fs.table.maxCluster || clusters[lastAlloc] > fs.table.maxCluster {
+			return nil, fmt.Errorf("invalid cluster chain at %d", lastAlloc)
+		}
+
+		// mark last allocated one as EOC
+		fs.table.clusters[clusters[lastAlloc]] = fs.table.eocMarker
+
+		// unmark all of the unused ones
+		lastAllocatedCluster = fs.fsis.lastAllocatedCluster
+		for _, cl := range deallocated {
+			if cl > fs.table.maxCluster {
+				return nil, fmt.Errorf("invalid cluster chain at %d", cl)
+			}
+
+			fs.table.clusters[cl] = fs.table.unusedMarker
+			if cl == lastAllocatedCluster {
+				lastAllocatedCluster--
+			}
+		}
+
+		// Shrink the cached cluster list
+		clusters = clusters[:lastAlloc+1]
+	}
+
+	// update the FSIS
+	fs.fsis.lastAllocatedCluster = lastAllocatedCluster
+
+	// Mark FAT as dirty so it will be flushed when the file is closed
+	fs.fatDirty = true
+
+	return clusters, nil
 }
 
 func abs(x int) int {

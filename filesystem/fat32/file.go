@@ -1,21 +1,32 @@
 package fat32
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
 
+	"github.com/diskfs/go-diskfs/backend"
 	"github.com/diskfs/go-diskfs/filesystem"
 )
+
+// ErrFileTooLarge is returned when attempting to write beyond FAT32's 4GB file size limit
+var ErrFileTooLarge = errors.New("file size exceeds FAT32 limit of 4GB")
+
+const maxFAT32FileSize = (1 << 32) - 1 // 4,294,967,295 bytes (4GB - 1)
 
 // File represents a single file in a FAT32 filesystem
 type File struct {
 	*directoryEntry
-	isReadWrite bool
-	isAppend    bool
-	offset      int64
-	parent      *Directory
-	filesystem  *FileSystem
+	isReadWrite    bool
+	isAppend       bool
+	offset         int64
+	parent         *Directory
+	filesystem     *FileSystem
+	needsFlush     bool                 // tracks if directory entries need to be written on Close()
+	cachedClusters []uint32             // cached cluster chain to avoid repeated lookups
+	allocatedSize  uint64               // size for which clusters have been allocated
+	writableFile   backend.WritableFile // cached writable file handle
 }
 
 // Get the full cluster chain of the File.
@@ -155,6 +166,174 @@ func (fl *File) Read(b []byte) (int, error) {
 	return totalRead, retErr
 }
 
+// ReadFrom reads data from r until EOF and writes it to the file.
+// This is an optimized implementation that io.Copy will prefer over repeated Write calls.
+// It allocates disk space in larger chunks to minimize FAT table scanning overhead.
+func (fl *File) ReadFrom(r io.Reader) (int64, error) {
+	if fl == nil || fl.filesystem == nil {
+		return 0, os.ErrClosed
+	}
+
+	if !fl.isReadWrite {
+		return 0, filesystem.ErrReadonlyFilesystem
+	}
+
+	// Cache the writable file handle
+	if fl.writableFile == nil {
+		wf, err := fl.filesystem.backend.Writable()
+		if err != nil {
+			return 0, err
+		}
+
+		fl.writableFile = wf
+	}
+
+	writableFile := fl.writableFile
+	fs := fl.filesystem
+	bytesPerCluster := fs.bytesPerCluster
+
+	start := int64(fs.dataStart)
+
+	// Try to determine source size for optimal allocation using Seeker interface
+	var knownSize int64 = -1
+
+	if seeker, ok := r.(io.Seeker); ok {
+		currentPos, err := seeker.Seek(0, io.SeekCurrent)
+		if err == nil {
+			if endPos, err := seeker.Seek(0, io.SeekEnd); err == nil {
+				knownSize = endPos - currentPos
+				// Reset to original position
+				if _, err = seeker.Seek(currentPos, io.SeekStart); err != nil {
+					return 0, fmt.Errorf("unable to reset reader position after size determination: %v", err)
+				}
+			}
+		}
+	}
+
+	// Allocation chunk size: allocate in 16MB chunks to reduce FAT scanning overhead
+	// (only used when source size is unknown)
+	const allocationChunkSize = 16 * 1024 * 1024
+	chunkClusters := max(allocationChunkSize/bytesPerCluster, 1)
+
+	// Pre-allocate all space if we know the size upfront
+	if knownSize > 0 && fl.allocatedSize == 0 {
+		targetSize := fl.offset + knownSize
+		// Only pre-allocate if it won't exceed FAT32 limit
+		if targetSize > 0 && targetSize <= maxFAT32FileSize {
+			clusters, err := fs.allocateSpace(uint64(targetSize), fl.clusterLocation)
+			if err == nil {
+				fl.cachedClusters = clusters
+				fl.allocatedSize = uint64(targetSize)
+				if len(clusters) > 0 && fl.clusterLocation == 0 {
+					fl.clusterLocation = clusters[0]
+				}
+			}
+		}
+	}
+
+	totalWritten := int64(0)
+	buffer := make([]byte, 32*1024) // 32KB read buffer (matches io.Copy default)
+
+	for {
+		// Read data from source
+		n, readErr := r.Read(buffer)
+		if n > 0 {
+			// Calculate new size after this write
+			oldSize := int64(fl.fileSize)
+			newSize := max(fl.offset+int64(n), oldSize)
+
+			// Check FAT32 file size limit
+			if newSize > maxFAT32FileSize {
+				return totalWritten, ErrFileTooLarge
+			}
+
+			// Allocate space in chunks if needed
+			var clusters []uint32
+			var err error
+
+			if fl.cachedClusters != nil && uint64(newSize) <= fl.allocatedSize {
+				// Use cached cluster list - no need to reallocate
+				clusters = fl.cachedClusters
+			} else {
+				// Need more space - allocate ahead in chunks to minimize FAT scanning
+				// Calculate how much extra to allocate beyond what we need right now
+				allocateSize := newSize
+				extraNeeded := allocateSize - int64(fl.allocatedSize)
+				if extraNeeded > 0 {
+					// Round up to next allocation chunk boundary
+					extraClusters := (extraNeeded + int64(bytesPerCluster) - 1) / int64(bytesPerCluster)
+					chunks := (extraClusters + int64(chunkClusters) - 1) / int64(chunkClusters)
+					allocateSize = int64(fl.allocatedSize) + chunks*int64(chunkClusters)*int64(bytesPerCluster)
+				}
+
+				if fl.cachedClusters != nil {
+					clusters, err = fs.allocateSpaceWithCache(uint64(allocateSize), fl.clusterLocation, fl.cachedClusters)
+				} else {
+					clusters, err = fs.allocateSpace(uint64(allocateSize), fl.clusterLocation)
+				}
+				if err != nil {
+					return totalWritten, fmt.Errorf("unable to allocate clusters for file: %v", err)
+				}
+
+				fl.cachedClusters = clusters
+				fl.allocatedSize = uint64(allocateSize)
+
+				// Update cluster location if this is the first allocation
+				if len(clusters) > 0 && fl.clusterLocation == 0 {
+					fl.clusterLocation = clusters[0]
+				}
+			}
+
+			// Update file size
+			if oldSize != newSize {
+				fl.fileSize = uint32(newSize)
+			}
+
+			// Write the data to clusters
+			totalWritten += int64(n)
+			clusterIndex := int(fl.offset) / bytesPerCluster
+			remainder := fl.offset % int64(bytesPerCluster)
+			writePos := 0
+
+			// Handle partial first cluster if offset isn't cluster-aligned
+			if remainder != 0 {
+				lastCluster := clusters[clusterIndex]
+				offset := start + int64(lastCluster-2)*int64(bytesPerCluster) + remainder
+				toWrite := min(int64(bytesPerCluster)-remainder, int64(n))
+				_, err := writableFile.WriteAt(buffer[writePos:writePos+int(toWrite)], offset+fs.start)
+				if err != nil {
+					return totalWritten, fmt.Errorf("unable to write to file: %v", err)
+				}
+				writePos += int(toWrite)
+				clusterIndex++
+			}
+
+			// Write remaining full/partial clusters
+			for writePos < n && clusterIndex < len(clusters) {
+				left := n - writePos
+				toWrite := min(bytesPerCluster, left)
+				offset := start + int64(clusters[clusterIndex]-2)*int64(bytesPerCluster)
+				_, err := writableFile.WriteAt(buffer[writePos:writePos+toWrite], offset+fs.start)
+				if err != nil {
+					return totalWritten, fmt.Errorf("unable to write to file: %v", err)
+				}
+				writePos += toWrite
+				clusterIndex++
+			}
+
+			fl.offset += int64(n)
+			fl.needsFlush = true
+		}
+
+		if readErr != nil {
+			if readErr == io.EOF {
+				return totalWritten, nil
+			}
+			return totalWritten, readErr
+		}
+	}
+}
+
 // Write writes len(b) bytes to the File.
 // It returns the number of bytes written and an error, if any.
 // returns a non-nil error when n != len(b)
@@ -167,10 +346,16 @@ func (fl *File) Write(p []byte) (int, error) {
 	}
 
 	totalWritten := 0
-	writableFile, err := fl.filesystem.backend.Writable()
-	if err != nil {
-		return totalWritten, err
+
+	// Cache the writable file handle
+	if fl.writableFile == nil {
+		wf, err := fl.filesystem.backend.Writable()
+		if err != nil {
+			return totalWritten, err
+		}
+		fl.writableFile = wf
 	}
+	writableFile := fl.writableFile
 
 	fs := fl.filesystem
 	// if the file was not opened RDWR, nothing we can do
@@ -184,10 +369,34 @@ func (fl *File) Write(p []byte) (int, error) {
 	if newSize < oldSize {
 		newSize = oldSize
 	}
-	// 1- ensure we have space and clusters
-	clusters, err := fs.allocateSpace(uint64(newSize), fl.clusterLocation)
-	if err != nil {
-		return 0x00, fmt.Errorf("unable to allocate clusters for file: %v", err)
+
+	// Check FAT32 file size limit
+	if newSize > maxFAT32FileSize {
+		return 0, ErrFileTooLarge
+	}
+
+	// Get or allocate clusters - use cached cluster list if available and sufficient
+	var (
+		clusters []uint32
+		err      error
+	)
+	if fl.cachedClusters != nil && uint64(newSize) <= fl.allocatedSize {
+		// Use cached cluster list - no need to reallocate or query FAT
+		clusters = fl.cachedClusters
+	} else {
+		// Need to allocate more space
+		// Pass the cached cluster list to avoid re-reading from FAT
+		if fl.cachedClusters != nil {
+			clusters, err = fs.allocateSpaceWithCache(uint64(newSize), fl.clusterLocation, fl.cachedClusters)
+		} else {
+			clusters, err = fs.allocateSpace(uint64(newSize), fl.clusterLocation)
+		}
+		if err != nil {
+			return 0x00, fmt.Errorf("unable to allocate clusters for file: %v", err)
+		}
+		// Cache the cluster list and allocated size
+		fl.cachedClusters = clusters
+		fl.allocatedSize = uint64(newSize)
 	}
 
 	// update the directory entry size for the file
@@ -237,11 +446,8 @@ func (fl *File) Write(p []byte) (int, error) {
 
 	fl.offset += int64(totalWritten)
 
-	// update the parent that we have changed the file size
-	err = fs.writeDirectoryEntries(fl.parent)
-	if err != nil {
-		return 0, fmt.Errorf("error writing directory entries to disk: %v", err)
-	}
+	// mark that directory entries need to be written on Close()
+	fl.needsFlush = true
 
 	return totalWritten, nil
 }
@@ -269,14 +475,37 @@ func (fl *File) Seek(offset int64, whence int) (int64, error) {
 
 // Close close the file
 func (fl *File) Close() error {
+	if fl == nil || fl.filesystem == nil {
+		return nil
+	}
+
+	// if FAT was modified, flush it first
+	if fl.filesystem.fatDirty {
+		if err := fl.filesystem.writeFsis(); err != nil {
+			return fmt.Errorf("error writing file system information sector: %v", err)
+		}
+		if err := fl.filesystem.writeFat(); err != nil {
+			return fmt.Errorf("error writing file allocation table: %v", err)
+		}
+		fl.filesystem.fatDirty = false
+	}
+
+	// if file was modified, flush directory entries
+	if fl.needsFlush {
+		if err := fl.filesystem.writeDirectoryEntries(fl.parent); err != nil {
+			return fmt.Errorf("error writing directory entries to disk: %v", err)
+		}
+		fl.needsFlush = false
+	}
+
 	fl.filesystem = nil
 	return nil
 }
 
 func (fl *File) SetSystem(on bool) error {
-	fs := fl.filesystem
 	fl.isSystem = on
-	return fs.writeDirectoryEntries(fl.parent)
+	fl.needsFlush = true
+	return nil
 }
 
 func (fl *File) IsSystem() bool {
@@ -284,9 +513,9 @@ func (fl *File) IsSystem() bool {
 }
 
 func (fl *File) SetHidden(on bool) error {
-	fs := fl.filesystem
 	fl.isHidden = on
-	return fs.writeDirectoryEntries(fl.parent)
+	fl.needsFlush = true
+	return nil
 }
 
 func (fl *File) IsHidden() bool {
@@ -294,9 +523,9 @@ func (fl *File) IsHidden() bool {
 }
 
 func (fl *File) SetReadOnly(on bool) error {
-	fs := fl.filesystem
 	fl.isReadOnly = on
-	return fs.writeDirectoryEntries(fl.parent)
+	fl.needsFlush = true
+	return nil
 }
 
 func (fl *File) IsReadOnly() bool {
