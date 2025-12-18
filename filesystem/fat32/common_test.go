@@ -15,6 +15,7 @@ import (
 
 const (
 	Fat32File           = "./testdata/dist/fat32.img"
+	Fat32File4kB        = "./testdata/dist/fat32-4k.img"
 	fsckFile            = "./testdata/dist/fsck.txt"
 	rootdirFile         = "./testdata/dist/root_dir.txt"
 	rootdirFileFLS      = "./testdata/dist/root_dir_fls.txt"
@@ -199,9 +200,7 @@ func testGetValidDirectoryEntriesFromFile(dirFilePath, dirEntryPattern string, f
 		text := scanner.Text()
 		dirEntryMatch := testDirectoryEntryRE.FindStringSubmatch(text)
 		fileEntryMatch := testFileEntryRE.FindStringSubmatch(text)
-		var (
-			de *directoryEntry
-		)
+		var de *directoryEntry
 		switch {
 		case len(dirEntryMatch) == 4:
 			filenameShort := dirEntryMatch[1]

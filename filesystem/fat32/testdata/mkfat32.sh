@@ -16,6 +16,8 @@ set -x
 apk --update add dosfstools mtools sleuthkit
 dd if=/dev/zero of=/data/fat32.img bs=1M count=10
 mkfs.vfat -v -F 32 /data/fat32.img
+dd if=/dev/zero of=/data/fat32-4k.img bs=1M count=10
+mkfs.vfat -v -F 32 -S 4096 /data/fat32-4k.img
 echo "mtools_skip_check=1" >> /etc/mtools.conf
 mmd -i /data/fat32.img ::/foo
 mmd -i /data/fat32.img ::/foo/bar

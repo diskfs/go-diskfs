@@ -25,11 +25,13 @@ func dos20BPBFromBytes(b []byte) (*dos20BPB, error) {
 	}
 	bpb := dos20BPB{}
 	// make sure we have a valid sector size
+	// Modern mkfs.vfat creates FAT32 with larger sector sizes on 4K native disks
+	// Accept any power-of-2 sector size >= 512
 	sectorSize := binary.LittleEndian.Uint16(b[0:2])
-	if sectorSize != uint16(SectorSize512) {
-		return nil, fmt.Errorf("invalid sector size %d provided in DOS 2.0 BPB. Must be %d", sectorSize, SectorSize512)
+	if sectorSize < uint16(SectorSize512) || (sectorSize&(sectorSize-1)) != 0 {
+		return nil, fmt.Errorf("invalid sector size %d provided in DOS 2.0 BPB. Must be power of 2 and >= %d", sectorSize, SectorSize512)
 	}
-	bpb.bytesPerSector = SectorSize512
+	bpb.bytesPerSector = SectorSize(sectorSize)
 	bpb.sectorsPerCluster = b[2]
 	bpb.reservedSectors = binary.LittleEndian.Uint16(b[3:5])
 	bpb.fatCount = b[5]

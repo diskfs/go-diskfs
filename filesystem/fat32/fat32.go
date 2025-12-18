@@ -341,30 +341,36 @@ func Read(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) 
 		return nil, fmt.Errorf("requested size is smaller than minimum allowed FAT32 size %d", blocksize*4)
 	}
 	// load the information from the disk
-	// read first 512 bytes from the file
-	bsb := make([]byte, SectorSize512)
+	// We need to read at least the first logical sector to get the BPB
+	// Try reading up to 4096 bytes to handle 4K sector devices
+	maxSectorSize := 4096
+	bsb := make([]byte, maxSectorSize)
 	n, err := b.ReadAt(bsb, start)
 	if err != nil {
 		return nil, fmt.Errorf("could not read bytes from file: %w", err)
 	}
-	if uint16(n) < uint16(SectorSize512) {
-		return nil, fmt.Errorf("only could read %d bytes from file", n)
+	if n < int(SectorSize512) {
+		return nil, fmt.Errorf("only could read %d bytes from file, need at least %d", n, SectorSize512)
 	}
-	bs, err := msDosBootSectorFromBytes(bsb)
 
+	// Parse boot sector from the first 512 bytes (boot sector structure is always 512 bytes)
+	bs, err := msDosBootSectorFromBytes(bsb[:SectorSize512])
 	if err != nil {
 		return nil, fmt.Errorf("error reading MS-DOS Boot Sector: %w", err)
 	}
 
+	// Get the actual sector size from the BPB
+	bytesPerSector := bs.biosParameterBlock.dos331BPB.dos20BPB.bytesPerSector
 	sectorsPerFat := bs.biosParameterBlock.sectorsPerFat
-	fatSize := sectorsPerFat * uint32(SectorSize512)
+	fatSize := sectorsPerFat * uint32(bytesPerSector)
 	reservedSectors := bs.biosParameterBlock.dos331BPB.dos20BPB.reservedSectors
 	sectorsPerCluster := bs.biosParameterBlock.dos331BPB.dos20BPB.sectorsPerCluster
-	fatPrimaryStart := uint64(reservedSectors) * uint64(SectorSize512)
+	fatPrimaryStart := uint64(reservedSectors) * uint64(bytesPerSector)
 	fatSecondaryStart := fatPrimaryStart + uint64(fatSize)
 
+	// FSI sector is always 512 bytes
 	fsisBytes := make([]byte, 512)
-	read, err := b.ReadAt(fsisBytes, int64(bs.biosParameterBlock.fsInformationSector)*blocksize+start)
+	read, err := b.ReadAt(fsisBytes, int64(bs.biosParameterBlock.fsInformationSector)*int64(bytesPerSector)+start)
 	if err != nil {
 		return nil, fmt.Errorf("unable to read bytes for FSInformationSector: %w", err)
 	}
@@ -392,7 +398,7 @@ func Read(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) 
 		fsis:            *fsis,
 		table:           *fat,
 		dataStart:       dataStart,
-		bytesPerCluster: int(sectorsPerCluster) * int(SectorSize512),
+		bytesPerCluster: int(sectorsPerCluster) * int(bytesPerSector),
 		start:           start,
 		size:            size,
 		backend:         b,
@@ -994,7 +1000,6 @@ func (fs *FileSystem) mkLabel(parent *Directory, name string) (*directoryEntry, 
 // if it does not exist, it may or may not make it
 func (fs *FileSystem) readDirWithMkdir(p string, doMake bool) (*Directory, []*directoryEntry, error) {
 	paths, err := splitPath(p)
-
 	if err != nil {
 		return nil, nil, err
 	}
