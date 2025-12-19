@@ -2,7 +2,8 @@ package fat32
 
 import (
 	"fmt"
-	"time"
+
+	"github.com/diskfs/go-diskfs/util/timestamp"
 )
 
 // Directory represents a single directory in a FAT32 filesystem
@@ -50,6 +51,8 @@ func (d *Directory) createEntry(name string, cluster uint32, dir bool) (*directo
 		lfn = name
 	}
 
+	ts := timestamp.GetTime()
+
 	// allocate a slot for the new filename in the existing directory
 	entry := directoryEntry{
 		filenameLong:      lfn,
@@ -59,9 +62,9 @@ func (d *Directory) createEntry(name string, cluster uint32, dir bool) (*directo
 		fileSize:          uint32(0),
 		clusterLocation:   cluster,
 		filesystem:        d.filesystem,
-		createTime:        time.Now(),
-		modifyTime:        time.Now(),
-		accessTime:        time.Now(),
+		createTime:        ts,
+		modifyTime:        ts,
+		accessTime:        ts,
 		isSubdirectory:    dir,
 		isNew:             true,
 	}
@@ -97,7 +100,7 @@ func (d *Directory) renameEntry(oldFileName, newFileName string) error {
 	// TODO implement check for long/short filename after increment of sfn is correctly implemented
 
 	newEntries := make([]*directoryEntry, 0, len(d.entries))
-	var isReplaced = false
+	isReplaced := false
 	for _, entry := range d.entries {
 		if entry.filenameLong == newFileName {
 			continue // skip adding already existing file, will be overwritten
@@ -111,7 +114,7 @@ func (d *Directory) renameEntry(oldFileName, newFileName string) error {
 			entry.filenameLong = lfn
 			entry.filenameShort = shortName
 			entry.fileExtension = extension
-			entry.modifyTime = time.Now()
+			entry.modifyTime = timestamp.GetTime()
 			isReplaced = true
 		}
 		newEntries = append(newEntries, entry)
@@ -127,6 +130,8 @@ func (d *Directory) renameEntry(oldFileName, newFileName string) error {
 
 // createVolumeLabel create a volume label entry in the given directory, and return the handle to it
 func (d *Directory) createVolumeLabel(name string) (*directoryEntry, error) {
+	ts := timestamp.GetTime()
+
 	// allocate a slot for the new filename in the existing directory
 	entry := directoryEntry{
 		filenameLong:      "",
@@ -136,9 +141,9 @@ func (d *Directory) createVolumeLabel(name string) (*directoryEntry, error) {
 		fileSize:          uint32(0),
 		clusterLocation:   0,
 		filesystem:        d.filesystem,
-		createTime:        time.Now(),
-		modifyTime:        time.Now(),
-		accessTime:        time.Now(),
+		createTime:        ts,
+		modifyTime:        ts,
+		accessTime:        ts,
 		isSubdirectory:    false,
 		isNew:             true,
 		isVolumeLabel:     true,

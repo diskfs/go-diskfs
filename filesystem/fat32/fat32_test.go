@@ -8,14 +8,17 @@ package fat32_test
 import (
 	"bytes"
 	"crypto/rand"
+	"crypto/sha256"
 	"fmt"
 	"io"
 	mathrandv2 "math/rand/v2"
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	diskfs "github.com/diskfs/go-diskfs"
 	"github.com/diskfs/go-diskfs/backend"
@@ -130,6 +133,160 @@ func TestFat32With4kSectors(t *testing.T) {
 	}
 }
 
+func TestFat32SourceDateEpoch(t *testing.T) {
+	tempDir := t.TempDir()
+	testFile := path.Join(tempDir, "fat32-sde.img")
+	testImageSize := int64(10 * 1024 * 1024)
+	expectedTimestamp := "1609459200"
+
+	t.Setenv("SOURCE_DATE_EPOCH", "1609459200")
+
+	bk, err := file.CreateFromPath(testFile, testImageSize)
+	if err != nil {
+		t.Fatalf("creating backend failed: %v", err)
+	}
+
+	d, err := diskfs.OpenBackend(bk)
+	if err != nil {
+		t.Fatalf("opening disk failed: %v", err)
+	}
+	defer d.Close()
+
+	fs, err := d.CreateFilesystem(disk.FilesystemSpec{
+		Partition:   0,
+		FSType:      filesystem.TypeFat32,
+		VolumeLabel: "TESTFS",
+	})
+	if err != nil {
+		t.Fatalf("creating filesystem failed: %v", err)
+	}
+
+	// Create a test file
+	rw, err := fs.OpenFile("/test.txt", os.O_CREATE|os.O_RDWR)
+	if err != nil {
+		t.Fatalf("creating test file failed: %v", err)
+	}
+	_, _ = rw.Write([]byte("test content"))
+	rw.Close()
+
+	// Create a directory
+	if err := fs.Mkdir("/testdir"); err != nil {
+		t.Fatalf("creating test directory failed: %v", err)
+	}
+
+	fs.Close()
+
+	// Reopen and verify timestamps
+	bk, err = file.OpenFromPath(testFile, false)
+	if err != nil {
+		t.Fatalf("reopening backend failed: %v", err)
+	}
+
+	d, err = diskfs.OpenBackend(bk)
+	if err != nil {
+		t.Fatalf("reopening disk failed: %v", err)
+	}
+	defer d.Close()
+
+	fs, err = d.GetFilesystem(0)
+	if err != nil {
+		t.Fatalf("getting filesystem failed: %v", err)
+	}
+
+	entries, err := fs.ReadDir("/")
+	if err != nil {
+		t.Fatalf("reading directory failed: %v", err)
+	}
+
+	epochInt, err := strconv.ParseInt(expectedTimestamp, 10, 64)
+	if err != nil {
+		t.Fatalf("parsing expected timestamp failed: %v", err)
+	}
+
+	expected := time.Unix(epochInt, 0)
+
+	for _, entry := range entries {
+		if entry.Name() == "test.txt" || entry.Name() == "testdir" {
+			if entry.ModTime().Unix() != expected.Unix() {
+				t.Errorf("%s: timestamp mismatch, got %v, expected %v", entry.Name(), entry.ModTime().Unix(), expected.Unix())
+			}
+		}
+	}
+}
+
+func TestFat32Invariant(t *testing.T) {
+	tempDir := t.TempDir()
+
+	testFile := path.Join(tempDir, "fat32-invariant.img")
+	testFile1 := path.Join(tempDir, "fat32-invariant-1.img")
+	testImageSize := int64(10 * 1024 * 1024)
+
+	createFAT32Filesystem(t, testFile, testImageSize, true)
+	createFAT32Filesystem(t, testFile1, testImageSize, true)
+
+	testDataFile, err := os.Open(testFile)
+	if err != nil {
+		t.Fatalf("opening test data file failed: %v", err)
+	}
+
+	defer testDataFile.Close()
+
+	testDataFileSHA := sha256.New()
+
+	_, err = io.Copy(testDataFileSHA, testDataFile)
+	if err != nil {
+		t.Fatalf("hashing test file failed: %v", err)
+	}
+
+	testDataFile1, err := os.Open(testFile1)
+	if err != nil {
+		t.Fatalf("opening test data file 1 failed: %v", err)
+	}
+
+	defer testDataFile1.Close()
+
+	testDataFile1SHA := sha256.New()
+
+	_, err = io.Copy(testDataFile1SHA, testDataFile1)
+	if err != nil {
+		t.Fatalf("hashing test data file failed: %v", err)
+	}
+
+	if !bytes.Equal(testDataFileSHA.Sum(nil), testDataFile1SHA.Sum(nil)) {
+		t.Errorf("invariant FAT32 filesystems differ")
+	}
+}
+
+func createFAT32Filesystem(t *testing.T, imagePath string, size int64, reproducible bool) {
+	t.Helper()
+
+	bk, err := file.CreateFromPath(imagePath, size)
+	if err != nil {
+		t.Fatalf("creating backend failed: %v", err)
+	}
+
+	d, err := diskfs.OpenBackend(bk)
+	if err != nil {
+		t.Fatalf("opening disk failed: %v", err)
+	}
+
+	defer d.Close()
+
+	fs, err := d.CreateFilesystem(disk.FilesystemSpec{
+		Partition:    0,
+		FSType:       filesystem.TypeFat32,
+		VolumeLabel:  "TESTFS",
+		Reproducible: reproducible,
+	})
+	if err != nil {
+		t.Fatalf("creating filesystem failed: %v", err)
+	}
+
+	if err := fs.Close(); err != nil {
+		t.Fatalf("closing filesystem failed: %v", err)
+	}
+}
+
 func TestFat32Mkdir(t *testing.T) {
 	// only do this test if os.Getenv("TEST_IMAGE") contains a real image
 	if intImage == "" {
@@ -193,7 +350,7 @@ func TestFat32Mkdir(t *testing.T) {
 	t.Run("fat32.Create to Mkdir", func(t *testing.T) {
 		// This is to enable Create "fit" into the common testing logic
 		createShim := func(file backend.Storage, size int64, start int64, blocksize int64) (*fat32.FileSystem, error) {
-			return fat32.Create(file, size, start, blocksize, "")
+			return fat32.Create(file, size, start, blocksize, "", false)
 		}
 		t.Run("entire image", func(t *testing.T) {
 			runTest(t, 0, 0, createShim)
@@ -231,7 +388,7 @@ func TestFat32Create(t *testing.T) {
 
 				b := file.New(f, false)
 				// create the filesystem
-				fs, err := fat32.Create(b, tt.filesize-pre-post, pre, tt.blocksize, "")
+				fs, err := fat32.Create(b, tt.filesize-pre-post, pre, tt.blocksize, "", false)
 				switch {
 				case (err == nil && tt.err != nil) || (err != nil && tt.err == nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
 					t.Errorf("Create(%s, %d, %d, %d): mismatched errors\nactual %v\nexpected %v", f.Name(), tt.filesize, 0, tt.blocksize, err, tt.err)
@@ -584,7 +741,7 @@ func TestFat32OpenFile(t *testing.T) {
 				t.Fatalf("error getting file info for tmpfile %s: %v", f.Name(), err)
 			}
 			backend := file.New(f, false)
-			fs, err := fat32.Create(backend, fileInfo.Size()-pre-post, pre, 512, " NO NAME")
+			fs, err := fat32.Create(backend, fileInfo.Size()-pre-post, pre, 512, " NO NAME", false)
 			if err != nil {
 				t.Fatalf("error reading fat32 filesystem from %s: %v", f.Name(), err)
 			}
@@ -892,7 +1049,7 @@ func TestFat32Label(t *testing.T) {
 
 		theBackend := file.New(f, false)
 		// create an empty filesystem
-		fs, err := fat32.Create(theBackend, fileInfo.Size(), 0, 512, "go-diskfs")
+		fs, err := fat32.Create(theBackend, fileInfo.Size(), 0, 512, "go-diskfs", false)
 		if err != nil {
 			t.Fatalf("error creating fat32 filesystem: %v", err)
 		}
@@ -946,7 +1103,7 @@ func TestFat32Label(t *testing.T) {
 
 		theBackend := file.New(f, false)
 		// create an empty filesystem
-		fs, err := fat32.Create(theBackend, fileInfo.Size(), 0, 512, "go-diskfs")
+		fs, err := fat32.Create(theBackend, fileInfo.Size(), 0, 512, "go-diskfs", false)
 		if err != nil {
 			t.Fatalf("error creating fat32 filesystem: %v", err)
 		}
@@ -994,7 +1151,7 @@ func TestFat32MkdirCases(t *testing.T) {
 	}
 	defer os.Remove(f.Name())
 	theBackend := file.New(f, false)
-	fs, err := fat32.Create(theBackend, 1048576, 0, 512, "")
+	fs, err := fat32.Create(theBackend, 1048576, 0, 512, "", false)
 	if err != nil {
 		t.Error(err.Error())
 	}
@@ -1352,7 +1509,7 @@ func Test_Rename(t *testing.T) {
 
 			b := file.New(f, false)
 			// create an empty filesystem
-			fs, err := fat32.Create(b, fileInfo.Size(), 0, 512, "go-diskfs")
+			fs, err := fat32.Create(b, fileInfo.Size(), 0, 512, "go-diskfs", false)
 			if err != nil {
 				t.Fatalf("error creating fat32 filesystem: %v", err)
 			}
@@ -1511,7 +1668,7 @@ func Test_Remove(t *testing.T) {
 
 			b := file.New(f, false)
 			// create an empty filesystem
-			fs, err := fat32.Create(b, fileInfo.Size(), 0, 512, "go-diskfs")
+			fs, err := fat32.Create(b, fileInfo.Size(), 0, 512, "go-diskfs", false)
 			if err != nil {
 				t.Fatalf("error creating fat32 filesystem: %v", err)
 			}
