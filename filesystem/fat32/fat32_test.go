@@ -111,6 +111,25 @@ func TestFat32Type(t *testing.T) {
 	}
 }
 
+func TestFat32With4kSectors(t *testing.T) {
+	bk, err := file.OpenFromPath(fat32.Fat32File4kB, true)
+	if err != nil {
+		t.Fatalf("Failed to open file with 4k sectors: %v", err)
+	}
+
+	d, err := diskfs.OpenBackend(bk)
+	if err != nil {
+		t.Fatalf("Failed to open disk with 4k sectors: %v", err)
+	}
+
+	defer d.Close()
+
+	_, err = d.GetFilesystem(0)
+	if err != nil {
+		t.Fatalf("Failed to get filesystem with 4k sectors: %v", err)
+	}
+}
+
 func TestFat32Mkdir(t *testing.T) {
 	// only do this test if os.Getenv("TEST_IMAGE") contains a real image
 	if intImage == "" {
@@ -1249,7 +1268,6 @@ func Test_Rename(t *testing.T) {
 				// do not create orig file
 			},
 			post: func(_ *testing.T, _ *fat32.FileSystem) {
-
 			},
 		},
 		{
@@ -1406,7 +1424,6 @@ func Test_Remove(t *testing.T) {
 				// do not create any file
 			},
 			post: func(_ *testing.T, _ *fat32.FileSystem) {
-
 			},
 		},
 		{
