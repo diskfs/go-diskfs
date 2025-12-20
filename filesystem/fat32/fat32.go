@@ -93,7 +93,7 @@ func (fs *FileSystem) Equal(a *FileSystem) bool {
 //
 // If the provided blocksize is 0, it will use the default of 512 bytes. If it is any number other than 0
 // or 512, it will return an error.
-func Create(b backend.Storage, size, start, blocksize int64, volumeLabel string) (*FileSystem, error) {
+func Create(b backend.Storage, size, start, blocksize int64, volumeLabel string, reproducible bool) (*FileSystem, error) {
 	// blocksize must be <=0 or exactly SectorSize512 or error
 	if blocksize != int64(SectorSize512) && blocksize > 0 {
 		return nil, fmt.Errorf("blocksize for FAT32 must be either 512 bytes or 0, not %d", blocksize)
@@ -104,10 +104,20 @@ func Create(b backend.Storage, size, start, blocksize int64, volumeLabel string)
 	if size < blocksize*4 {
 		return nil, fmt.Errorf("requested size is smaller than minimum allowed FAT32, requested %d minimum %d", size, blocksize*4)
 	}
-	// FAT filesystems use time-of-day of creation as a volume ID
-	now := time.Now()
-	// because we like the fudges other people did for uniqueness
-	volid := uint32(now.Unix()<<20 | (now.UnixNano() / 1000000))
+
+	var volid uint32
+
+	// if we are not invariant, create a volume ID
+	// otherwise, leave it as zero
+	// note: `mkfs.vfat --invariant` uses a volid of 0xabcd1234 in little-endian format
+	// but we will just use zero for simplicity since we do not care about matching exactly
+	// and only want reproducible builds
+	if !reproducible {
+		// FAT filesystems use time-of-day of creation as a volume ID
+		now := time.Now()
+		// because we like the fudges other people did for uniqueness
+		volid = uint32(now.Unix()<<20 | (now.UnixNano() / 1000000))
+	}
 
 	fsisPrimarySector := uint16(1)
 	backupBootSector := uint16(6)
@@ -602,6 +612,7 @@ func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 	if err != nil {
 		return nil, fmt.Errorf("could not read directory entries for %s: %w", dir, err)
 	}
+
 	// we now know that the directory exists, see if the file exists
 	var targetEntry *directoryEntry
 	for _, e := range entries {

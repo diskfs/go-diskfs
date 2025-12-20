@@ -83,7 +83,6 @@ func (d *Disk) Partition(table partition.Table) error {
 // is invalid, or the partition is invalid
 func (d *Disk) WritePartitionContents(part int, reader io.Reader) (int64, error) {
 	backingRwFile, err := d.Backend.Writable()
-
 	if err != nil {
 		return -1, err
 	}
@@ -129,6 +128,8 @@ type FilesystemSpec struct {
 	FSType      filesystem.Type
 	VolumeLabel string
 	WorkDir     string
+	// The filesystem will be created in a reproducible manner following SOURCE_DATE_EPOCH guidelines.
+	Reproducible bool
 }
 
 // CreateFilesystem creates a filesystem on a disk image, the equivalent of mkfs.
@@ -171,7 +172,7 @@ func (d *Disk) CreateFilesystem(spec FilesystemSpec) (filesystem.FileSystem, err
 
 	switch spec.FSType {
 	case filesystem.TypeFat32:
-		return fat32.Create(d.Backend, size, start, d.LogicalBlocksize, spec.VolumeLabel)
+		return fat32.Create(d.Backend, size, start, d.LogicalBlocksize, spec.VolumeLabel, spec.Reproducible)
 	case filesystem.TypeISO9660:
 		return iso9660.Create(d.Backend, size, start, d.LogicalBlocksize, spec.WorkDir)
 	case filesystem.TypeExt4:
