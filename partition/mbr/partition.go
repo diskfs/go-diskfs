@@ -8,7 +8,10 @@ import (
 	"io"
 
 	"github.com/diskfs/go-diskfs/backend"
+	"github.com/diskfs/go-diskfs/partition/part"
 )
+
+var _ part.Partition = &Partition{}
 
 // Partition represents the structure of a single partition on the disk
 // note that start and end cylinder, head, sector (CHS) are ignored, for the most part.
@@ -211,4 +214,9 @@ func (p *Partition) sectorSizes() (physical, logical int) {
 // partition table UUID with the partition number as a suffix.
 func (p *Partition) UUID() string {
 	return p.partitionUUID
+}
+
+// Label returns the partition label. MBR partitions do not have labels, so an empty string is returned.
+func (p *Partition) Label() string {
+	return ""
 }

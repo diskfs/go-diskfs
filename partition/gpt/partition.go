@@ -10,6 +10,7 @@ import (
 	"unicode/utf16"
 
 	"github.com/diskfs/go-diskfs/backend"
+	"github.com/diskfs/go-diskfs/partition/part"
 	uuid "github.com/google/uuid"
 )
 
@@ -17,6 +18,8 @@ import (
 const PartitionEntrySize = 128
 
 var zeroUUIDBytes = make([]byte, 16)
+
+var _ part.Partition = &Partition{}
 
 // Partition represents the structure of a single partition on the disk
 type Partition struct {
@@ -232,22 +235,22 @@ func (p *Partition) ReadContents(f backend.File, out io.Writer) (int64, error) {
 
 // initEntry adjust the Start/End/Size entries and ensure it has a GUID
 func (p *Partition) initEntry(blocksize, starting uint64) error {
-	part := p
-	if part.Type == Unused {
+	actualPart := p
+	if actualPart.Type == Unused {
 		return nil
 	}
 	var guid uuid.UUID
 
-	if part.GUID == "" {
+	if actualPart.GUID == "" {
 		guid, _ = uuid.NewRandom()
 	} else {
 		var err error
-		guid, err = uuid.Parse(part.GUID)
+		guid, err = uuid.Parse(actualPart.GUID)
 		if err != nil {
-			return fmt.Errorf("invalid UUID: %s", part.GUID)
+			return fmt.Errorf("invalid UUID: %s", actualPart.GUID)
 		}
 	}
-	part.GUID = strings.ToUpper(guid.String())
+	actualPart.GUID = strings.ToUpper(guid.String())
 
 	// check size matches sectors
 	// valid possibilities:
@@ -255,22 +258,22 @@ func (p *Partition) initEntry(blocksize, starting uint64) error {
 	// 2- size>0, start>=0, end=0 - valid - begin at start for size bytes
 	// 3- size>0, start=0, end=0 - valid - begin at end of previous partition, go for size bytes
 	// anything else is an error
-	size, start, end := part.Size, part.Start, part.End
+	size, start, end := actualPart.Size, actualPart.Start, actualPart.End
 	calculatedSize := (end - start + 1) * blocksize
 	switch {
 	case end >= start && size == calculatedSize:
 	case size == 0 && end >= start:
 		// provided specific start and end, so calculate size
-		part.Size = calculatedSize
+		actualPart.Size = calculatedSize
 	case size > 0 && size%blocksize == 0 && start > 0 && end == 0:
 		// provided specific start and size, so calculate end
-		part.End = start + size/blocksize - 1
+		actualPart.End = start + size/blocksize - 1
 	case size > 0 && size%blocksize == 0 && start == 0 && end == 0:
 		// we start right after the end of the previous
 		start = starting
 		end = start + size/blocksize - 1
-		part.Start = start
-		part.End = end
+		actualPart.Start = start
+		actualPart.End = end
 	default:
 		return fmt.Errorf("invalid partition entry, size %d bytes does not match start sector %d and end sector %d", size, start, end)
 	}
@@ -295,6 +298,11 @@ func (p *Partition) Equal(o *Partition) bool {
 // UUID returns the partitions UUID
 func (p *Partition) UUID() string {
 	return p.GUID
+}
+
+// Label returns the partition label
+func (p *Partition) Label() string {
+	return p.Name
 }
 
 // Expand increases the size of the partition by a number of sectors
