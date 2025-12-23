@@ -337,12 +337,13 @@ func Create(b backend.Storage, size, start, blocksize int64, volumeLabel string,
 // which allow you to work directly with partitions, rather than having to calculate (and hopefully not make any errors)
 // where a partition starts and ends.
 //
-// If the provided blocksize is 0, it will use the default of 512 bytes. If it is any number other than 0
-// or 512, it will return an error.
+// If the provided blocksize is 0, it will use the default of 512 bytes. The blocksize parameter is only used
+// for validation; the actual bytes per sector is read from the filesystem's BPB.
 func Read(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) {
-	// blocksize must be <=0 or exactly SectorSize512 or error
-	if blocksize != int64(SectorSize512) && blocksize > 0 {
-		return nil, fmt.Errorf("blocksize for FAT32 must be either 512 bytes or 0, not %d", blocksize)
+	// blocksize validation - we accept 0 (default), 512, or 4096 (for 4k native disks)
+	// The actual bytesPerSector is read from the BPB regardless of this parameter
+	if blocksize != 0 && blocksize != int64(SectorSize512) && blocksize != 4096 {
+		return nil, fmt.Errorf("blocksize for FAT32 must be 0, 512, or 4096 bytes, not %d", blocksize)
 	}
 	if size > Fat32MaxSize {
 		return nil, fmt.Errorf("requested size is larger than maximum allowed FAT32 size %d", Fat32MaxSize)
@@ -444,7 +445,8 @@ func (fs *FileSystem) writeBootSector() error {
 
 	// write backup boot sector to the file
 	if fs.bootSector.biosParameterBlock.backupBootSector > 0 {
-		count, err = writableFile.WriteAt(b, int64(fs.bootSector.biosParameterBlock.backupBootSector)*int64(SectorSize512)+fs.start)
+		bytesPerSector := fs.bootSector.biosParameterBlock.dos331BPB.dos20BPB.bytesPerSector
+		count, err = writableFile.WriteAt(b, int64(fs.bootSector.biosParameterBlock.backupBootSector)*int64(bytesPerSector)+fs.start)
 		if err != nil {
 			return fmt.Errorf("error writing MS-DOS Boot Sector to disk: %w", err)
 		}
@@ -459,7 +461,8 @@ func (fs *FileSystem) writeBootSector() error {
 func (fs *FileSystem) writeFsis() error {
 	fsInformationSector := fs.bootSector.biosParameterBlock.fsInformationSector
 	backupBootSector := fs.bootSector.biosParameterBlock.backupBootSector
-	fsisPrimary := int64(fsInformationSector * uint16(SectorSize512))
+	bytesPerSector := fs.bootSector.biosParameterBlock.dos331BPB.dos20BPB.bytesPerSector
+	fsisPrimary := int64(fsInformationSector) * int64(bytesPerSector)
 
 	fsisBytes := fs.fsis.toBytes()
 	writableFile, err := fs.backend.Writable()
@@ -472,7 +475,7 @@ func (fs *FileSystem) writeFsis() error {
 	}
 
 	if backupBootSector > 0 {
-		if _, err := writableFile.WriteAt(fsisBytes, int64(backupBootSector+1)*int64(SectorSize512)+fs.start); err != nil {
+		if _, err := writableFile.WriteAt(fsisBytes, int64(backupBootSector+1)*int64(bytesPerSector)+fs.start); err != nil {
 			return fmt.Errorf("unable to write backup Fsis: %w", err)
 		}
 	}
@@ -482,7 +485,8 @@ func (fs *FileSystem) writeFsis() error {
 
 func (fs *FileSystem) writeFat() error {
 	reservedSectors := fs.bootSector.biosParameterBlock.dos331BPB.dos20BPB.reservedSectors
-	fatPrimaryStart := uint64(reservedSectors) * uint64(SectorSize512)
+	bytesPerSector := fs.bootSector.biosParameterBlock.dos331BPB.dos20BPB.bytesPerSector
+	fatPrimaryStart := uint64(reservedSectors) * uint64(bytesPerSector)
 	fatSecondaryStart := fatPrimaryStart + uint64(fs.table.size)
 
 	fatBytes := fs.table.bytes()
