@@ -13,4 +13,5 @@ type Partition interface {
 	ReadContents(backend.File, io.Writer) (int64, error)
 	WriteContents(backend.WritableFile, io.Reader) (uint64, error)
 	UUID() string
+	Label() string
 }
