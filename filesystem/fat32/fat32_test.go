@@ -133,6 +133,167 @@ func TestFat32With4kSectors(t *testing.T) {
 	}
 }
 
+// TestFat32Write512 tests writing to a standard 512-byte sector FAT32
+func TestFat32Write512(t *testing.T) {
+	tempDir := t.TempDir()
+	testFile := path.Join(tempDir, "fat32-512.img")
+	testImageSize := int64(10 * 1024 * 1024)
+
+	// Create filesystem with standard 512-byte sectors
+	bk, err := file.CreateFromPath(testFile, testImageSize)
+	if err != nil {
+		t.Fatalf("creating backend failed: %v", err)
+	}
+
+	d, err := diskfs.OpenBackend(bk)
+	if err != nil {
+		t.Fatalf("opening disk failed: %v", err)
+	}
+	defer d.Close()
+
+	fs, err := d.CreateFilesystem(disk.FilesystemSpec{
+		Partition:   0,
+		FSType:      filesystem.TypeFat32,
+		VolumeLabel: "TEST512",
+	})
+	if err != nil {
+		t.Fatalf("creating filesystem failed: %v", err)
+	}
+
+	// Write a test file
+	testContent := []byte("Hello 512!")
+	f, err := fs.OpenFile("/test.txt", os.O_CREATE|os.O_RDWR)
+	if err != nil {
+		t.Fatalf("creating test file failed: %v", err)
+	}
+
+	if _, err := f.Write(testContent); err != nil {
+		t.Fatalf("writing to file failed: %v", err)
+	}
+
+	if err := f.Close(); err != nil {
+		t.Fatalf("closing file failed: %v", err)
+	}
+
+	if err := fs.Close(); err != nil {
+		t.Fatalf("closing filesystem failed: %v", err)
+	}
+
+	// Reopen and read back
+	bk, err = file.OpenFromPath(testFile, false)
+	if err != nil {
+		t.Fatalf("reopening backend failed: %v", err)
+	}
+
+	d, err = diskfs.OpenBackend(bk)
+	if err != nil {
+		t.Fatalf("reopening disk failed: %v", err)
+	}
+	defer d.Close()
+
+	fs, err = d.GetFilesystem(0)
+	if err != nil {
+		t.Fatalf("getting filesystem failed: %v", err)
+	}
+
+	f, err = fs.OpenFile("/test.txt", os.O_RDONLY)
+	if err != nil {
+		t.Fatalf("opening test file for reading failed: %v", err)
+	}
+
+	defer f.Close()
+
+	readBuf := make([]byte, 100)
+	n, _ := f.Read(readBuf)
+
+	if !bytes.Equal(readBuf[:n], testContent) {
+		t.Errorf("content mismatch: got %q, expected %q", string(readBuf[:n]), string(testContent))
+	}
+}
+
+// TestFat32Write4k tests writing to a 4k sector FAT32
+func TestFat32Write4k(t *testing.T) {
+	tempDir := t.TempDir()
+	testFile := path.Join(tempDir, "fat32-4k.img")
+
+	// Copy the 4k image to a temp file
+	originalData, err := os.ReadFile(fat32.Fat32File4kB)
+	if err != nil {
+		t.Fatalf("reading original 4k image failed: %v", err)
+	}
+
+	if err := os.WriteFile(testFile, originalData, 0o600); err != nil {
+		t.Fatalf("creating test file copy failed: %v", err)
+	}
+
+	// Open and write
+	bk, err := file.OpenFromPath(testFile, false)
+	if err != nil {
+		t.Fatalf("opening backend failed: %v", err)
+	}
+
+	d, err := diskfs.OpenBackend(bk)
+	if err != nil {
+		t.Fatalf("opening disk failed: %v", err)
+	}
+	defer d.Close()
+
+	fs, err := d.GetFilesystem(0)
+	if err != nil {
+		t.Fatalf("getting 4k sector filesystem failed: %v", err)
+	}
+
+	// Write a test file
+	testContent := []byte("Hello 4k!")
+	f, err := fs.OpenFile("/test4k.txt", os.O_CREATE|os.O_RDWR)
+	if err != nil {
+		t.Fatalf("creating test file failed: %v", err)
+	}
+
+	if _, err := f.Write(testContent); err != nil {
+		t.Fatalf("writing to file failed: %v", err)
+	}
+
+	if err := f.Close(); err != nil {
+		t.Fatalf("closing file failed: %v", err)
+	}
+
+	if err := fs.Close(); err != nil {
+		t.Fatalf("closing filesystem failed: %v", err)
+	}
+
+	// Reopen and read back
+	bk, err = file.OpenFromPath(testFile, false)
+	if err != nil {
+		t.Fatalf("reopening backend failed: %v", err)
+	}
+
+	d, err = diskfs.OpenBackend(bk)
+	if err != nil {
+		t.Fatalf("reopening disk failed: %v", err)
+	}
+	defer d.Close()
+
+	fs, err = d.GetFilesystem(0)
+	if err != nil {
+		t.Fatalf("getting filesystem after write failed: %v", err)
+	}
+
+	f, err = fs.OpenFile("/test4k.txt", os.O_RDONLY)
+	if err != nil {
+		t.Fatalf("opening test file for reading failed: %v", err)
+	}
+
+	defer f.Close()
+
+	readBuf := make([]byte, 100)
+	n, _ := f.Read(readBuf)
+
+	if !bytes.Equal(readBuf[:n], testContent) {
+		t.Errorf("content mismatch: got %q, expected %q", string(readBuf[:n]), string(testContent))
+	}
+}
+
 func TestFat32SourceDateEpoch(t *testing.T) {
 	tempDir := t.TempDir()
 	testFile := path.Join(tempDir, "fat32-sde.img")
