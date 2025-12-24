@@ -753,6 +753,27 @@ func (fs *FileSystem) Symlink(oldpath, newpath string) error {
 	return filesystem.ErrNotImplemented
 }
 
+// Chtimes changes the file creation, access and modification times
+func (fs *FileSystem) Chtimes(p string, ctime, atime, mtime time.Time) error {
+	_, entry, err := fs.getEntryAndParent(p)
+	if err != nil {
+		return err
+	}
+	if entry == nil {
+		return fmt.Errorf("target file %s does not exist", p)
+	}
+	// get the inode
+	inodeNumber := entry.inode
+	inode, err := fs.readInode(inodeNumber)
+	if err != nil {
+		return fmt.Errorf("could not read inode number %d: %v", inodeNumber, err)
+	}
+	inode.createTime = ctime
+	inode.accessTime = atime
+	inode.modifyTime = mtime
+	return fs.writeInode(inode)
+}
+
 // Chmod changes the mode of the named file to mode. If the file is a symbolic link,
 // it changes the mode of the link's target.
 //
