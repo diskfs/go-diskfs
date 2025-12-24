@@ -204,12 +204,12 @@ func (d *Disk) GetFilesystem(part int) (filesystem.FileSystem, error) {
 		size = d.Size
 		start = 0
 	case d.Table == nil:
-		return nil, fmt.Errorf("cannot read filesystem on a partition without a partition table")
+		return nil, &NoPartitionTableError{}
 	default:
 		partitions := d.Table.GetPartitions()
 		// API indexes from 1, but slice from 0
 		if part > len(partitions) {
-			return nil, fmt.Errorf("cannot get filesystem on partition %d greater than maximum partition %d", part, len(partitions))
+			return nil, NewMaxPartitionsExceededError(part, len(partitions))
 		}
 		size = partitions[part-1].GetSize()
 		start = partitions[part-1].GetStart()
@@ -242,7 +242,7 @@ func (d *Disk) GetFilesystem(part int) (filesystem.FileSystem, error) {
 		return ext4FS, nil
 	}
 	log.Debugf("ext4 failed: %v", err)
-	return nil, fmt.Errorf("unknown filesystem on partition %d", part)
+	return nil, NewUnknownFilesystemError(part)
 }
 
 // Close the disk. Once successfully closed, it can no longer be used.

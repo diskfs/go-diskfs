@@ -8,6 +8,7 @@ package disk_test
 import (
 	"bytes"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -521,9 +522,9 @@ func TestGetFilesystem(t *testing.T) {
 			LogicalBlocksize:  512,
 			PhysicalBlocksize: 512,
 		}
-		expected := fmt.Errorf("cannot read filesystem on a partition without a partition table")
 		fs, err := d.GetFilesystem(1)
-		if err == nil || err.Error() != expected.Error() {
+		expected := &disk.NoPartitionTableError{}
+		if err == nil || !errors.Is(err, expected) {
 			t.Errorf("Mismatched error: actual %v expected %v", err, expected)
 		}
 		if fs != nil {
