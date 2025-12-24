@@ -3,7 +3,13 @@ package ext4
 import (
 	"fmt"
 	"io"
+	"io/fs"
+
+	"github.com/diskfs/go-diskfs/filesystem"
 )
+
+var _ filesystem.File = (*File)(nil)
+var _ fs.File = (*File)(nil)
 
 // File represents a single file in an ext4 filesystem
 type File struct {
@@ -211,4 +217,14 @@ func (fl *File) Seek(offset int64, whence int) (int64, error) {
 func (fl *File) Close() error {
 	*fl = File{}
 	return nil
+}
+
+// Stat returns a fs.FileInfo structure describing file
+func (fl *File) Stat() (fs.FileInfo, error) {
+	return &FileInfo{
+		modTime: fl.modifyTime,
+		name:    fl.filename,
+		size:    int64(fl.size),
+		isDir:   fl.directoryEntry.fileType == dirFileTypeDirectory,
+	}, nil
 }

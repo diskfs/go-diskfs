@@ -1,7 +1,9 @@
 package fat32
 
 import (
+	"fmt"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -68,4 +70,19 @@ func (fi FileInfo) Size() int64 {
 //nolint:gocritic // we need this to comply with fs.FileInfo
 func (fi FileInfo) Sys() interface{} {
 	return nil
+}
+
+func shortNameFromDirEntry(e *directoryEntry) string {
+	shortName := e.filenameShort
+	if e.lowercaseShortname {
+		shortName = strings.ToLower(shortName)
+	}
+	fileExtension := e.fileExtension
+	if e.lowercaseExtension {
+		fileExtension = strings.ToLower(fileExtension)
+	}
+	if fileExtension != "" {
+		shortName = fmt.Sprintf("%s.%s", shortName, fileExtension)
+	}
+	return shortName
 }

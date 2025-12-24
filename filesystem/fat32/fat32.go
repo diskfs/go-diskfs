@@ -3,6 +3,7 @@ package fat32
 import (
 	"errors"
 	"fmt"
+	iofs "io/fs"
 	"os"
 	"path"
 	"strings"
@@ -508,6 +509,7 @@ func (fs *FileSystem) writeFat() error {
 
 // interface guard
 var _ filesystem.FileSystem = (*FileSystem)(nil)
+var _ iofs.FS = (*FileSystem)(nil)
 
 // Do cleaning job for fat32. Note that fat32 does not have side-effects so we do not do anything.
 func (fs *FileSystem) Close() error {
@@ -575,26 +577,25 @@ func (fs *FileSystem) ReadDir(p string) ([]os.FileInfo, error) {
 		if e.isVolumeLabel {
 			continue
 		}
-		shortName := e.filenameShort
-		if e.lowercaseShortname {
-			shortName = strings.ToLower(shortName)
-		}
-		fileExtension := e.fileExtension
-		if e.lowercaseExtension {
-			fileExtension = strings.ToLower(fileExtension)
-		}
-		if fileExtension != "" {
-			shortName = fmt.Sprintf("%s.%s", shortName, fileExtension)
-		}
 		ret = append(ret, FileInfo{
 			modTime:   e.modifyTime,
 			name:      e.filenameLong,
-			shortName: shortName,
+			shortName: shortNameFromDirEntry(e),
 			size:      int64(e.fileSize),
 			isDir:     e.isSubdirectory,
 		})
 	}
 	return ret, nil
+}
+
+// Open returns an fs.File from which you can read the contents of a file
+// Especially useful for doing fs.FS operations
+func (fs *FileSystem) Open(p string) (iofs.File, error) {
+	file, err := fs.OpenFile(p, os.O_RDONLY)
+	if err != nil {
+		return nil, err
+	}
+	return file, nil
 }
 
 // OpenFile returns an io.ReadWriter from which you can read the contents of a file

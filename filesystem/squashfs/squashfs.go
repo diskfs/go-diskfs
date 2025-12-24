@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	iofs "io/fs"
 	"math"
 	"os"
 	"path"
@@ -231,6 +232,7 @@ func Read(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) 
 
 // interface guard
 var _ filesystem.FileSystem = (*FileSystem)(nil)
+var _ iofs.FS = (*FileSystem)(nil)
 
 // Delete the temporary directory created during the SquashFS image creation
 func (fs *FileSystem) Close() error {
@@ -366,6 +368,16 @@ func (fs *FileSystem) ReadDir(p string) ([]os.FileInfo, error) {
 		}
 	}
 	return fi, nil
+}
+
+// Open returns an fs.File from which you can read the contents of a file
+// Especially useful for doing fs.FS operations
+func (fs *FileSystem) Open(p string) (iofs.File, error) {
+	file, err := fs.OpenFile(p, os.O_RDONLY)
+	if err != nil {
+		return nil, err
+	}
+	return file, nil
 }
 
 // OpenFile returns an io.ReadWriter from which you can read the contents of a file

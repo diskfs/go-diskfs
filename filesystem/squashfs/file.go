@@ -3,10 +3,14 @@ package squashfs
 import (
 	"fmt"
 	"io"
+	iofs "io/fs"
 	"os"
 
 	"github.com/diskfs/go-diskfs/filesystem"
 )
+
+var _ filesystem.File = (*File)(nil)
+var _ iofs.File = (*File)(nil)
 
 // File represents a single file in a squashfs filesystem
 //
@@ -15,13 +19,14 @@ import (
 //	include all of the data
 type File struct {
 	*extendedFile
-	isReadWrite   bool
-	isAppend      bool
-	offset        int64
-	filesystem    *FileSystem
-	blockLocation int64  // the position of the last block decompressed
-	blockSize     uint32 // the size of the last block decompressed, needed for sparse files
-	block         []byte // the actual last block decompressed
+	directoryEntry *directoryEntry
+	isReadWrite    bool
+	isAppend       bool
+	offset         int64
+	filesystem     *FileSystem
+	blockLocation  int64  // the position of the last block decompressed
+	blockSize      uint32 // the size of the last block decompressed, needed for sparse files
+	block          []byte // the actual last block decompressed
 }
 
 // Read reads up to len(b) bytes from the File.
@@ -181,4 +186,9 @@ func (fl *File) Seek(offset int64, whence int) (int64, error) {
 func (fl *File) Close() error {
 	fl.filesystem = nil
 	return nil
+}
+
+// Stat returns a fs.FileInfo structure describing file
+func (fl *File) Stat() (iofs.FileInfo, error) {
+	return fl.directoryEntry, nil
 }

@@ -709,6 +709,7 @@ func Read(b backend.Storage, size, start, sectorsize int64) (*FileSystem, error)
 
 // interface guard
 var _ filesystem.FileSystem = (*FileSystem)(nil)
+var _ iofs.FS = (*FileSystem)(nil)
 
 // Do cleaning job for ext4. Note that ext4 does not have side-effects so we do not do anything.
 func (fs *FileSystem) Close() error {
@@ -796,6 +797,16 @@ func (fs *FileSystem) ReadDir(p string) ([]os.FileInfo, error) {
 	}
 
 	return ret, nil
+}
+
+// Open returns an fs.File from which you can read the contents of a file
+// Especially useful for doing fs.FS operations
+func (fs *FileSystem) Open(p string) (iofs.File, error) {
+	file, err := fs.OpenFile(p, os.O_RDONLY)
+	if err != nil {
+		return nil, err
+	}
+	return file, nil
 }
 
 // OpenFile returns an io.ReadWriter from which you can read the contents of a file

@@ -3,6 +3,7 @@ package iso9660
 import (
 	"encoding/binary"
 	"fmt"
+	iofs "io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -288,6 +289,7 @@ func Read(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) 
 
 // interface guard
 var _ filesystem.FileSystem = (*FileSystem)(nil)
+var _ iofs.FS = (*FileSystem)(nil)
 
 // Delete the temporary directory created during the iso9660 image creation
 func (fsm *FileSystem) Close() error {
@@ -402,6 +404,16 @@ func (fsm *FileSystem) ReadDir(p string) ([]os.FileInfo, error) {
 		}
 	}
 	return fi, nil
+}
+
+// Open returns an fs.File from which you can read the contents of a file
+// Especially useful for doing fs.FS operations
+func (fsm *FileSystem) Open(p string) (iofs.File, error) {
+	file, err := fsm.OpenFile(p, os.O_RDONLY)
+	if err != nil {
+		return nil, err
+	}
+	return file, nil
 }
 
 // OpenFile returns an io.ReadWriter from which you can read the contents of a file
