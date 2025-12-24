@@ -8,6 +8,7 @@ import (
 	"math"
 	"os"
 	"path"
+	"time"
 
 	"github.com/diskfs/go-diskfs/backend"
 	"github.com/diskfs/go-diskfs/filesystem"
@@ -330,6 +331,13 @@ func (fs *FileSystem) Chmod(name string, mode os.FileMode) error {
 //nolint:revive // parameters will be used eventually
 func (fs *FileSystem) Chown(name string, uid, gid int) error {
 	// https://dr-emann.github.io/squashfs/squashfs.html#_id_table
+	return filesystem.ErrNotImplemented
+}
+
+// Chtimes changes the file creation, access and modification times
+//
+//nolint:revive // parameters will be used eventually
+func (fs *FileSystem) Chtimes(name string, ctime, atime, mtime time.Time) error {
 	return filesystem.ErrNotImplemented
 }
 

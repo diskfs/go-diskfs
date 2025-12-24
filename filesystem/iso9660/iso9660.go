@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"time"
 
 	"github.com/diskfs/go-diskfs/backend"
 	"github.com/diskfs/go-diskfs/filesystem"
@@ -353,6 +354,13 @@ func (fsm *FileSystem) Symlink(oldpath, newpath string) error {
 func (fsm *FileSystem) Chmod(name string, mode os.FileMode) error {
 	// Rock Ridge has UNIX-style file modes support
 	// https://en.wikipedia.org/wiki/ISO_9660#Rock_Ridge
+	return filesystem.ErrNotImplemented
+}
+
+// Chtimes changes the file creation, access and modification times
+//
+//nolint:revive // parameters will be used eventually
+func (fs *FileSystem) Chtimes(name string, ctime, atime, mtime time.Time) error {
 	return filesystem.ErrNotImplemented
 }
 

@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/diskfs/go-diskfs/backend/file"
 	"github.com/go-test/deep"
@@ -534,5 +535,58 @@ func TestCreate(t *testing.T) {
 	}
 	if fs == nil {
 		t.Fatalf("Expected non-nil filesystem after creation")
+	}
+}
+
+func TestChtimes(t *testing.T) {
+	outfile := testCreateImgCopyFrom(t, imgFile)
+	f, err := os.OpenFile(outfile, os.O_RDWR, 0)
+	if err != nil {
+		t.Fatalf("Error opening test image: %v", err)
+	}
+	defer f.Close()
+
+	b := file.New(f, false)
+	fs, err := Read(b, 100*MB, 0, 512)
+	if err != nil {
+		t.Fatalf("Error reading filesystem: %v", err)
+	}
+	newfile := "/testfile"
+	mode := os.O_RDWR | os.O_CREATE
+	fileIntf, err := fs.OpenFile(newfile, mode)
+	if err != nil {
+		t.Fatalf("error opening file %s: %v", newfile, err)
+	}
+	fileImpl, ok := fileIntf.(*File)
+	if !ok {
+		t.Fatalf("could not cast to ext4.File")
+	}
+	ctime := fileImpl.createTime.Add(-30 * time.Minute)
+	atime := fileImpl.accessTime.Add(60 * time.Minute)
+	mtime := fileImpl.modifyTime.Add(120 * time.Minute)
+
+	if err := fs.Chtimes(newfile, ctime, atime, mtime); err != nil {
+		t.Fatalf("error changing times on file %s: %v", newfile, err)
+	}
+	// now check that it was updated
+	// get existing times
+	fileIntf, err = fs.OpenFile(newfile, os.O_RDONLY)
+	if err != nil {
+		t.Fatalf("error opening file %s: %v", newfile, err)
+	}
+	// ext4 only supports second-level time resolution
+
+	fileImpl, ok = fileIntf.(*File)
+	if !ok {
+		t.Fatalf("could not cast to ext4.File")
+	}
+	if fileImpl.createTime.Unix() != ctime.Unix() {
+		t.Errorf("mismatched create time, actual %v expected %v", fileImpl.createTime, ctime)
+	}
+	if fileImpl.accessTime.Unix() != atime.Unix() {
+		t.Errorf("mismatched access time, actual %v expected %v", fileImpl.accessTime, atime)
+	}
+	if fileImpl.modifyTime.Unix() != mtime.Unix() {
+		t.Errorf("mismatched modify time, actual %v expected %v", fileImpl.modifyTime, mtime)
 	}
 }

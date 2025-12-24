@@ -547,6 +547,43 @@ func (fs *FileSystem) Symlink(_, _ string) error {
 	return filesystem.ErrNotSupported
 }
 
+// Chtimes changes the file creation, access and modification times
+func (fs *FileSystem) Chtimes(p string, ctime, atime, mtime time.Time) error {
+	// get the path
+	dir := path.Dir(p)
+	filename := path.Base(p)
+	// if the dir == filename, then it is just /
+	if dir == filename {
+		return fmt.Errorf("cannot open directory %s as file", p)
+	}
+	// get the directory entries
+	parentDir, entries, err := fs.readDirWithMkdir(dir, false)
+	if err != nil {
+		return fmt.Errorf("could not read directory entries for %s: %w", dir, err)
+	}
+	// find the specific entry we need
+	var entry *directoryEntry
+	for _, e := range entries {
+		shortName := e.filenameShort
+		if e.fileExtension != "" {
+			shortName += "." + e.fileExtension
+		}
+		if !strings.EqualFold(e.filenameLong, filename) && !strings.EqualFold(shortName, filename) {
+			continue
+		}
+		entry = e
+	}
+	if entry == nil {
+		return fmt.Errorf("path %s not found", p)
+	}
+	// if we got this far, we have found the file
+	entry.accessTime = atime
+	entry.modifyTime = mtime
+	entry.createTime = ctime
+	// write the directory entries to disk
+	return fs.writeDirectoryEntries(parentDir)
+}
+
 // Chmod changes the mode of the named file to mode. If the file is a symbolic link,
 // it changes the mode of the link's target.
 func (fs *FileSystem) Chmod(_ string, _ os.FileMode) error {

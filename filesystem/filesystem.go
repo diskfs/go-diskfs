@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io/fs"
 	"os"
+	"time"
 )
 
 var (
@@ -33,6 +34,8 @@ type FileSystem interface {
 	// Chown changes the numeric uid and gid of the named file. If the file is a symbolic link,
 	// it changes the uid and gid of the link's target. A uid or gid of -1 means to not change that value
 	Chown(name string, uid, gid int) error
+	// Chtimes changes the file creation, access and modification times.
+	Chtimes(pathname string, ctime, atime, mtime time.Time) error
 	// ReadDir read the contents of a directory
 	ReadDir(pathname string) ([]os.FileInfo, error)
 	// Open open a handle to read a file, implements fs.FS

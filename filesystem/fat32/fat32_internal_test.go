@@ -6,11 +6,38 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/diskfs/go-diskfs/backend/file"
 	"github.com/diskfs/go-diskfs/testhelper"
 	"github.com/google/go-cmp/cmp"
 )
+
+func tmpFat32() (*os.File, error) {
+	filename := "fat32_test"
+	f, err := os.CreateTemp("", filename)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to create tempfile %s :%v", filename, err)
+	}
+
+	// either copy the contents of the base file over, or make a file of similar size
+	b, err := os.ReadFile(Fat32File)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to read contents of %s: %v", Fat32File, err)
+	}
+
+	size := int64(len(b))
+	empty := make([]byte, size)
+	written, err := f.Write(empty)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to write %d zeroes as content of %s: %v", size, filename, err)
+	}
+	if written != len(empty) {
+		return nil, fmt.Errorf("wrote only %d zeroes as content of %s instead of %d", written, filename, len(empty))
+	}
+
+	return f, nil
+}
 
 /*
  TODO:
@@ -366,5 +393,62 @@ func TestFat32ReadDirWithMkdir(t *testing.T) {
 			t.Logf("%v", entries)
 			t.Logf("%v", tt.entries)
 		}
+	}
+}
+func TestChtimes(t *testing.T) {
+	f, err := tmpFat32()
+	if err != nil {
+		t.Fatal(err)
+	}
+	fileInfo, err := f.Stat()
+	if err != nil {
+		t.Fatalf("error getting file info for tmpfile %s: %v", f.Name(), err)
+	}
+
+	fs, err := Create(file.New(f, false), fileInfo.Size(), 0, 512, "TESTVOL", false)
+	if err != nil {
+		t.Fatalf("error reading fat32 filesystem from %s: %v", f.Name(), err)
+	}
+	newfile := "/testfile"
+	mode := os.O_RDWR | os.O_CREATE
+	fileIntf, err := fs.OpenFile(newfile, mode)
+	if err != nil {
+		t.Fatalf("error opening file %s: %v", newfile, err)
+	}
+	fileImpl, ok := fileIntf.(*File)
+	if !ok {
+		t.Fatalf("could not cast to fat32.File")
+	}
+	ctime := fileImpl.createTime.Add(-30 * time.Minute)
+	atime := fileImpl.accessTime.Add(60 * time.Minute)
+	mtime := fileImpl.modifyTime.Add(120 * time.Minute)
+
+	if err := fs.Chtimes(newfile, ctime, atime, mtime); err != nil {
+		t.Fatalf("error changing times on file %s: %v", newfile, err)
+	}
+	// now check that it was updated
+	// get existing times
+	fileIntf, err = fs.OpenFile(newfile, os.O_RDONLY)
+	if err != nil {
+		t.Fatalf("error opening file %s: %v", newfile, err)
+	}
+	fileImpl, ok = fileIntf.(*File)
+	if !ok {
+		t.Fatalf("could not cast to fat32.File")
+	}
+	// fat32 only supports resolution of seconds for ctime and atime, so round off the seconds
+	ctime = ctime.Truncate(time.Second)
+	mtime = mtime.Truncate(time.Second)
+	// fat32 only supports dates for atime, so zero out everything else
+	atime = time.Date(atime.Year(), atime.Month(), atime.Day(), 0, 0, 0, 0, atime.UTC().Location())
+
+	if !fileImpl.createTime.Equal(ctime) {
+		t.Errorf("mismatched create time, actual %v expected %v", fileImpl.createTime, ctime)
+	}
+	if !fileImpl.accessTime.Equal(atime) {
+		t.Errorf("mismatched access time, actual %v expected %v", fileImpl.accessTime, atime)
+	}
+	if !fileImpl.modifyTime.Equal(mtime) {
+		t.Errorf("mismatched modify time, actual %v expected %v", fileImpl.modifyTime, mtime)
 	}
 }
