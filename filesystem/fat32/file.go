@@ -3,10 +3,14 @@ package fat32
 import (
 	"fmt"
 	"io"
+	iofs "io/fs"
 	"os"
 
 	"github.com/diskfs/go-diskfs/filesystem"
 )
+
+var _ filesystem.File = &File{}
+var _ iofs.File = &File{}
 
 // File represents a single file in a FAT32 filesystem
 type File struct {
@@ -16,6 +20,17 @@ type File struct {
 	offset      int64
 	parent      *Directory
 	filesystem  *FileSystem
+}
+
+// Stat returns a fs.FileInfo structure describing file
+func (fl *File) Stat() (iofs.FileInfo, error) {
+	return FileInfo{
+		modTime:   fl.modifyTime,
+		name:      fl.filenameLong,
+		shortName: shortNameFromDirEntry(fl.directoryEntry),
+		size:      int64(fl.fileSize),
+		isDir:     fl.isSubdirectory,
+	}, nil
 }
 
 // Get the full cluster chain of the File.

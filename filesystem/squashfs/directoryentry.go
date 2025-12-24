@@ -191,10 +191,11 @@ func (d *directoryEntry) Open() (filesystem.File, error) {
 	}
 
 	return &File{
-		extendedFile: eFile,
-		isReadWrite:  false,
-		isAppend:     false,
-		offset:       0,
-		filesystem:   d.fs,
+		directoryEntry: d,
+		extendedFile:   eFile,
+		isReadWrite:    false,
+		isAppend:       false,
+		offset:         0,
+		filesystem:     d.fs,
 	}, nil
 }

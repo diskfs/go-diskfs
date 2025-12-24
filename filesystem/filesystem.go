@@ -4,6 +4,7 @@ package filesystem
 
 import (
 	"errors"
+	"io/fs"
 	"os"
 )
 
@@ -34,6 +35,8 @@ type FileSystem interface {
 	Chown(name string, uid, gid int) error
 	// ReadDir read the contents of a directory
 	ReadDir(pathname string) ([]os.FileInfo, error)
+	// Open open a handle to read a file, implements fs.FS
+	Open(pathname string) (fs.File, error)
 	// OpenFile open a handle to read or write to a file
 	OpenFile(pathname string, flag int) (File, error)
 	// Rename renames (moves) oldpath to newpath. If newpath already exists and is not a directory, Rename replaces it.
