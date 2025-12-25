@@ -436,16 +436,16 @@ func TestChtimes(t *testing.T) {
 	if !ok {
 		t.Fatalf("could not cast to fat32.File")
 	}
-	// fat32 only supports resolution of seconds for ctime and atime, so round off the seconds
-	ctime = ctime.Truncate(time.Second)
-	mtime = mtime.Truncate(time.Second)
 	// fat32 only supports dates for atime, so zero out everything else
 	atime = time.Date(atime.Year(), atime.Month(), atime.Day(), 0, 0, 0, 0, atime.UTC().Location())
 
-	if fileImpl.createTime.Unix() != ctime.Unix() {
+	// because of the rounding, we could end up with up to one second difference in the tests
+	ctimeDiff := fileImpl.createTime.Unix() - ctime.Unix()
+	if ctimeDiff > 1 || ctimeDiff < -1 {
 		t.Errorf("mismatched create time, actual %v expected %v", fileImpl.createTime, ctime)
 	}
-	if fileImpl.modifyTime.Unix() != mtime.Unix() {
+	mtimeDiff := fileImpl.modifyTime.Unix() - mtime.Unix()
+	if mtimeDiff > 1 || mtimeDiff < -1 {
 		t.Errorf("mismatched modify time, actual %v expected %v", fileImpl.modifyTime, mtime)
 	}
 	if !fileImpl.accessTime.Equal(atime) {
