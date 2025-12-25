@@ -442,13 +442,13 @@ func TestChtimes(t *testing.T) {
 	// fat32 only supports dates for atime, so zero out everything else
 	atime = time.Date(atime.Year(), atime.Month(), atime.Day(), 0, 0, 0, 0, atime.UTC().Location())
 
-	if !fileImpl.createTime.Equal(ctime) {
+	if fileImpl.createTime.Unix() != ctime.Unix() {
 		t.Errorf("mismatched create time, actual %v expected %v", fileImpl.createTime, ctime)
+	}
+	if fileImpl.modifyTime.Unix() != mtime.Unix() {
+		t.Errorf("mismatched modify time, actual %v expected %v", fileImpl.modifyTime, mtime)
 	}
 	if !fileImpl.accessTime.Equal(atime) {
 		t.Errorf("mismatched access time, actual %v expected %v", fileImpl.accessTime, atime)
-	}
-	if !fileImpl.modifyTime.Equal(mtime) {
-		t.Errorf("mismatched modify time, actual %v expected %v", fileImpl.modifyTime, mtime)
 	}
 }
