@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/diskfs/go-diskfs/partition/part"
 	"github.com/diskfs/go-diskfs/testhelper"
 )
 
@@ -218,7 +219,6 @@ func TestWriteContents(t *testing.T) {
 		}
 		var b bytes.Buffer
 		reader := bufio.NewReader(&b)
-		expected := "write 0 bytes to partition "
 		f := &testhelper.FileImpl{}
 		written, err := partition.WriteContents(f, reader)
 		if written != 0 {
@@ -227,8 +227,9 @@ func TestWriteContents(t *testing.T) {
 		if err == nil {
 			t.Errorf("returned nil error instead of actual errors")
 		}
-		if !strings.HasPrefix(err.Error(), expected) {
-			t.Errorf("error type %s instead of expected %s", err.Error(), expected)
+		var ierr *part.IncompletePartitionWriteError
+		if !errors.As(err, &ierr) {
+			t.Errorf("expected IncompletePartitionWriteError, got %v", err)
 		}
 	})
 	t.Run("error writing file", func(t *testing.T) {

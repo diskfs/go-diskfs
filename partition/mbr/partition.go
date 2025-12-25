@@ -169,7 +169,7 @@ func (p *Partition) WriteContents(f backend.WritableFile, contents io.Reader) (u
 	}
 	// did the total written equal the size of the partition?
 	if total != uint64(size) {
-		return total, fmt.Errorf("write %d bytes to partition but actual size is %d", total, size)
+		return total, part.NewIncompletePartitionWriteError(total, uint64(size))
 	}
 	return total, nil
 }
