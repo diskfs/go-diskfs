@@ -29,6 +29,7 @@ func GetValidTable() *Table {
 	}
 	parts := []*Partition{
 		{
+			Index:              1,
 			Start:              2048,
 			End:                3048,
 			Size:               (3048 - 2048 + 1) * 512,

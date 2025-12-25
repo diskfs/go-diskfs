@@ -24,7 +24,7 @@ func TestFromBytes(t *testing.T) {
 	t.Run("Short byte slice", func(t *testing.T) {
 		b := make([]byte, partitionEntrySize-1)
 		_, _ = rand.Read(b)
-		partition, err := partitionFromBytes(b, logicalSectorSize, physicalSectorSize)
+		partition, err := partitionFromBytes(1, b, logicalSectorSize, physicalSectorSize)
 		if partition != nil {
 			t.Error("should return nil partition")
 		}
@@ -39,7 +39,7 @@ func TestFromBytes(t *testing.T) {
 	t.Run("Long byte slice", func(t *testing.T) {
 		b := make([]byte, partitionEntrySize+1)
 		_, _ = rand.Read(b)
-		partition, err := partitionFromBytes(b, logicalSectorSize, physicalSectorSize)
+		partition, err := partitionFromBytes(1, b, logicalSectorSize, physicalSectorSize)
 		if partition != nil {
 			t.Error("should return nil partition")
 		}
@@ -55,7 +55,7 @@ func TestFromBytes(t *testing.T) {
 		b := make([]byte, partitionEntrySize)
 		_, _ = rand.Read(b)
 		b[0] = 0x67
-		partition, err := partitionFromBytes(b, logicalSectorSize, physicalSectorSize)
+		partition, err := partitionFromBytes(1, b, logicalSectorSize, physicalSectorSize)
 		if partition != nil {
 			t.Error("should return nil partition")
 		}
@@ -72,7 +72,7 @@ func TestFromBytes(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unable to read test fixture file %s: %v", mbrPartitionFile, err)
 		}
-		partition, err := partitionFromBytes(b, logicalSectorSize, physicalSectorSize)
+		partition, err := partitionFromBytes(1, b, logicalSectorSize, physicalSectorSize)
 		if partition == nil {
 			t.Error("should not return nil partition")
 		}

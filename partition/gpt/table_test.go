@@ -16,6 +16,7 @@ import (
 
 	"github.com/diskfs/go-diskfs/partition/gpt"
 	"github.com/diskfs/go-diskfs/testhelper"
+	"github.com/go-test/deep"
 )
 
 const (
@@ -155,8 +156,12 @@ func TestTableRead(t *testing.T) {
 			t.Errorf("returned error %v instead of nil", err)
 		}
 		expected := gpt.GetValidTable()
-		if table == nil || !table.Equal(expected) {
-			t.Errorf("actual table was %v instead of expected %v", table, expected)
+		if table == nil {
+			t.Errorf("returned nil instead of table")
+		}
+
+		if diff := deep.Equal(table, expected); diff != nil {
+			t.Errorf("table mismatch: %v", diff)
 		}
 	})
 }

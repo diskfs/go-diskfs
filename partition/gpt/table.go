@@ -334,7 +334,7 @@ func readPartitionArrayBytes(b []byte, entrySize, logicalSectorSize, physicalSec
 	for i, c := 0, b; len(c) >= entrySize; c, i = c[entrySize:], i+1 {
 		bpart := c[:entrySize]
 		// write the primary partition entry
-		p, err := partitionFromBytes(bpart, logicalSectorSize, physicalSectorSize)
+		p, err := partitionFromBytes(i+1, bpart, logicalSectorSize, physicalSectorSize)
 		if err != nil {
 			return nil, fmt.Errorf("error reading partition entry %d: %v", i, err)
 		}
