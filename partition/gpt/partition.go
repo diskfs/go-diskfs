@@ -23,6 +23,7 @@ var _ part.Partition = &Partition{}
 
 // Partition represents the structure of a single partition on the disk
 type Partition struct {
+	Index              int    // index of the partition in the table
 	Start              uint64 // start sector for the partition
 	End                uint64 // end sector for the partition
 	Size               uint64 // size of the partition in bytes
@@ -90,8 +91,9 @@ func (p *Partition) toBytes() ([]byte, error) {
 	return b, nil
 }
 
-// FromBytes create a partition entry from bytes
-func partitionFromBytes(b []byte, logicalSectorSize, physicalSectorSize int) (*Partition, error) {
+// FromBytes create a partition entry from bytes. The index should start with 1. It is up to
+// the caller to convert from zero-based indexing to one-based partition numbering.
+func partitionFromBytes(index int, b []byte, logicalSectorSize, physicalSectorSize int) (*Partition, error) {
 	if len(b) != PartitionEntrySize {
 		return nil, fmt.Errorf("data for partition was %d bytes instead of expected %d", len(b), PartitionEntrySize)
 	}
@@ -127,6 +129,7 @@ func partitionFromBytes(b []byte, logicalSectorSize, physicalSectorSize int) (*P
 	name := string(r)
 
 	return &Partition{
+		Index:              index,
 		Start:              firstLBA,
 		End:                lastLBA,
 		Name:               name,
@@ -136,6 +139,10 @@ func partitionFromBytes(b []byte, logicalSectorSize, physicalSectorSize int) (*P
 		logicalSectorSize:  logicalSectorSize,
 		physicalSectorSize: physicalSectorSize,
 	}, nil
+}
+
+func (p *Partition) GetIndex() int {
+	return p.Index
 }
 
 func (p *Partition) GetSize() int64 {

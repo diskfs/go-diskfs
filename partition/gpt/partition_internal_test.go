@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/diskfs/go-diskfs/testhelper"
+	"github.com/go-test/deep"
 )
 
 const (
@@ -23,7 +24,7 @@ func TestFromBytes(t *testing.T) {
 	t.Run("Short byte slice", func(t *testing.T) {
 		b := make([]byte, PartitionEntrySize-1)
 		_, _ = rand.Read(b)
-		partition, err := partitionFromBytes(b, 2048, 2048)
+		partition, err := partitionFromBytes(1, b, 2048, 2048)
 		if partition != nil {
 			t.Error("should return nil partition")
 		}
@@ -38,7 +39,7 @@ func TestFromBytes(t *testing.T) {
 	t.Run("Long byte slice", func(t *testing.T) {
 		b := make([]byte, PartitionEntrySize+1)
 		_, _ = rand.Read(b)
-		partition, err := partitionFromBytes(b, 2048, 2048)
+		partition, err := partitionFromBytes(1, b, 2048, 2048)
 		if partition != nil {
 			t.Error("should return nil partition")
 		}
@@ -55,7 +56,7 @@ func TestFromBytes(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unable to read test fixture file %s: %v", gptPartitionFile, err)
 		}
-		partition, err := partitionFromBytes(b, 0, 0)
+		partition, err := partitionFromBytes(1, b, 0, 0)
 		if partition == nil {
 			t.Error("should not return nil partition")
 		}
@@ -64,6 +65,7 @@ func TestFromBytes(t *testing.T) {
 		}
 		// check out data
 		expected := Partition{
+			Index:      1,
 			Start:      2048,
 			End:        3048,
 			Name:       "EFI System",
@@ -71,8 +73,8 @@ func TestFromBytes(t *testing.T) {
 			Attributes: 0,
 			Type:       EFISystemPartition,
 		}
-		if !partition.Equal(&expected) {
-			t.Errorf("actual partition was %v instead of expected %v", partition, expected)
+		if diff := deep.Equal(partition, &expected); diff != nil {
+			t.Errorf("partition mismatch: %v", diff)
 		}
 	})
 }
