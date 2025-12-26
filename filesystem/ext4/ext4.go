@@ -843,9 +843,6 @@ func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	if entry != nil && entry.fileType == dirFileTypeDirectory {
-		return nil, fmt.Errorf("cannot open directory %s as file", p)
-	}
 
 	// see if the file exists
 	// if the file does not exist, and is not opened for os.O_CREATE, return an error

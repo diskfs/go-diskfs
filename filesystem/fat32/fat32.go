@@ -645,10 +645,6 @@ func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 	// get the path
 	dir := path.Dir(p)
 	filename := path.Base(p)
-	// if the dir == filename, then it is just /
-	if dir == filename {
-		return nil, fmt.Errorf("cannot open directory %s as file", p)
-	}
 	// get the directory entries
 	parentDir, entries, err := fs.readDirWithMkdir(dir, false)
 	if err != nil {
@@ -657,20 +653,20 @@ func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 
 	// we now know that the directory exists, see if the file exists
 	var targetEntry *directoryEntry
-	for _, e := range entries {
-		shortName := e.filenameShort
-		if e.fileExtension != "" {
-			shortName += "." + e.fileExtension
+	if filename == dir {
+		targetEntry = &parentDir.directoryEntry
+	} else {
+		for _, e := range entries {
+			shortName := e.filenameShort
+			if e.fileExtension != "" {
+				shortName += "." + e.fileExtension
+			}
+			if !strings.EqualFold(e.filenameLong, filename) && !strings.EqualFold(shortName, filename) {
+				continue
+			}
+			// if we got this far, we have found the file
+			targetEntry = e
 		}
-		if !strings.EqualFold(e.filenameLong, filename) && !strings.EqualFold(shortName, filename) {
-			continue
-		}
-		// cannot do anything with directories
-		if e.isSubdirectory {
-			return nil, fmt.Errorf("cannot open directory %s as file", p)
-		}
-		// if we got this far, we have found the file
-		targetEntry = e
 	}
 
 	// see if the file exists
