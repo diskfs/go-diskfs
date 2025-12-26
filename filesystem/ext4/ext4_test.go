@@ -236,26 +236,27 @@ func testCreateEmptyFile(t *testing.T, size int64) *os.File {
 func TestWriteFile(t *testing.T) {
 	var newFile = "newlygeneratedfile.dat"
 	tests := []struct {
-		name     string
-		path     string
-		flag     int
-		offset   int64
-		size     int
-		readAll  bool
-		expected []byte
-		err      error
+		name        string
+		path        string
+		flag        int
+		offset      int64
+		size        int
+		readAll     bool
+		expected    []byte
+		openFileErr error
+		writeErr    error
 	}{
-		{"create invalid path", "/do/not/exist/any/where", os.O_CREATE, 0, 0, false, nil, errors.New("could not read directory entries")},
-		{"create in root", "/" + newFile, os.O_CREATE | os.O_RDWR, 0, 0, false, []byte("hello world"), nil},
-		{"create in valid subdirectory", "/foo/" + newFile, os.O_CREATE | os.O_RDWR, 0, 0, false, []byte("hello world"), nil},
-		{"create exists as directory", "/foo", os.O_CREATE, 0, 0, false, nil, errors.New("cannot open directory /foo as file")},
-		{"create exists as file", "/random.dat", os.O_CREATE | os.O_RDWR, 0, 0, false, nil, nil},
-		{"append invalid path", "/do/not/exist/any/where", os.O_APPEND, 0, 0, false, nil, errors.New("could not read directory entries")},
-		{"append exists as directory", "/foo", os.O_APPEND, 0, 0, false, nil, errors.New("cannot open directory /foo as file")},
-		{"append exists as file", "/random.dat", os.O_APPEND | os.O_RDWR, 0, 0, false, nil, nil},
-		{"overwrite invalid path", "/do/not/exist/any/where", os.O_RDWR, 0, 0, false, nil, errors.New("could not read directory entries")},
-		{"overwrite exists as directory", "/foo", os.O_RDWR, 0, 0, false, nil, errors.New("cannot open directory /foo as file")},
-		{"overwrite exists as file", "/random.dat", os.O_RDWR, 0, 0, false, nil, nil},
+		{"create invalid path", "/do/not/exist/any/where", os.O_CREATE, 0, 0, false, nil, errors.New("could not read directory entries"), nil},
+		{"create in root", "/" + newFile, os.O_CREATE | os.O_RDWR, 0, 0, false, []byte("hello world"), nil, nil},
+		{"create in valid subdirectory", "/foo/" + newFile, os.O_CREATE | os.O_RDWR, 0, 0, false, []byte("hello world"), nil, nil},
+		{"create exists as directory", "/foo", os.O_CREATE, 0, 0, false, nil, nil, errors.New("cannot create file as existing directory")},
+		{"create exists as file", "/random.dat", os.O_CREATE | os.O_RDWR, 0, 0, false, nil, nil, nil},
+		{"append invalid path", "/do/not/exist/any/where", os.O_APPEND, 0, 0, false, nil, errors.New("could not read directory entries"), nil},
+		{"append exists as directory", "/foo", os.O_APPEND, 0, 0, false, nil, nil, errors.New("file is not open for writing")},
+		{"append exists as file", "/random.dat", os.O_APPEND | os.O_RDWR, 0, 0, false, nil, nil, nil},
+		{"overwrite invalid path", "/do/not/exist/any/where", os.O_RDWR, 0, 0, false, nil, errors.New("could not read directory entries"), nil},
+		{"overwrite exists as directory", "/foo", os.O_RDWR, 0, 0, false, nil, nil, nil},
+		{"overwrite exists as file", "/random.dat", os.O_RDWR, 0, 0, false, nil, nil, nil},
 	}
 	imageTests := []struct {
 		name      string
@@ -283,18 +284,19 @@ func TestWriteFile(t *testing.T) {
 					}
 					ext4File, err := fs.OpenFile(tt.path, tt.flag)
 					switch {
-					case err != nil && tt.err == nil:
+					case err != nil && tt.openFileErr == nil:
 						t.Fatalf("unexpected error opening file: %v", err)
-					case err == nil && tt.err != nil:
-						t.Fatalf("missing expected error opening file: %v", tt.err)
-					case err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error()):
-						t.Fatalf("mismatched error opening file, expected '%v' got '%v'", tt.err, err)
+					case err == nil && tt.openFileErr != nil:
+						t.Fatalf("missing expected error opening file: %v", tt.openFileErr)
+					case err != nil && tt.openFileErr != nil && !strings.HasPrefix(err.Error(), tt.openFileErr.Error()):
+						t.Fatalf("mismatched error opening file, expected '%v' got '%v'", tt.openFileErr, err)
 					case err == nil:
+						// if it is a directory, expect errors on Seek and Write
 						if _, err := ext4File.Seek(tt.offset, io.SeekStart); err != nil {
 							t.Fatalf("Error seeking file for write: %v", err)
 						}
 						n, err := ext4File.Write(tt.expected)
-						if err != nil && err != io.EOF {
+						if (tt.writeErr != nil && err == nil) || (tt.writeErr == nil && err != nil && err != io.EOF) {
 							t.Fatalf("Error writing file: %v", err)
 						}
 						if n != len(tt.expected) {
