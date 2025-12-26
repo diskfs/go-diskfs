@@ -725,9 +725,12 @@ func TestFat32OpenFile(t *testing.T) {
 				err      error
 			}{
 				// error opening a directory
-				{"/", os.O_RDONLY, "", fmt.Errorf("cannot open directory %s as file", "/")},
-				{"/", os.O_RDWR, "", fmt.Errorf("cannot open directory %s as file", "/")},
-				{"/", os.O_CREATE, "", fmt.Errorf("cannot open directory %s as file", "/")},
+				{"/", os.O_RDONLY, "", nil},
+				{"/", os.O_RDWR, "", nil},
+				{"/", os.O_CREATE, "", nil},
+				// try some directories
+				{"/foo", os.O_RDONLY, "", nil},
+				{"/foo/bar", os.O_RDONLY, "", nil},
 				// open non-existent file for read or read write
 				{"/abcdefg", os.O_RDONLY, "", fmt.Errorf("target file %s does not exist", "/abcdefg")},
 				{"/abcdefg", os.O_RDWR, "", fmt.Errorf("target file %s does not exist", "/abcdefg")},
