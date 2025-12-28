@@ -290,7 +290,6 @@ func Read(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) 
 
 // interface guard
 var _ filesystem.FileSystem = (*FileSystem)(nil)
-var _ iofs.FS = (*FileSystem)(nil)
 
 // Delete the temporary directory created during the iso9660 image creation
 func (fsm *FileSystem) Close() error {

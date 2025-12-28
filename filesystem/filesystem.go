@@ -17,6 +17,7 @@ var (
 
 // FileSystem is a reference to a single filesystem on a disk
 type FileSystem interface {
+	fs.FS
 	// Type return the type of filesystem
 	Type() Type
 	// Mkdir make a directory
