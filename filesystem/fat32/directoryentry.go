@@ -70,7 +70,10 @@ func (de *directoryEntry) Type() iofs.FileMode {
 }
 
 func (de *directoryEntry) Name() string {
-	return de.filenameLong
+	if de.filenameLong != "" {
+		return de.filenameLong
+	}
+	return shortNameFromDirEntry(de)
 }
 
 func (de *directoryEntry) toBytes() ([]byte, error) {

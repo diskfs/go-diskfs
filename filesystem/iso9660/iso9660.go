@@ -397,6 +397,10 @@ func (fsm *FileSystem) ReadDir(p string) ([]iofs.DirEntry, error) {
 			return nil, fmt.Errorf("error reading directory %s: %v", p, err)
 		}
 		for _, entry := range dirEntries {
+			// ignore any entry that is current directory or parent
+			if entry.isSelf || entry.isParent {
+				continue
+			}
 			de = append(de, entry)
 		}
 	}
@@ -505,6 +509,22 @@ func (fsm *FileSystem) Remove(p string) error {
 		return filesystem.ErrReadonlyFilesystem
 	}
 	return os.Remove(path.Join(fsm.workspace, p))
+}
+
+// Stat returns a FileInfo describing the file.
+func (fsm *FileSystem) Stat(name string) (iofs.FileInfo, error) {
+	dir := path.Dir(name)
+	basename := path.Base(name)
+	des, err := fsm.ReadDir(dir)
+	if err != nil {
+		return nil, fmt.Errorf("could not read directory %s: %v", dir, err)
+	}
+	for _, de := range des {
+		if de.Name() == basename {
+			return de.Info()
+		}
+	}
+	return nil, &iofs.PathError{Op: "stat", Path: name, Err: fmt.Errorf("file %s not found in directory %s", basename, dir)}
 }
 
 // readDirectory - read directory entry on iso only (not workspace)

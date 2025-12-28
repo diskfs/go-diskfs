@@ -356,9 +356,7 @@ func (fs *FileSystem) ReadDir(p string) ([]iofs.DirEntry, error) {
 		if err != nil {
 			return nil, fmt.Errorf("could not read directory %s: %v", p, err)
 		}
-		for _, e := range dirEntries {
-			de = append(de, e)
-		}
+		de = append(de, dirEntries...)
 	} else {
 		dirEntries, err := fs.readDirectory(p)
 		if err != nil {
@@ -470,6 +468,22 @@ func (fs *FileSystem) Remove(p string) error {
 		return filesystem.ErrReadonlyFilesystem
 	}
 	return os.Remove(path.Join(fs.workspace, p))
+}
+
+// Stat returns a FileInfo describing the file.
+func (fs *FileSystem) Stat(name string) (iofs.FileInfo, error) {
+	dir := path.Dir(name)
+	basename := path.Base(name)
+	des, err := fs.ReadDir(dir)
+	if err != nil {
+		return nil, fmt.Errorf("could not read directory %s: %v", dir, err)
+	}
+	for _, de := range des {
+		if de.Name() == basename {
+			return de.Info()
+		}
+	}
+	return nil, &iofs.PathError{Op: "stat", Path: name, Err: fmt.Errorf("file %s not found in directory %s", basename, dir)}
 }
 
 // readDirectory - read directory entry on squashfs only (not workspace)

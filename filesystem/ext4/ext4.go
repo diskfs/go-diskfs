@@ -808,10 +808,10 @@ func (fs *FileSystem) ReadDir(p string) ([]iofs.DirEntry, error) {
 		if err != nil {
 			return nil, fmt.Errorf("could not read inode %d at position %d in directory: %v", e.inode, i, err)
 		}
-		ret = append(ret, &directoryEntryInfo{
+		ret[i] = &directoryEntryInfo{
 			inode:          in,
 			directoryEntry: e,
-		})
+		}
 	}
 
 	return ret, nil

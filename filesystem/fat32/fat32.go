@@ -841,6 +841,30 @@ func (fs *FileSystem) Rename(oldpath, newpath string) error {
 	return nil
 }
 
+// Stat returns a FileInfo describing the file.
+func (fs *FileSystem) Stat(name string) (iofs.FileInfo, error) {
+	dir := path.Dir(name)
+	basename := path.Base(name)
+	des, err := fs.ReadDir(dir)
+	if err != nil {
+		return nil, fmt.Errorf("could not read directory %s: %v", dir, err)
+	}
+	// handle the root case
+	if dir == basename && (basename == "/" || basename == ".") {
+		rootDir, _, err := fs.readDirWithMkdir("/", false)
+		if err != nil {
+			return nil, fmt.Errorf("could not read root directory: %v", err)
+		}
+		return rootDir.Info()
+	}
+	for _, de := range des {
+		if de.Name() == basename {
+			return de.Info()
+		}
+	}
+	return nil, &iofs.PathError{Op: "stat", Path: name, Err: fmt.Errorf("file %s not found in directory %s", basename, dir)}
+}
+
 // Label get the label of the filesystem from the secial file in the root directory.
 // The label stored in the boot sector is ignored to mimic Windows behavior which
 // only stores and reads the label from the special file in the root directory.
