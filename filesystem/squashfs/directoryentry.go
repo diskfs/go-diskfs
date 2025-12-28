@@ -71,6 +71,16 @@ func (d *directoryEntry) ModTime() time.Time {
 	return d.modTime
 }
 
+// Info returns the FileInfo representation of the directory entry
+func (d *directoryEntry) Info() (fs.FileInfo, error) {
+	return d, nil
+}
+
+// Type returns the type of the directory entry
+func (d *directoryEntry) Type() fs.FileMode {
+	return d.Mode().Type()
+}
+
 // Mode FileMode     // file mode bits
 func (d *directoryEntry) Mode() os.FileMode {
 	mode := d.mode

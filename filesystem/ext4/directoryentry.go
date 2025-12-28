@@ -3,6 +3,7 @@ package ext4
 import (
 	"encoding/binary"
 	"fmt"
+	iofs "io/fs"
 )
 
 // directoryFileType uses different constants than the file type property in the inode
@@ -23,7 +24,9 @@ const (
 	dirFileTypeSymlink   directoryFileType = 0x7
 )
 
-// directoryEntry is a single directory entry
+// directoryEntry is a single directory entry, represents a low-level entry
+// per the data on the actual disk.
+// For higher-level directory entries, see Directory struct or directoryEntryInfo.
 type directoryEntry struct {
 	inode    uint32
 	filename string
@@ -173,4 +176,33 @@ func parseDirEntriesHashed(b []byte, depth uint8, node dxNode, blocksize uint32,
 		dirEntries = append(dirEntries, addDirEntries...)
 	}
 	return dirEntries, nil
+}
+
+type directoryEntryInfo struct {
+	*directoryEntry
+	*inode
+}
+
+func (de *directoryEntryInfo) Info() (iofs.FileInfo, error) {
+	return &FileInfo{
+		modTime: de.modifyTime,
+		name:    de.filename,
+		size:    int64(de.size),
+		isDir:   de.directoryEntry.fileType == dirFileTypeDirectory,
+	}, nil
+}
+
+func (de *directoryEntryInfo) Type() iofs.FileMode {
+	if de.directoryEntry.fileType == dirFileTypeDirectory {
+		return iofs.ModeDir
+	}
+	return 0
+}
+
+func (de *directoryEntryInfo) IsDir() bool {
+	return de.directoryEntry.fileType == dirFileTypeDirectory
+}
+
+func (de *directoryEntryInfo) Name() string {
+	return de.filename
 }

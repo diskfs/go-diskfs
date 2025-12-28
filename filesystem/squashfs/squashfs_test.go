@@ -311,12 +311,16 @@ func TestSquashfsOpen(t *testing.T) {
 	if err != nil {
 		t.Errorf("Failed to get read-only squashfs filesystem: %v", err)
 	}
-	fis, err := fs.ReadDir("/")
+	des, err := fs.ReadDir("/")
 	if err != nil {
 		t.Errorf("Failed to list squashfs filesystem: %v", err)
 	}
-	var dir = make(map[string]os.FileInfo, len(fis))
-	for _, fi := range fis {
+	var dir = make(map[string]os.FileInfo, len(des))
+	for _, de := range des {
+		fi, err := de.Info()
+		if err != nil {
+			t.Fatalf("getting info for %s failed: %v", de.Name(), err)
+		}
 		dir[fi.Name()] = fi
 	}
 
@@ -436,11 +440,15 @@ func TestSquashfsCheckListing(t *testing.T) {
 
 	var list func(dir string)
 	list = func(dir string) {
-		fis, err := fs.ReadDir(dir)
+		des, err := fs.ReadDir(dir)
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, fi := range fis {
+		for _, de := range des {
+			fi, err := de.Info()
+			if err != nil {
+				t.Fatal(err)
+			}
 			p := path.Join(dir, fi.Name())
 			if _, found := listing[p]; found {
 				delete(listing, p)
@@ -719,7 +727,11 @@ func TestSquashfsReadDirXattr(t *testing.T) {
 		)
 		for _, f := range list {
 			if f.Name() == tt.f {
-				fi = f
+				fiFound, err := f.Info()
+				if err != nil {
+					t.Fatalf("unexpected error getting info for file %s: %v", tt.f, err)
+				}
+				fi = fiFound
 				found = true
 			}
 		}

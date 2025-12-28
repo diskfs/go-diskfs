@@ -233,7 +233,6 @@ func Read(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) 
 
 // interface guard
 var _ filesystem.FileSystem = (*FileSystem)(nil)
-var _ iofs.FS = (*FileSystem)(nil)
 
 // Delete the temporary directory created during the SquashFS image creation
 func (fs *FileSystem) Close() error {
@@ -343,11 +342,11 @@ func (fs *FileSystem) Chtimes(name string, ctime, atime, mtime time.Time) error 
 
 // ReadDir return the contents of a given directory in a given filesystem.
 //
-// Returns a slice of os.FileInfo with all of the entries in the directory.
+// Returns a slice of fs.DirEntry with all of the entries in the directory.
 //
 // Will return an error if the directory does not exist or is a regular file and not a directory
-func (fs *FileSystem) ReadDir(p string) ([]os.FileInfo, error) {
-	var fi []os.FileInfo
+func (fs *FileSystem) ReadDir(p string) ([]iofs.DirEntry, error) {
+	var de []iofs.DirEntry
 	// non-workspace: read from squashfs
 	// workspace: read from regular filesystem
 	if fs.workspace != "" {
@@ -357,25 +356,17 @@ func (fs *FileSystem) ReadDir(p string) ([]os.FileInfo, error) {
 		if err != nil {
 			return nil, fmt.Errorf("could not read directory %s: %v", p, err)
 		}
-		for _, e := range dirEntries {
-			info, err := e.Info()
-			if err != nil {
-				return nil, fmt.Errorf("could not read directory %s: %v", p, err)
-			}
-
-			fi = append(fi, info)
-		}
+		de = append(de, dirEntries...)
 	} else {
 		dirEntries, err := fs.readDirectory(p)
 		if err != nil {
 			return nil, fmt.Errorf("error reading directory %s: %v", p, err)
 		}
-		fi = make([]os.FileInfo, 0, len(dirEntries))
-		for _, entry := range dirEntries {
-			fi = append(fi, entry)
+		for _, e := range dirEntries {
+			de = append(de, e)
 		}
 	}
-	return fi, nil
+	return de, nil
 }
 
 // Open returns an fs.File from which you can read the contents of a file
@@ -454,6 +445,16 @@ func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 	return f, nil
 }
 
+// ReadFile implements ReadFileFS to read an entire file into memory
+func (fs *FileSystem) ReadFile(name string) ([]byte, error) {
+	f, err := fs.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return io.ReadAll(f)
+}
+
 // Rename renames (moves) oldpath to newpath. If newpath already exists and is not a directory, Rename replaces it.
 func (fs *FileSystem) Rename(oldpath, newpath string) error {
 	if fs.workspace == "" {
@@ -467,6 +468,22 @@ func (fs *FileSystem) Remove(p string) error {
 		return filesystem.ErrReadonlyFilesystem
 	}
 	return os.Remove(path.Join(fs.workspace, p))
+}
+
+// Stat returns a FileInfo describing the file.
+func (fs *FileSystem) Stat(name string) (iofs.FileInfo, error) {
+	dir := path.Dir(name)
+	basename := path.Base(name)
+	des, err := fs.ReadDir(dir)
+	if err != nil {
+		return nil, fmt.Errorf("could not read directory %s: %v", dir, err)
+	}
+	for _, de := range des {
+		if de.Name() == basename {
+			return de.Info()
+		}
+	}
+	return nil, &iofs.PathError{Op: "stat", Path: name, Err: fmt.Errorf("file %s not found in directory %s", basename, dir)}
 }
 
 // readDirectory - read directory entry on squashfs only (not workspace)

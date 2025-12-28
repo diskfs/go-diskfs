@@ -3,6 +3,7 @@ package fat32
 import (
 	"errors"
 	"fmt"
+	"io"
 	iofs "io/fs"
 	"os"
 	"path"
@@ -509,7 +510,6 @@ func (fs *FileSystem) writeFat() error {
 
 // interface guard
 var _ filesystem.FileSystem = (*FileSystem)(nil)
-var _ iofs.FS = (*FileSystem)(nil)
 
 // Do cleaning job for fat32. Note that fat32 does not have side-effects so we do not do anything.
 func (fs *FileSystem) Close() error {
@@ -598,10 +598,10 @@ func (fs *FileSystem) Chown(_ string, _, _ int) error {
 
 // ReadDir return the contents of a given directory in a given filesystem.
 //
-// Returns a slice of os.FileInfo with all of the entries in the directory.
+// Returns a slice of iofs.DirEntry with all of the entries in the directory.
 //
 // Will return an error if the directory does not exist or is a regular file and not a directory
-func (fs *FileSystem) ReadDir(p string) ([]os.FileInfo, error) {
+func (fs *FileSystem) ReadDir(p string) ([]iofs.DirEntry, error) {
 	_, entries, err := fs.readDirWithMkdir(p, false)
 	if err != nil {
 		return nil, fmt.Errorf("error reading directory %s: %w", p, err)
@@ -609,18 +609,12 @@ func (fs *FileSystem) ReadDir(p string) ([]os.FileInfo, error) {
 	// once we have made it here, looping is done. We have found the final entry
 	// we need to return all of the file info
 	//nolint:prealloc // because the following loop may omit some entry
-	var ret []os.FileInfo
+	var ret []iofs.DirEntry
 	for _, e := range entries {
 		if e.isVolumeLabel {
 			continue
 		}
-		ret = append(ret, FileInfo{
-			modTime:   e.modifyTime,
-			name:      e.filenameLong,
-			shortName: shortNameFromDirEntry(e),
-			size:      int64(e.fileSize),
-			isDir:     e.isSubdirectory,
-		})
+		ret = append(ret, e)
 	}
 	return ret, nil
 }
@@ -711,6 +705,16 @@ func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 		filesystem:     fs,
 		parent:         parentDir,
 	}, nil
+}
+
+// ReadFile implements ReadFileFS to read an entire file into memory
+func (fs *FileSystem) ReadFile(name string) ([]byte, error) {
+	f, err := fs.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return io.ReadAll(f)
 }
 
 // removes the named file or (empty) directory.
@@ -835,6 +839,30 @@ func (fs *FileSystem) Rename(oldpath, newpath string) error {
 	}
 
 	return nil
+}
+
+// Stat returns a FileInfo describing the file.
+func (fs *FileSystem) Stat(name string) (iofs.FileInfo, error) {
+	dir := path.Dir(name)
+	basename := path.Base(name)
+	des, err := fs.ReadDir(dir)
+	if err != nil {
+		return nil, fmt.Errorf("could not read directory %s: %v", dir, err)
+	}
+	// handle the root case
+	if dir == basename && (basename == "/" || basename == ".") {
+		rootDir, _, err := fs.readDirWithMkdir("/", false)
+		if err != nil {
+			return nil, fmt.Errorf("could not read root directory: %v", err)
+		}
+		return rootDir.Info()
+	}
+	for _, de := range des {
+		if de.Name() == basename {
+			return de.Info()
+		}
+	}
+	return nil, &iofs.PathError{Op: "stat", Path: name, Err: fmt.Errorf("file %s not found in directory %s", basename, dir)}
 }
 
 // Label get the label of the filesystem from the secial file in the root directory.

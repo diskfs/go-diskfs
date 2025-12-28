@@ -367,9 +367,14 @@ func TestFat32SourceDateEpoch(t *testing.T) {
 	expected := time.Unix(epochInt, 0)
 
 	for _, entry := range entries {
+		info, err := entry.Info()
+		if err != nil {
+			t.Errorf("getting info for %s failed: %v", entry.Name(), err)
+			continue
+		}
 		if entry.Name() == "test.txt" || entry.Name() == "testdir" {
-			if entry.ModTime().Unix() != expected.Unix() {
-				t.Errorf("%s: timestamp mismatch, got %v, expected %v", entry.Name(), entry.ModTime().Unix(), expected.Unix())
+			if info.ModTime().Unix() != expected.Unix() {
+				t.Errorf("%s: timestamp mismatch, got %v, expected %v", entry.Name(), info.ModTime().Unix(), expected.Unix())
 			}
 		}
 	}
@@ -687,10 +692,20 @@ func TestFat32ReadDir(t *testing.T) {
 				t.Errorf("readDir(%s): Unexpected nil output", tt.path)
 			case len(output) != tt.count:
 				t.Errorf("readDir(%s): output gave %d entries instead of expected %d", tt.path, len(output), tt.count)
-			case len(output) > 0 && output[0].IsDir() != tt.isDir:
-				t.Errorf("readDir(%s): output gave directory %t expected %t", tt.path, output[0].IsDir(), tt.isDir)
-			case len(output) > 0 && output[0].Name() != tt.name:
-				t.Errorf("readDir(%s): output gave name %s expected %s", tt.path, output[0].Name(), tt.name)
+			case len(output) > 0:
+				if output[0].IsDir() != tt.isDir {
+					t.Errorf("readDir(%s): output gave directory %t expected %t", tt.path, output[0].IsDir(), tt.isDir)
+				}
+				if output[0].Name() != tt.name {
+					t.Errorf("readDir(%s): output gave name %s expected %s", tt.path, output[0].Name(), tt.name)
+				}
+				fi, err := output[0].Info()
+				if err != nil {
+					t.Fatalf("readDir(%s): Info() returned unexpected error: %v", tt.path, err)
+				}
+				if fi.Name() != tt.name {
+					t.Errorf("readDir(%s): Info() returned name %s expected %s", tt.path, fi.Name(), tt.name)
+				}
 			}
 		}
 	}

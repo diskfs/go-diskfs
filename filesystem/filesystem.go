@@ -17,6 +17,10 @@ var (
 
 // FileSystem is a reference to a single filesystem on a disk
 type FileSystem interface {
+	fs.FS
+	fs.ReadDirFS
+	fs.ReadFileFS
+	fs.StatFS
 	// Type return the type of filesystem
 	Type() Type
 	// Mkdir make a directory
@@ -36,8 +40,6 @@ type FileSystem interface {
 	Chown(name string, uid, gid int) error
 	// Chtimes changes the file creation, access and modification times.
 	Chtimes(pathname string, ctime, atime, mtime time.Time) error
-	// ReadDir read the contents of a directory
-	ReadDir(pathname string) ([]os.FileInfo, error)
 	// Open open a handle to read a file, implements fs.FS
 	Open(pathname string) (fs.File, error)
 	// OpenFile open a handle to read or write to a file

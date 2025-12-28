@@ -709,7 +709,6 @@ func Read(b backend.Storage, size, start, sectorsize int64) (*FileSystem, error)
 
 // interface guard
 var _ filesystem.FileSystem = (*FileSystem)(nil)
-var _ iofs.FS = (*FileSystem)(nil)
 
 // Do cleaning job for ext4. Note that ext4 does not have side-effects so we do not do anything.
 func (fs *FileSystem) Close() error {
@@ -792,10 +791,10 @@ func (fs *FileSystem) Chown(name string, uid, gid int) error {
 
 // ReadDir return the contents of a given directory in a given filesystem.
 //
-// Returns a slice of os.FileInfo with all of the entries in the directory.
+// Returns a slice of iofs.DirEntry with all of the entries in the directory.
 //
 // Will return an error if the directory does not exist or is a regular file and not a directory
-func (fs *FileSystem) ReadDir(p string) ([]os.FileInfo, error) {
+func (fs *FileSystem) ReadDir(p string) ([]iofs.DirEntry, error) {
 	dir, err := fs.readDirWithMkdir(p, false)
 	if err != nil {
 		return nil, fmt.Errorf("error reading directory %s: %v", p, err)
@@ -803,17 +802,15 @@ func (fs *FileSystem) ReadDir(p string) ([]os.FileInfo, error) {
 	// once we have made it here, looping is done. We have found the final entry
 	// we need to return all of the file info
 	count := len(dir.entries)
-	ret := make([]os.FileInfo, count)
+	ret := make([]iofs.DirEntry, count)
 	for i, e := range dir.entries {
 		in, err := fs.readInode(e.inode)
 		if err != nil {
 			return nil, fmt.Errorf("could not read inode %d at position %d in directory: %v", e.inode, i, err)
 		}
-		ret[i] = &FileInfo{
-			modTime: in.modifyTime,
-			name:    e.filename,
-			size:    int64(in.size),
-			isDir:   e.fileType == dirFileTypeDirectory,
+		ret[i] = &directoryEntryInfo{
+			inode:          in,
+			directoryEntry: e,
 		}
 	}
 
@@ -896,6 +893,16 @@ func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 		filesystem:     fs,
 		extents:        extents,
 	}, nil
+}
+
+// ReadFile implements ReadFileFS to read an entire file into memory
+func (fs *FileSystem) ReadFile(name string) ([]byte, error) {
+	f, err := fs.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return io.ReadAll(f)
 }
 
 // Label read the volume label
