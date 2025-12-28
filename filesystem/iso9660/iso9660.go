@@ -378,8 +378,8 @@ func (fsm *FileSystem) Chown(name string, uid, gid int) error {
 // Returns a slice of os.FileInfo with all of the entries in the directory.
 //
 // Will return an error if the directory does not exist or is a regular file and not a directory
-func (fsm *FileSystem) ReadDir(p string) ([]os.FileInfo, error) {
-	var fi []os.FileInfo
+func (fsm *FileSystem) ReadDir(p string) ([]iofs.DirEntry, error) {
+	var de []iofs.DirEntry
 	// non-workspace: read from iso9660
 	// workspace: read from regular filesystem
 	if fsm.workspace != "" {
@@ -389,28 +389,17 @@ func (fsm *FileSystem) ReadDir(p string) ([]os.FileInfo, error) {
 		if err != nil {
 			return nil, fmt.Errorf("could not read directory %s: %v", p, err)
 		}
-		for _, e := range dirEntries {
-			info, err := e.Info()
-			if err != nil {
-				return nil, fmt.Errorf("could not read directory %s: %v", p, err)
-			}
-			fi = append(fi, info)
-		}
+		de = dirEntries
 	} else {
 		dirEntries, err := fsm.readDirectory(p)
 		if err != nil {
 			return nil, fmt.Errorf("error reading directory %s: %v", p, err)
 		}
-		fi = make([]os.FileInfo, 0, len(dirEntries))
 		for _, entry := range dirEntries {
-			// ignore any entry that is current directory or parent
-			if entry.isSelf || entry.isParent {
-				continue
-			}
-			fi = append(fi, entry)
+			de = append(de, entry)
 		}
 	}
-	return fi, nil
+	return de, nil
 }
 
 // Open returns an fs.File from which you can read the contents of a file

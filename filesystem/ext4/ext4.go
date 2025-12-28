@@ -791,10 +791,10 @@ func (fs *FileSystem) Chown(name string, uid, gid int) error {
 
 // ReadDir return the contents of a given directory in a given filesystem.
 //
-// Returns a slice of os.FileInfo with all of the entries in the directory.
+// Returns a slice of iofs.DirEntry with all of the entries in the directory.
 //
 // Will return an error if the directory does not exist or is a regular file and not a directory
-func (fs *FileSystem) ReadDir(p string) ([]os.FileInfo, error) {
+func (fs *FileSystem) ReadDir(p string) ([]iofs.DirEntry, error) {
 	dir, err := fs.readDirWithMkdir(p, false)
 	if err != nil {
 		return nil, fmt.Errorf("error reading directory %s: %v", p, err)
@@ -802,18 +802,16 @@ func (fs *FileSystem) ReadDir(p string) ([]os.FileInfo, error) {
 	// once we have made it here, looping is done. We have found the final entry
 	// we need to return all of the file info
 	count := len(dir.entries)
-	ret := make([]os.FileInfo, count)
+	ret := make([]iofs.DirEntry, count)
 	for i, e := range dir.entries {
 		in, err := fs.readInode(e.inode)
 		if err != nil {
 			return nil, fmt.Errorf("could not read inode %d at position %d in directory: %v", e.inode, i, err)
 		}
-		ret[i] = &FileInfo{
-			modTime: in.modifyTime,
-			name:    e.filename,
-			size:    int64(in.size),
-			isDir:   e.fileType == dirFileTypeDirectory,
-		}
+		ret = append(ret, &directoryEntryInfo{
+			inode:          in,
+			directoryEntry: e,
+		})
 	}
 
 	return ret, nil

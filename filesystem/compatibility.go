@@ -76,10 +76,10 @@ func (f *fsCompatible) Open(name string) (fs.File, error) {
 		return &fsDirWrapper{name: name, compat: f, stat: &fakeRootDir{}}, nil
 	}
 	dirname := path.Dir(name)
-	if info, err := f.fs.ReadDir(dirname); err == nil {
-		for i := range info {
-			if info[i].Name() == path.Base(name) {
-				stat = info[i]
+	if de, err := f.fs.ReadDir(dirname); err == nil {
+		for i := range de {
+			if de[i].Name() == path.Base(name) {
+				stat, _ = de[i].Info()
 				break
 			}
 		}
@@ -98,15 +98,7 @@ func (f *fsCompatible) Open(name string) (fs.File, error) {
 }
 
 func (f *fsCompatible) ReadDir(name string) ([]fs.DirEntry, error) {
-	entries, err := f.fs.ReadDir(name)
-	if err != nil {
-		return nil, err
-	}
-	direntries := make([]fs.DirEntry, len(entries))
-	for i := range entries {
-		direntries[i] = fs.FileInfoToDirEntry(entries[i])
-	}
-	return direntries, nil
+	return f.fs.ReadDir(name)
 }
 
 // FS converts a diskfs FileSystem to a fs.FS for compatibility with

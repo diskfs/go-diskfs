@@ -3,6 +3,7 @@ package fat32
 import (
 	"encoding/binary"
 	"fmt"
+	iofs "io/fs"
 	"regexp"
 	"strings"
 	"time"
@@ -45,6 +46,31 @@ type directoryEntry struct {
 	filesystem         *FileSystem
 	longFilenameSlots  int
 	isNew              bool
+}
+
+func (de *directoryEntry) Info() (iofs.FileInfo, error) {
+	return FileInfo{
+		modTime:   de.modifyTime,
+		name:      de.filenameLong,
+		shortName: shortNameFromDirEntry(de),
+		size:      int64(de.fileSize),
+		isDir:     de.isSubdirectory,
+	}, nil
+}
+
+func (de *directoryEntry) IsDir() bool {
+	return de.isSubdirectory
+}
+
+func (de *directoryEntry) Type() iofs.FileMode {
+	if de.isSubdirectory {
+		return iofs.ModeDir
+	}
+	return 0
+}
+
+func (de *directoryEntry) Name() string {
+	return de.filenameLong
 }
 
 func (de *directoryEntry) toBytes() ([]byte, error) {

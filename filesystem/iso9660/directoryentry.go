@@ -514,6 +514,16 @@ func (de *directoryEntry) Sys() interface{} {
 	return nil
 }
 
+// Info returns the FileInfo structure, which directoryEntry already implements
+func (de *directoryEntry) Info() (os.FileInfo, error) {
+	return de, nil
+}
+
+// Type returns the type of the directory entry
+func (de *directoryEntry) Type() os.FileMode {
+	return de.Mode()
+}
+
 // utilities
 
 func bytesToTime(b []byte) time.Time {

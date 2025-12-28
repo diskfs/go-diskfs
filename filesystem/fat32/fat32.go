@@ -597,10 +597,10 @@ func (fs *FileSystem) Chown(_ string, _, _ int) error {
 
 // ReadDir return the contents of a given directory in a given filesystem.
 //
-// Returns a slice of os.FileInfo with all of the entries in the directory.
+// Returns a slice of iofs.DirEntry with all of the entries in the directory.
 //
 // Will return an error if the directory does not exist or is a regular file and not a directory
-func (fs *FileSystem) ReadDir(p string) ([]os.FileInfo, error) {
+func (fs *FileSystem) ReadDir(p string) ([]iofs.DirEntry, error) {
 	_, entries, err := fs.readDirWithMkdir(p, false)
 	if err != nil {
 		return nil, fmt.Errorf("error reading directory %s: %w", p, err)
@@ -608,18 +608,12 @@ func (fs *FileSystem) ReadDir(p string) ([]os.FileInfo, error) {
 	// once we have made it here, looping is done. We have found the final entry
 	// we need to return all of the file info
 	//nolint:prealloc // because the following loop may omit some entry
-	var ret []os.FileInfo
+	var ret []iofs.DirEntry
 	for _, e := range entries {
 		if e.isVolumeLabel {
 			continue
 		}
-		ret = append(ret, FileInfo{
-			modTime:   e.modifyTime,
-			name:      e.filenameLong,
-			shortName: shortNameFromDirEntry(e),
-			size:      int64(e.fileSize),
-			isDir:     e.isSubdirectory,
-		})
+		ret = append(ret, e)
 	}
 	return ret, nil
 }

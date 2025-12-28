@@ -367,9 +367,14 @@ func TestFat32SourceDateEpoch(t *testing.T) {
 	expected := time.Unix(epochInt, 0)
 
 	for _, entry := range entries {
+		info, err := entry.Info()
+		if err != nil {
+			t.Errorf("getting info for %s failed: %v", entry.Name(), err)
+			continue
+		}
 		if entry.Name() == "test.txt" || entry.Name() == "testdir" {
-			if entry.ModTime().Unix() != expected.Unix() {
-				t.Errorf("%s: timestamp mismatch, got %v, expected %v", entry.Name(), entry.ModTime().Unix(), expected.Unix())
+			if info.ModTime().Unix() != expected.Unix() {
+				t.Errorf("%s: timestamp mismatch, got %v, expected %v", entry.Name(), info.ModTime().Unix(), expected.Unix())
 			}
 		}
 	}

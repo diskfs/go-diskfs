@@ -34,6 +34,11 @@ func fileInfoFor(path string, fs filesystem.FileSystem) error {
 	}
 
 	for _, file := range files {
+		fileInfo, err := file.Info()
+		if err != nil {
+			fmt.Printf("Failed to get info for file %s: %v\n", file.Name(), err)
+			continue
+		}
 		fullPath := filepath.Join(path, file.Name())
 		if file.IsDir() {
 			err = fileInfoFor(fullPath, fs)
@@ -53,7 +58,7 @@ func fileInfoFor(path string, fs filesystem.FileSystem) error {
 			fmt.Printf("Failed to cast to iso9660.File for %s\n", fullPath)
 			continue
 		}
-		fmt.Printf("%s\n Size: %d\n Location: %d\n\n", fullPath, file.Size(), myFile.Location())
+		fmt.Printf("%s\n Size: %d\n Location: %d\n\n", fullPath, fileInfo.Size(), myFile.Location())
 	}
 	return nil
 }
