@@ -34,14 +34,14 @@ func TestFinalizeSquashfs(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to squashfs.Create: %v", err)
 		}
-		for _, dir := range []string{"/", "/FOO", "/BAR", "/ABC"} {
+		for _, dir := range []string{".", "FOO", "BAR", "ABC"} {
 			err = fs.Mkdir(dir)
 			if err != nil {
 				t.Fatalf("Failed to squashfs.Mkdir(%s): %v", dir, err)
 			}
 		}
 		var sqsfile filesystem.File
-		for _, filename := range []string{"/BAR/LARGEFILE", "/ABC/LARGEFILE"} {
+		for _, filename := range []string{"BAR/LARGEFILE", "ABC/LARGEFILE"} {
 			sqsfile, err = fs.OpenFile(filename, os.O_CREATE|os.O_RDWR)
 			if err != nil {
 				t.Fatalf("Failed to squashfs.OpenFile(%s): %v", filename, err)
@@ -71,7 +71,7 @@ func TestFinalizeSquashfs(t *testing.T) {
 
 		fooCount := 75
 		for i := 0; i <= fooCount; i++ {
-			filename := fmt.Sprintf("/FOO/FILENAME_%d", i)
+			filename := fmt.Sprintf("FOO/FILENAME_%d", i)
 			contents := []byte(fmt.Sprintf("filename_%d\n", i))
 			sqsfile, err = fs.OpenFile(filename, os.O_CREATE|os.O_RDWR)
 			if err != nil {
@@ -102,7 +102,7 @@ func TestFinalizeSquashfs(t *testing.T) {
 			t.Fatalf("error reading the tmpfile as squashfs: %v", err)
 		}
 
-		dirFi, err := fs.ReadDir("/")
+		dirFi, err := fs.ReadDir(".")
 		if err != nil {
 			t.Errorf("error reading the root directory from squashfs: %v", err)
 		}
@@ -123,9 +123,9 @@ func TestFinalizeSquashfs(t *testing.T) {
 
 		// get a few files I expect
 		fileContents := map[string]string{
-			"/README.MD":       "readme\n",
-			"/FOO/FILENAME_50": "filename_50\n",
-			"/FOO/FILENAME_2":  "filename_2\n",
+			"README.MD":       "readme\n",
+			"FOO/FILENAME_50": "filename_50\n",
+			"FOO/FILENAME_2":  "filename_2\n",
 		}
 
 		for k, v := range fileContents {

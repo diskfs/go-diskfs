@@ -97,7 +97,7 @@ func (pt *pathTable) getLocation(p string) uint32 {
 	// level represents the level of the parent
 	var level uint16 = 1
 	var location uint32
-	if len(parts) == 0 {
+	if len(parts) == 0 || parts[0] == "." {
 		location = pt.records[0].location
 	} else {
 		current := parts[0]

@@ -725,6 +725,10 @@ func (fs *FileSystem) Type() filesystem.Type {
 // * It will make the entire tree path if it does not exist
 // * It will not return an error if the path already exists
 func (fs *FileSystem) Mkdir(p string) error {
+	// should not accept anything that starts with /
+	if err := validatePath(p); err != nil {
+		return err
+	}
 	_, err := fs.readDirWithMkdir(p, true)
 	// we are not interesting in returning the entries
 	return err
@@ -795,6 +799,10 @@ func (fs *FileSystem) Chown(name string, uid, gid int) error {
 //
 // Will return an error if the directory does not exist or is a regular file and not a directory
 func (fs *FileSystem) ReadDir(p string) ([]iofs.DirEntry, error) {
+	// should not accept anything that starts with /
+	if err := validatePath(p); err != nil {
+		return nil, err
+	}
 	dir, err := fs.readDirWithMkdir(p, false)
 	if err != nil {
 		return nil, fmt.Errorf("error reading directory %s: %v", p, err)
@@ -802,16 +810,20 @@ func (fs *FileSystem) ReadDir(p string) ([]iofs.DirEntry, error) {
 	// once we have made it here, looping is done. We have found the final entry
 	// we need to return all of the file info
 	count := len(dir.entries)
-	ret := make([]iofs.DirEntry, count)
+	ret := make([]iofs.DirEntry, 0, count)
 	for i, e := range dir.entries {
 		in, err := fs.readInode(e.inode)
 		if err != nil {
 			return nil, fmt.Errorf("could not read inode %d at position %d in directory: %v", e.inode, i, err)
 		}
-		ret[i] = &directoryEntryInfo{
+		if e.filename == "." || e.filename == ".." || e.filename == "" {
+			// skip these entries
+			continue
+		}
+		ret = append(ret, &directoryEntryInfo{
 			inode:          in,
 			directoryEntry: e,
-		}
+		})
 	}
 
 	return ret, nil
@@ -820,6 +832,10 @@ func (fs *FileSystem) ReadDir(p string) ([]iofs.DirEntry, error) {
 // Open returns an fs.File from which you can read the contents of a file
 // Especially useful for doing fs.FS operations
 func (fs *FileSystem) Open(p string) (iofs.File, error) {
+	// should not accept anything that starts with /
+	if err := validatePath(p); err != nil {
+		return nil, err
+	}
 	file, err := fs.OpenFile(p, os.O_RDONLY)
 	if err != nil {
 		return nil, err
@@ -2046,4 +2062,10 @@ func checkSuperBackup(g uint64) bool {
 		}
 	}
 	return false
+}
+func validatePath(name string) error {
+	if !iofs.ValidPath(name) {
+		return iofs.ErrInvalid
+	}
+	return nil
 }

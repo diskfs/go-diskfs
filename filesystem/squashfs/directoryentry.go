@@ -184,7 +184,11 @@ func (d *directoryEntry) Open() (filesystem.File, error) {
 	// get the inode data for this file
 	// now open the file
 	// get the inode for the file
-	var eFile *extendedFile
+	var (
+		eFile *extendedFile
+		f     filesystem.File
+		err   error
+	)
 	in := d.inode
 	iType := in.inodeType()
 	body := in.getBody()
@@ -194,18 +198,44 @@ func (d *directoryEntry) Open() (filesystem.File, error) {
 		bFile, _ := body.(*basicFile)
 		extFile := bFile.toExtended()
 		eFile = &extFile
+		f = &File{
+			directoryEntry: d,
+			extendedFile:   eFile,
+			isReadWrite:    false,
+			isAppend:       false,
+			offset:         0,
+			filesystem:     d.fs,
+		}
 	case inodeExtendedFile:
 		eFile, _ = body.(*extendedFile)
+		f = &File{
+			directoryEntry: d,
+			extendedFile:   eFile,
+			isReadWrite:    false,
+			isAppend:       false,
+			offset:         0,
+			filesystem:     d.fs,
+		}
+	case inodeBasicSymlink:
+		bLink, _ := body.(*basicSymlink)
+		target := bLink.target
+		f, err = d.fs.OpenFile(target, os.O_RDONLY)
+	case inodeExtendedSymlink:
+		eLink, _ := body.(*extendedSymlink)
+		target := eLink.target
+		f, err = d.fs.OpenFile(target, os.O_RDONLY)
+	case inodeBasicDirectory, inodeExtendedDirectory:
+		f = &File{
+			directoryEntry: d,
+			extendedFile:   eFile,
+			isReadWrite:    false,
+			isAppend:       false,
+			offset:         0,
+			filesystem:     d.fs,
+		}
 	default:
 		return nil, fmt.Errorf("inode is of type %d, neither basic nor extended file", iType)
 	}
 
-	return &File{
-		directoryEntry: d,
-		extendedFile:   eFile,
-		isReadWrite:    false,
-		isAppend:       false,
-		offset:         0,
-		filesystem:     d.fs,
-	}, nil
+	return f, err
 }

@@ -5,10 +5,10 @@ import (
 	"testing"
 
 	"github.com/diskfs/go-diskfs/backend/file"
-	"github.com/diskfs/go-diskfs/filesystem"
+	"github.com/diskfs/go-diskfs/filesystem/internal/testutil"
 )
 
-func TestISO9660FSCompatibility(t *testing.T) {
+func TestFSCompatibility(t *testing.T) {
 	f, err := os.Open(ISO9660File)
 	if err != nil {
 		t.Fatalf("Failed to read iso9660 testfile: %v", err)
@@ -16,20 +16,25 @@ func TestISO9660FSCompatibility(t *testing.T) {
 	defer f.Close()
 
 	b := file.New(f, true)
-	isofs, err := Read(b, 0, 0, 2048)
+	fs, err := Read(b, 0, 0, 2048)
 	if err != nil {
 		t.Fatalf("iso read: %s", err)
 	}
 
-	fs := filesystem.FS(isofs)
-	entries, err := fs.ReadDir("/")
+	if _, err := fs.ReadDir("/"); err == nil {
+		t.Fatalf("should have given error with ReadDir(/): %s", err)
+	}
+	entries, err := fs.ReadDir(".")
 	if err != nil {
-		t.Fatalf("cannot read /: %s", err)
+		t.Fatalf("should not have given error with ReadDir(.): %s", err)
 	}
 	if len(entries) != 5 {
 		t.Fatalf("should be 5 entries in iso fs")
 	}
-	testfile, err := fs.Open("/README.MD")
+	if _, err := fs.Open("/README.MD"); err == nil {
+		t.Fatalf("should have given an error with Open(/README.MD)")
+	}
+	testfile, err := fs.Open("README.MD")
 	if err != nil {
 		t.Fatalf("test file: %s", err)
 	}
@@ -40,4 +45,6 @@ func TestISO9660FSCompatibility(t *testing.T) {
 	if stat.Size() != 7 {
 		t.Fatalf("size bad: %d", stat.Size())
 	}
+
+	testutil.TestFSTree(t, fs)
 }

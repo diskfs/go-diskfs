@@ -227,7 +227,7 @@ func TestFinalize9660(t *testing.T) {
 			t.Fatalf("error reading the tmpfile as iso: %v", err)
 		}
 
-		dirFi, err := fs.ReadDir("/")
+		dirFi, err := fs.ReadDir(".")
 		if err != nil {
 			t.Errorf("error reading the root directory from iso: %v", err)
 		}
@@ -248,9 +248,9 @@ func TestFinalize9660(t *testing.T) {
 
 		// get a few files I expect
 		fileContents := map[string]string{
-			"/README.MD":    "readme\n",
-			"/FOO/FILENA50": "filename_50\n",
-			"/FOO/FILENA02": "filename_2\n",
+			"README.MD":    "readme\n",
+			"FOO/FILENA50": "filename_50\n",
+			"FOO/FILENA02": "filename_2\n",
 		}
 
 		for k, v := range fileContents {
@@ -459,7 +459,7 @@ func TestFinalizeRockRidge(t *testing.T) {
 			t.Fatalf("error reading the tmpfile as iso: %v", err)
 		}
 
-		dirFi, err := fs.ReadDir("/")
+		dirFi, err := fs.ReadDir(".")
 		if err != nil {
 			t.Errorf("error reading the root directory from iso: %v", err)
 		}
