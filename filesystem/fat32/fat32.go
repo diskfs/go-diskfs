@@ -3,6 +3,7 @@ package fat32
 import (
 	"errors"
 	"fmt"
+	"io"
 	iofs "io/fs"
 	"os"
 	"path"
@@ -704,6 +705,16 @@ func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 		filesystem:     fs,
 		parent:         parentDir,
 	}, nil
+}
+
+// ReadFile implements ReadFileFS to read an entire file into memory
+func (fs *FileSystem) ReadFile(name string) ([]byte, error) {
+	f, err := fs.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return io.ReadAll(f)
 }
 
 // removes the named file or (empty) directory.

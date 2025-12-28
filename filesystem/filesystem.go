@@ -19,6 +19,7 @@ var (
 type FileSystem interface {
 	fs.FS
 	fs.ReadDirFS
+	fs.ReadFileFS
 	// Type return the type of filesystem
 	Type() Type
 	// Mkdir make a directory

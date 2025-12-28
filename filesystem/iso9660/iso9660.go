@@ -3,6 +3,7 @@ package iso9660
 import (
 	"encoding/binary"
 	"fmt"
+	"io"
 	iofs "io/fs"
 	"os"
 	"path"
@@ -479,6 +480,16 @@ func (fsm *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 	}
 
 	return f, nil
+}
+
+// ReadFile implements ReadFileFS to read an entire file into memory
+func (fsm *FileSystem) ReadFile(name string) ([]byte, error) {
+	f, err := fsm.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return io.ReadAll(f)
 }
 
 // Rename renames (moves) oldpath to newpath. If newpath already exists and is not a directory, Rename replaces it.
