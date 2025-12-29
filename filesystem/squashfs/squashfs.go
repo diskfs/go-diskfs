@@ -278,6 +278,9 @@ func (fs *FileSystem) GetCacheSize() int {
 //
 // if readonly and not in workspace, will return an error
 func (fs *FileSystem) Mkdir(p string) error {
+	if err := validatePath(p); err != nil {
+		return err
+	}
 	if fs.workspace == "" {
 		return filesystem.ErrReadonlyFilesystem
 	}
@@ -346,6 +349,10 @@ func (fs *FileSystem) Chtimes(name string, ctime, atime, mtime time.Time) error 
 //
 // Will return an error if the directory does not exist or is a regular file and not a directory
 func (fs *FileSystem) ReadDir(p string) ([]iofs.DirEntry, error) {
+	// should not accept anything that starts with /
+	if err := validatePath(p); err != nil {
+		return nil, err
+	}
 	var de []iofs.DirEntry
 	// non-workspace: read from squashfs
 	// workspace: read from regular filesystem
@@ -386,6 +393,10 @@ func (fs *FileSystem) Open(p string) (iofs.File, error) {
 //
 // returns an error if the file does not exist
 func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
+	// should not accept anything that starts with /
+	if err := validatePath(p); err != nil {
+		return nil, err
+	}
 	var f filesystem.File
 	var err error
 
@@ -393,39 +404,44 @@ func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 	dir := path.Dir(p)
 	filename := path.Base(p)
 
-	// if the dir == filename, then it is just /
-	if dir == filename {
-		return nil, fmt.Errorf("cannot open directory %s as file", p)
-	}
-
 	// cannot open to write or append or create if we do not have a workspace
 	writeMode := flag&os.O_WRONLY != 0 || flag&os.O_RDWR != 0 || flag&os.O_APPEND != 0 || flag&os.O_CREATE != 0 || flag&os.O_TRUNC != 0 || flag&os.O_EXCL != 0
 	if fs.workspace == "" {
 		if writeMode {
 			return nil, filesystem.ErrReadonlyFilesystem
 		}
-
-		// get the directory entries
-		var entries []*directoryEntry
-		entries, err = fs.readDirectory(dir)
-		if err != nil {
-			return nil, fmt.Errorf("could not read directory entries for %s", dir)
-		}
 		// we now know that the directory exists, see if the file exists
 		var targetEntry *directoryEntry
-		for _, e := range entries {
-			eName := e.Name()
-			// cannot do anything with directories
-			if eName == filename && e.IsDir() {
-				return nil, fmt.Errorf("cannot open directory %s as file", p)
+
+		// what if we asked for root?
+		if dir == filename && filename == "." {
+			targetEntry = &directoryEntry{
+				fs:             fs,
+				inode:          fs.rootDir,
+				isSubdirectory: true,
+				name:           ".",
 			}
-			if eName == filename {
+		} else {
+			// get the directory entries
+			var entries []*directoryEntry
+			entries, err = fs.readDirectory(dir)
+			if err != nil {
+				return nil, fmt.Errorf("could not read directory entries for %s", dir)
+			}
+			for _, e := range entries {
+				eName := e.Name()
+				if eName != filename {
+					continue
+				}
+				// cannot do anything with directories
+				if e.IsDir() {
+					return nil, fmt.Errorf("cannot open directory %s as file", p)
+				}
 				// if we got this far, we have found the file
 				targetEntry = e
 				break
 			}
 		}
-
 		// see if the file exists
 		// if the file does not exist, and is not opened for os.O_CREATE, return an error
 		if targetEntry == nil {
@@ -531,7 +547,7 @@ func (fs *FileSystem) getDirectoryEntries(p string, in inode) ([]*directoryEntry
 	entriesRaw := dir.entries
 	var entries []*directoryEntry
 	// if this is the directory we are looking for, return the entries
-	if len(parts) == 0 {
+	if len(parts) == 0 || (len(parts) == 1 && parts[0] == ".") {
 		entries, err = fs.hydrateDirectoryEntries(entriesRaw)
 		if err != nil {
 			return nil, fmt.Errorf("could not populate directory entries for %s with properties: %v", p, err)
@@ -947,4 +963,10 @@ func readUidsGids(s *superblock, file backend.File, c Compressor) ([]uint32, err
 
 	// now have all of the data loaded
 	return parseIDTable(data), nil
+}
+func validatePath(name string) error {
+	if !iofs.ValidPath(name) {
+		return iofs.ErrInvalid
+	}
+	return nil
 }

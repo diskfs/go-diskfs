@@ -1,7 +1,6 @@
 package fat32
 
 import (
-	"errors"
 	"strings"
 )
 
@@ -18,19 +17,16 @@ const (
 	Fat32MaxSize int64 = 2198754099200
 )
 
-func universalizePath(p string) (string, error) {
+func universalizePath(p string) string {
 	// globalize the separator
 	ps := strings.ReplaceAll(p, "\\", "/")
-	if ps[0] != '/' {
-		return "", errors.New("must use absolute paths")
+	if ps[0] == '/' {
+		ps = ps[1:]
 	}
-	return ps, nil
+	return ps
 }
-func splitPath(p string) ([]string, error) {
-	ps, err := universalizePath(p)
-	if err != nil {
-		return nil, err
-	}
+func splitPath(p string) []string {
+	ps := universalizePath(p)
 	// we need to split such that each one ends in "/", except possibly the last one
 	parts := strings.Split(ps, "/")
 	// eliminate empty parts
@@ -40,5 +36,5 @@ func splitPath(p string) ([]string, error) {
 			ret = append(ret, sub)
 		}
 	}
-	return ret, nil
+	return ret
 }

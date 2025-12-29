@@ -37,7 +37,7 @@ func serve(filename, addr, fsType *string) error {
 		return fmt.Errorf("cannot open %s image in %q: %s", *fsType, *filename, err)
 	}
 
-	http.Handle("/", http.FileServer(http.FS(filesystem.FS(fs))))
+	http.Handle("/", http.FileServer(http.FS(fs)))
 
 	log.Printf("Serving %q on HTTP port: %s\n", *filename, *addr)
 	//nolint:gosec // we know this violates G114, but it is just an example

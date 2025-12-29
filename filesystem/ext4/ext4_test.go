@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	iofs "io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -464,10 +465,11 @@ func TestMkdir(t *testing.T) {
 		path string
 		err  error
 	}{
-		{"parent exists", "/foo/bar", nil},
-		{"parent does not exist", "/baz/bar", nil},
-		{"parent is file", "/random.dat/bar", errors.New("cannot create directory at")},
-		{"path exists", "/foo", nil},
+		{"parent exists", "foo/bar", nil},
+		{"invalid path", "/foo/bar", iofs.ErrInvalid},
+		{"parent does not exist", "baz/bar", nil},
+		{"parent is file", "random.dat/bar", errors.New("cannot create directory at")},
+		{"path exists", "foo", nil},
 	}
 	imageTests := []struct {
 		name      string
@@ -507,20 +509,16 @@ func TestMkdir(t *testing.T) {
 						if err != nil {
 							t.Fatalf("Error reading directory: %v", err)
 						}
-						if len(entries) < 2 {
-							t.Fatalf("expected at least 2 entries in directory, for . and .. , got %d", len(entries))
+						// ensure that the . and .. do not exist
+						if len(entries) > 1 {
+							if entries[0].Name() == "." {
+								t.Errorf("unexpected . entry in directory")
+							}
 						}
-						if entries[0].Name() != "." {
-							t.Errorf("expected . entry in directory")
-						}
-						if entries[1].Name() != ".." {
-							t.Errorf("expected .. entry in directory")
-						}
-						if !entries[0].IsDir() {
-							t.Errorf("expected . entry to be a directory")
-						}
-						if !entries[1].IsDir() {
-							t.Errorf("expected .. entry to be a directory")
+						if len(entries) > 2 {
+							if entries[1].Name() == ".." {
+								t.Errorf("unexpected .. entry in directory")
+							}
 						}
 					}
 				})

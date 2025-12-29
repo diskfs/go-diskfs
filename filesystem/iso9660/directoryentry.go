@@ -366,7 +366,7 @@ func parseDirEntries(b []byte, f *FileSystem) ([]*directoryEntry, error) {
 func (de *directoryEntry) getLocation(p string) (location, size uint32, err error) {
 	// break path down into parts and levels
 	parts := splitPath(p)
-	if len(parts) == 0 {
+	if len(parts) == 0 || parts[0] == "." {
 		location = de.location
 		size = de.size
 	} else {

@@ -222,6 +222,7 @@ func testGetFilesystemRoot() []*directoryEntry {
 	return []*directoryEntry{
 		{isSubdirectory: true, name: "foo", size: 9949, modTime: modTime, mode: 0o755},
 		{isSubdirectory: true, name: "zero", size: 32, modTime: modTime, mode: 0o755},
+		{isSubdirectory: true, name: "a", size: 32, modTime: modTime, mode: 0o755},
 		{isSubdirectory: true, name: "random", size: 32, modTime: modTime, mode: 0o755},
 		{isSubdirectory: false, name: "emptylink", size: 0, modTime: modTime, mode: 0o777},
 		{isSubdirectory: false, name: "goodlink", size: 0, modTime: modTime, mode: 0o777},

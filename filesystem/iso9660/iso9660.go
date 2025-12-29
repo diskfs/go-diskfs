@@ -380,6 +380,10 @@ func (fsm *FileSystem) Chown(name string, uid, gid int) error {
 //
 // Will return an error if the directory does not exist or is a regular file and not a directory
 func (fsm *FileSystem) ReadDir(p string) ([]iofs.DirEntry, error) {
+	// should not accept anything that starts with /
+	if err := validatePath(p); err != nil {
+		return nil, err
+	}
 	var de []iofs.DirEntry
 	// non-workspace: read from iso9660
 	// workspace: read from regular filesystem
@@ -410,6 +414,10 @@ func (fsm *FileSystem) ReadDir(p string) ([]iofs.DirEntry, error) {
 // Open returns an fs.File from which you can read the contents of a file
 // Especially useful for doing fs.FS operations
 func (fsm *FileSystem) Open(p string) (iofs.File, error) {
+	// should not accept anything that starts with /
+	if err := validatePath(p); err != nil {
+		return nil, err
+	}
 	file, err := fsm.OpenFile(p, os.O_RDONLY)
 	if err != nil {
 		return nil, err
@@ -610,4 +618,10 @@ func (fsm *FileSystem) Label() string {
 
 func (fsm *FileSystem) SetLabel(string) error {
 	return fmt.Errorf("ISO9660 filesystem is read-only")
+}
+func validatePath(name string) error {
+	if !iofs.ValidPath(name) {
+		return iofs.ErrInvalid
+	}
+	return nil
 }

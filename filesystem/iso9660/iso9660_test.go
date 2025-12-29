@@ -8,6 +8,7 @@ package iso9660_test
 import (
 	"fmt"
 	"io"
+	iofs "io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -293,9 +294,12 @@ func TestIso9660ReadDir(t *testing.T) {
 			// /BAR
 			// /FOO
 			// /README.MD;1
-			{fs, "/", 5, "ABC", "README.MD", nil},                                   // exists
-			{fs, "/ABC", 1, "", "LARGEFIL", nil},                                    // exists
-			{fs, "/abc", 0, "", "LARGEFIL", fmt.Errorf("directory does not exist")}, // should not find rock ridge name
+			{fs, "/", 0, "ABC", "README.MD", iofs.ErrInvalid},                      // exists
+			{fs, ".", 5, "ABC", "README.MD", nil},                                  // exists
+			{fs, "/ABC", 0, "", "LARGEFIL", iofs.ErrInvalid},                       // exists
+			{fs, "ABC", 1, "", "LARGEFIL", nil},                                    // exists
+			{fs, "abc", 0, "", "LARGEFIL", fmt.Errorf("directory does not exist")}, // should not find rock ridge name
+			{fs, "/abc", 0, "", "LARGEFIL", iofs.ErrInvalid},                       // should not find rock ridge name
 		},
 		)
 	})
@@ -307,12 +311,16 @@ func TestIso9660ReadDir(t *testing.T) {
 		runTests(t, []testList{
 			{fs, "/abcdef", 0, "", "", fmt.Errorf("directory does not exist")}, // does not exist
 			// root should have 4 entries (since we do not pass back . and ..):
-			{fs, "/", 6, "abc", "README.md", nil},                                   // exists
-			{fs, "/ABC", 0, "", "LARGEFIL", fmt.Errorf("directory does not exist")}, // should not find 8.3 name
-			{fs, "/abc", 1, "", "largefile", nil},                                   // should find rock ridge name
-			{fs, "/deep/a/b/c/d/e/f/g/h/i/j/k", 1, "file", "file", nil},             // should find a deep directory
-			{fs, "/G", 0, "", "H", fmt.Errorf("directory does not exist")},          // relocated directory
-			{fs, "/g", 0, "", "h", fmt.Errorf("directory does not exist")},          // relocated directory
+			{fs, "/", 0, "", "", iofs.ErrInvalid},                                   // invalid /
+			{fs, ".", 6, "abc", "README.md", nil},                                   // exists
+			{fs, "/ABC", 0, "", "", iofs.ErrInvalid},                                // should not find 8.3 name
+			{fs, "ABC", 0, "", "LARGEFIL", fmt.Errorf("directory does not exist")},  // should not find 8.3 name
+			{fs, "abc", 1, "", "largefile", nil},                                    // should find rock ridge name
+			{fs, "/abc", 0, "", "", iofs.ErrInvalid},                                // invalid
+			{fs, "deep/a/b/c/d/e/f/g/h/i/j/k", 1, "file", "file", nil},              // should find a deep directory
+			{fs, "/deep/a/b/c/d/e/f/g/h/i/j/k", 0, "file", "file", iofs.ErrInvalid}, // invalid
+			{fs, "G", 0, "", "H", fmt.Errorf("directory does not exist")},           // relocated directory
+			{fs, "g", 0, "", "h", fmt.Errorf("directory does not exist")},           // relocated directory
 		},
 		)
 	})
@@ -333,8 +341,10 @@ func TestIso9660ReadDir(t *testing.T) {
 			_ = os.WriteFile(filename, []byte(contents), 0o600)
 		}
 		runTests(t, []testList{
-			{fs, "/abcdef", 0, "", "", fmt.Errorf("directory does not exist")}, // does not exist
-			{fs, existPath, 10, "filename_0", "filename_9", nil},               // exists
+			{fs, "abcdef", 0, "", "", fmt.Errorf("directory does not exist")},             // does not exist
+			{fs, "/abcdef", 0, "", "", iofs.ErrInvalid},                                   // invalid starts with /
+			{fs, existPath, 0, "", "", iofs.ErrInvalid},                                   // invalid starts with /
+			{fs, strings.TrimPrefix(existPath, "/"), 10, "filename_0", "filename_9", nil}, // exists
 		},
 		)
 	})

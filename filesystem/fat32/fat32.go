@@ -602,6 +602,10 @@ func (fs *FileSystem) Chown(_ string, _, _ int) error {
 //
 // Will return an error if the directory does not exist or is a regular file and not a directory
 func (fs *FileSystem) ReadDir(p string) ([]iofs.DirEntry, error) {
+	// should not accept anything that starts with /
+	if err := validatePath(p); err != nil {
+		return nil, err
+	}
 	_, entries, err := fs.readDirWithMkdir(p, false)
 	if err != nil {
 		return nil, fmt.Errorf("error reading directory %s: %w", p, err)
@@ -611,7 +615,7 @@ func (fs *FileSystem) ReadDir(p string) ([]iofs.DirEntry, error) {
 	//nolint:prealloc // because the following loop may omit some entry
 	var ret []iofs.DirEntry
 	for _, e := range entries {
-		if e.isVolumeLabel {
+		if e.isVolumeLabel || e.filenameShort == "" || e.filenameShort == ".." || e.filenameShort == "." {
 			continue
 		}
 		ret = append(ret, e)
@@ -747,8 +751,8 @@ func (fs *FileSystem) Remove(pathname string) error {
 			if err != nil {
 				return fmt.Errorf("error while checking if file to delete is empty: %+v", err)
 			}
-			// '.' & '..' are always present in directory
-			if len(content) > 2 {
+			// '.' & '..' are not present in ReadDir
+			if len(content) > 0 {
 				return fmt.Errorf("cannot remove non-empty directory %s", pathname)
 			}
 		}
@@ -1076,10 +1080,7 @@ func (fs *FileSystem) mkLabel(parent *Directory, name string) (*directoryEntry, 
 // readDirWithMkdir - walks down a directory tree to the last entry
 // if it does not exist, it may or may not make it
 func (fs *FileSystem) readDirWithMkdir(p string, doMake bool) (*Directory, []*directoryEntry, error) {
-	paths, err := splitPath(p)
-	if err != nil {
-		return nil, nil, err
-	}
+	paths := splitPath(p)
 	// walk down the directory tree until all paths have been walked or we cannot find something
 	// start with the root directory
 	var entries []*directoryEntry
@@ -1090,9 +1091,12 @@ func (fs *FileSystem) readDirWithMkdir(p string, doMake bool) (*Directory, []*di
 			filesystem:      fs,
 		},
 	}
-	entries, err = fs.readDirectory(currentDir)
+	entries, err := fs.readDirectory(currentDir)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to read directory %s: %w", "/", err)
+	}
+	if p == "." {
+		return currentDir, entries, nil
 	}
 	for i, subp := range paths {
 		// do we have an entry whose name is the same as this name?
@@ -1314,4 +1318,11 @@ func abs(x int) int {
 		return -x
 	}
 	return x
+}
+
+func validatePath(name string) error {
+	if !iofs.ValidPath(name) {
+		return iofs.ErrInvalid
+	}
+	return nil
 }

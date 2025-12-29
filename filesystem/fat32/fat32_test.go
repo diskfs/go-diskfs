@@ -11,6 +11,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"io"
+	iofs "io/fs"
 	mathrandv2 "math/rand/v2"
 	"os"
 	"path"
@@ -26,6 +27,7 @@ import (
 	"github.com/diskfs/go-diskfs/disk"
 	"github.com/diskfs/go-diskfs/filesystem"
 	"github.com/diskfs/go-diskfs/filesystem/fat32"
+	"github.com/diskfs/go-diskfs/filesystem/internal/testutil"
 	"github.com/diskfs/go-diskfs/testhelper"
 )
 
@@ -354,7 +356,7 @@ func TestFat32SourceDateEpoch(t *testing.T) {
 		t.Fatalf("getting filesystem failed: %v", err)
 	}
 
-	entries, err := fs.ReadDir("/")
+	entries, err := fs.ReadDir(".")
 	if err != nil {
 		t.Fatalf("reading directory failed: %v", err)
 	}
@@ -657,21 +659,32 @@ func TestFat32ReadDir(t *testing.T) {
 		}
 		// ignore volume entry when public-facing root entries
 		rootEntries = rootEntries[:len(rootEntries)-1]
-		fooEntries, _, err := fat32.GetValidDirectoryEntriesExtended("/foo")
+		fooEntriesFull, _, err := fat32.GetValidDirectoryEntriesExtended("/foo")
 		if err != nil {
 			t.Fatalf("error getting valid directory entries for /foo: %v", err)
 		}
+		var fooEntries []iofs.DirEntry
+		for _, e := range fooEntriesFull {
+			if e.Name() == "." || e.Name() == ".." {
+				continue
+			}
+			fooEntries = append(fooEntries, e)
+		}
+
 		tests := []struct {
 			path  string
 			count int
-			name  string
+			name  string // of first entry, excluding . and ..
 			isDir bool
 			err   error
 		}{
-			{"/", len(rootEntries), "foo", true, nil},
-			{"/foo", len(fooEntries), ".", true, nil},
+			{"/", 0, "foo", true, iofs.ErrInvalid},
+			{".", len(rootEntries), rootEntries[0].Name(), true, nil},
+			{"/foo", 0, ".", true, iofs.ErrInvalid},
+			{"foo", len(fooEntries), fooEntries[0].Name(), true, nil},
 			// 0 entries because the directory does not exist
-			{"/a/b/c", 0, "", false, fmt.Errorf("error reading directory /a/b/c")},
+			{"/a/b/c", 0, "", false, iofs.ErrInvalid},
+			{"a/b/c", 0, "", false, fmt.Errorf("error reading directory a/b/c")},
 		}
 		fileInfo, err := f.Stat()
 		if err != nil {
@@ -715,6 +728,25 @@ func TestFat32ReadDir(t *testing.T) {
 	t.Run("embedded filesystem", func(t *testing.T) {
 		runTest(t, 500, 1000)
 	})
+}
+
+func TestFat32FSIsTree(t *testing.T) {
+	f, err := tmpFat32(true, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fileInfo, err := f.Stat()
+	if err != nil {
+		t.Fatalf("error getting file info for tmpfile %s: %v", f.Name(), err)
+	}
+
+	b := file.New(f, true)
+	fs, err := fat32.Read(b, fileInfo.Size(), 0, 512)
+	if err != nil {
+		t.Fatalf("error reading fat32 filesystem from %s: %v", f.Name(), err)
+	}
+
+	testutil.TestFSTree(t, fs)
 }
 
 //nolint:gocyclo // we really do not care about the cyclomatic complexity of a test function. Maybe someday we will improve it.
@@ -954,12 +986,12 @@ func TestFat32OpenFile(t *testing.T) {
 				}
 			}
 
-			dir, err := fs.ReadDir("/")
+			dir, err := fs.ReadDir(".")
 			if err != nil {
-				t.Errorf("write many: error reading /: %v", err)
+				t.Errorf("write many: error reading .: %v", err)
 			}
 			if len(dir) != fileCount {
-				t.Errorf("write many: entry count mismatch on /: expected %d, got %d -- %v", fileCount, len(dir), dir)
+				t.Errorf("write many: entry count mismatch on .: expected %d, got %d -- %v", fileCount, len(dir), dir)
 			}
 		}
 		t.Run("entire image", func(t *testing.T) {
@@ -1334,17 +1366,17 @@ func TestFat32MkdirCases(t *testing.T) {
 	if err != nil {
 		t.Error(err.Error())
 	}
-	err = fs.Mkdir("/EFI/BOOT")
+	err = fs.Mkdir("EFI/BOOT")
 	if err != nil {
 		t.Error(err.Error())
 	}
 	// Make the same folders but now lowercase ... I expect it not to create anything new,
 	// these folders exist but are named /EFI/BOOT
-	err = fs.Mkdir("/efi/boot")
+	err = fs.Mkdir("efi/boot")
 	if err != nil {
 		t.Error(err.Error())
 	}
-	files, err := fs.ReadDir("/")
+	files, err := fs.ReadDir(".")
 	if err != nil {
 		t.Error(err.Error())
 	}
@@ -1377,7 +1409,7 @@ func Test83Lowercase(t *testing.T) {
 	}
 
 	// Ensure using correct masks for lowercase shortname and extension (bits 3 and 4, zero-based)
-	files, err := fs.ReadDir("/lower83")
+	files, err := fs.ReadDir("lower83")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1519,12 +1551,11 @@ func TestCreateFileTree(t *testing.T) {
 }
 
 func Test_Rename(t *testing.T) {
-	workingPath := "/"
 	srcFile := "old.txt"
 	dstFile := "new.txt"
 	createFile := func(t *testing.T, fs *fat32.FileSystem, name, content string) {
 		t.Helper()
-		origFile, err := fs.OpenFile(filepath.Join(workingPath, name), os.O_CREATE|os.O_RDWR)
+		origFile, err := fs.OpenFile(name, os.O_CREATE|os.O_RDWR)
 		if err != nil {
 			t.Fatalf("Could not create file %s: %+v", name, err)
 		}
@@ -1537,7 +1568,7 @@ func Test_Rename(t *testing.T) {
 	}
 	readFile := func(t *testing.T, fs *fat32.FileSystem, name string) string {
 		t.Helper()
-		file, err := fs.OpenFile(filepath.Join(workingPath, name), os.O_RDONLY)
+		file, err := fs.OpenFile(name, os.O_RDONLY)
 		if err != nil {
 			t.Fatalf("file %s does not exist: %+v", name, err)
 		}
@@ -1585,7 +1616,7 @@ func Test_Rename(t *testing.T) {
 				createFile(t, fs, dstFile, "This should be overwritten")
 			},
 			post: func(_ *testing.T, fs *fat32.FileSystem) {
-				origFile, err := fs.OpenFile(filepath.Join(workingPath, srcFile), os.O_RDONLY)
+				origFile, err := fs.OpenFile(srcFile, os.O_RDONLY)
 				if err == nil {
 					defer origFile.Close()
 					t.Fatal("Original file is still there")
@@ -1643,7 +1674,7 @@ func Test_Rename(t *testing.T) {
 			hasError: false,
 			pre: func(t *testing.T, fs *fat32.FileSystem) {
 				t.Helper()
-				err := fs.Mkdir(filepath.Join(workingPath, srcFile))
+				err := fs.Mkdir(srcFile)
 				if err != nil {
 					t.Fatalf("Could not create directory %s: %+v", srcFile, err)
 				}
@@ -1652,11 +1683,11 @@ func Test_Rename(t *testing.T) {
 			},
 			post: func(t *testing.T, fs *fat32.FileSystem) {
 				t.Helper()
-				_, err := fs.ReadDir(filepath.Join(workingPath, srcFile))
+				_, err := fs.ReadDir(srcFile)
 				if err == nil {
 					t.Fatalf("source directory does exist: %+v", err)
 				}
-				_, err = fs.ReadDir(filepath.Join(workingPath, dstFile))
+				_, err = fs.ReadDir(dstFile)
 				if err != nil {
 					t.Fatalf("destination directory does not exist: %+v", err)
 				}
@@ -1695,7 +1726,7 @@ func Test_Rename(t *testing.T) {
 
 			test.pre(t, fs)
 
-			err = fs.Rename(filepath.Join(workingPath, srcFile), filepath.Join(workingPath, dstFile))
+			err = fs.Rename(srcFile, dstFile)
 
 			if test.hasError {
 				if err == nil {
@@ -1713,11 +1744,10 @@ func Test_Rename(t *testing.T) {
 }
 
 func Test_Remove(t *testing.T) {
-	workingPath := "/"
 	fileToRemove := "fileToRemove.txt"
 	createFile := func(t *testing.T, fs *fat32.FileSystem, name, content string) {
 		t.Helper()
-		origFile, err := fs.OpenFile(filepath.Join(workingPath, name), os.O_CREATE|os.O_RDWR)
+		origFile, err := fs.OpenFile(name, os.O_CREATE|os.O_RDWR)
 		if err != nil {
 			t.Fatalf("Could not create file %s: %+v", name, err)
 		}
@@ -1755,7 +1785,7 @@ func Test_Remove(t *testing.T) {
 		{
 			name:     "file to remove does not exist",
 			hasError: true,
-			errorMsg: "target file /fileToRemove.txt does not exist",
+			errorMsg: "target file fileToRemove.txt does not exist",
 			pre: func(_ *testing.T, _ *fat32.FileSystem) {
 				// do not create any file
 			},
@@ -1794,13 +1824,13 @@ func Test_Remove(t *testing.T) {
 			hasError: false,
 			pre: func(t *testing.T, fs *fat32.FileSystem) {
 				t.Helper()
-				if err := fs.Mkdir(filepath.Join(workingPath, fileToRemove)); err != nil {
+				if err := fs.Mkdir(fileToRemove); err != nil {
 					t.Fatalf("could not create test directory: %+v", err)
 				}
 			},
 			post: func(t *testing.T, fs *fat32.FileSystem) {
 				t.Helper()
-				_, err := fs.ReadDir(filepath.Join(workingPath, fileToRemove))
+				_, err := fs.ReadDir(fileToRemove)
 				if err == nil {
 					t.Fatalf("Expected that dir cannot be read, but is still there")
 				}
@@ -1811,15 +1841,15 @@ func Test_Remove(t *testing.T) {
 			hasError: true,
 			pre: func(t *testing.T, fs *fat32.FileSystem) {
 				t.Helper()
-				if err := fs.Mkdir(filepath.Join(workingPath, fileToRemove)); err != nil {
+				if err := fs.Mkdir(fileToRemove); err != nil {
 					t.Fatalf("could not create test directory: %+v", err)
 				}
 				// file within dir to remove
-				createFile(t, fs, filepath.Join(workingPath, fileToRemove, "test"), "foo")
+				createFile(t, fs, filepath.Join(fileToRemove, "test"), "foo")
 			},
 			post: func(t *testing.T, fs *fat32.FileSystem) {
 				t.Helper()
-				_, err := fs.ReadDir(filepath.Join(workingPath, fileToRemove))
+				_, err := fs.ReadDir(fileToRemove)
 				if err != nil {
 					t.Fatalf("Expected that dir can be read, but has error: %+v", err)
 				}
@@ -1854,11 +1884,11 @@ func Test_Remove(t *testing.T) {
 
 			test.pre(t, fs)
 
-			err = fs.Remove(filepath.Join(workingPath, fileToRemove))
+			err = fs.Remove(fileToRemove)
 
 			if test.hasError {
 				if err == nil {
-					t.Fatal("No Error renaming file", err)
+					t.Fatal("No Error renaming file")
 				} else if !strings.Contains(err.Error(), test.errorMsg) {
 					t.Fatalf("Error does not contain expected msg: %s. Original error: %v", test.errorMsg, err)
 				}

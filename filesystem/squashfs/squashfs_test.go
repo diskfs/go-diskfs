@@ -7,7 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	stdfs "io/fs"
+	iofs "io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -107,7 +107,7 @@ func TestSquashfsMkdir(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to get read-only squashfs filesystem: %v", err)
 		}
-		err = fs.Mkdir("/abcdef")
+		err = fs.Mkdir("abcdef")
 		if err == nil {
 			t.Errorf("received no error when trying to mkdir read-only filesystem")
 		}
@@ -117,16 +117,16 @@ func TestSquashfsMkdir(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to get workspace: %v", err)
 		}
-		existPath := "/abc"
+		existPath := "abc"
 		tests := []struct {
 			fs   *squashfs.FileSystem
 			path string
 			err  error
 		}{
-			{fs, "/abcdef", nil},                          // new one
+			{fs, "abcdef", nil},                           // new one
 			{fs, existPath, nil},                          // already exists
 			{fs, path.Join(existPath, "bar/def/la"), nil}, // already exists
-			{fs, "/a/b/c", nil},                           // already exists
+			{fs, "a/b/c", nil},                            // already exists
 		}
 
 		// for fsw, we want to work at least once with a path that exists
@@ -188,10 +188,10 @@ func TestSquashfsReadDir(t *testing.T) {
 			t.Errorf("Failed to get read-only squashfs filesystem: %v", err)
 		}
 		runTests(t, []testList{
-			{fs, "/abcdef", 0, "", "", fmt.Errorf("directory does not exist")},      // does not exist
-			{fs, "/", 9, "README.md", "zero", nil},                                  // exists
-			{fs, "/foo", 501, "filename_0", "filename_99", nil},                     // exists
-			{fs, "/abc", 0, "", "LARGEFIL", fmt.Errorf("directory does not exist")}, // should not find rock ridge name
+			{fs, "abcdef", 0, "", "", fmt.Errorf("directory does not exist")},      // does not exist
+			{fs, ".", 9, "README.md", "zero", nil},                                 // exists
+			{fs, "foo", 501, "filename_0", "filename_99", nil},                     // exists
+			{fs, "abc", 0, "", "LARGEFIL", fmt.Errorf("directory does not exist")}, // should not find rock ridge name
 		},
 		)
 	})
@@ -202,7 +202,7 @@ func TestSquashfsReadDir(t *testing.T) {
 		}
 		// make sure existPath exists in the workspace
 		ws := fs.Workspace()
-		existPath := "/abc"
+		existPath := "abc"
 		existPathWs := path.Join(ws, existPath)
 		_ = os.MkdirAll(existPathWs, 0o755)
 		// create files
@@ -212,8 +212,8 @@ func TestSquashfsReadDir(t *testing.T) {
 			_ = os.WriteFile(filename, []byte(contents), 0o600)
 		}
 		runTests(t, []testList{
-			{fs, "/abcdef", 0, "", "", fmt.Errorf("directory does not exist")}, // does not exist
-			{fs, existPath, 10, "filename_0", "filename_9", nil},               // exists
+			{fs, "abcdef", 0, "", "", fmt.Errorf("directory does not exist")}, // does not exist
+			{fs, existPath, 10, "filename_0", "filename_9", nil},              // exists
 		},
 		)
 	})
@@ -240,21 +240,27 @@ func TestSquashfsOpenFile(t *testing.T) {
 				case reader == nil && (tt.err == nil || tt.expected != ""):
 					t.Errorf("%s: Unexpected nil output", header)
 				case reader != nil:
-					b, err := io.ReadAll(reader)
+					in, err := reader.Stat()
 					if err != nil {
-						t.Errorf("%s: io.ReadAll(reader) unexpected error: %v", header, err)
+						t.Fatalf("%s: reader.Stat() unexpected error: %v", header, err)
 					}
-					// limit size
-					if len(b) > 1024 {
-						b = b[:1024]
-					}
-					expected := []byte(tt.expected)
-					if len(expected) > 1024 {
-						expected = expected[:1024]
-					}
-					diff, diffString := testhelper.DumpByteSlicesWithDiffs(b, expected, 32, false, true, true)
-					if diff {
-						t.Errorf("groupdescriptor.toBytes() mismatched, actual then expected\n%s", diffString)
+					if !in.IsDir() {
+						b, err := io.ReadAll(reader)
+						if err != nil {
+							t.Errorf("%s: io.ReadAll(reader) unexpected error: %v", header, err)
+						}
+						// limit size
+						if len(b) > 1024 {
+							b = b[:1024]
+						}
+						expected := []byte(tt.expected)
+						if len(expected) > 1024 {
+							expected = expected[:1024]
+						}
+						diff, diffString := testhelper.DumpByteSlicesWithDiffs(b, expected, 32, false, true, true)
+						if diff {
+							t.Errorf("groupdescriptor.toBytes() mismatched, actual then expected\n%s", diffString)
+						}
 					}
 				}
 			}
@@ -267,13 +273,15 @@ func TestSquashfsOpenFile(t *testing.T) {
 			var zeros1024 [1024]byte
 			tests := []testStruct{
 				// error opening a directory
-				{"/", os.O_RDONLY, "", fmt.Errorf("cannot open directory %s as file", "/")},
-				{"/abcdefg", os.O_RDONLY, "", fmt.Errorf("target file %s does not exist", "/abcdefg")},
-				{"/foo/filename_10", os.O_RDONLY, "filename_10\n", nil},
-				{"/foo/filename_75", os.O_RDONLY, "filename_75\n", nil},
-				{"/README.MD", os.O_RDONLY, "", fmt.Errorf("target file %s does not exist", "/README.MD")},
-				{"/README.md", os.O_RDONLY, "README\n", nil},
-				{"/zero/largefile", os.O_RDONLY, string(zeros1024[:]), nil},
+				{".", os.O_RDONLY, "", nil},
+				{"/", os.O_RDONLY, "", iofs.ErrInvalid},
+				{"abcdefg", os.O_RDONLY, "", fmt.Errorf("target file %s does not exist", "abcdefg")},
+				{"/abcdefg", os.O_RDONLY, "", iofs.ErrInvalid},
+				{"foo/filename_10", os.O_RDONLY, "filename_10\n", nil},
+				{"foo/filename_75", os.O_RDONLY, "filename_75\n", nil},
+				{"README.MD", os.O_RDONLY, "", fmt.Errorf("target file %s does not exist", "README.MD")},
+				{"README.md", os.O_RDONLY, "README\n", nil},
+				{"zero/largefile", os.O_RDONLY, string(zeros1024[:]), nil},
 			}
 			runTests(t, fs, tests)
 		})
@@ -284,7 +292,7 @@ func TestSquashfsOpenFile(t *testing.T) {
 			}
 			// make sure our test files exist and have necessary content
 			ws := fs.Workspace()
-			subdir := "/FOO"
+			subdir := "FOO"
 			_ = os.MkdirAll(path.Join(ws, subdir), 0o755)
 			for i := 0; i <= 75; i++ {
 				filename := fmt.Sprintf("FILENA%02d", i)
@@ -292,13 +300,14 @@ func TestSquashfsOpenFile(t *testing.T) {
 				_ = os.WriteFile(path.Join(ws, subdir, filename), []byte(content), 0o600)
 			}
 			tests := []testStruct{
-				// error opening a directory
-				{"/", os.O_RDONLY, "", fmt.Errorf("cannot open directory %s as file", "/")},
+				// opening a directory
+				{".", os.O_RDONLY, "", nil},
+				{"/", os.O_RDONLY, "", iofs.ErrInvalid},
 				// open non-existent file for read or read write
-				{"/abcdefg", os.O_RDONLY, "", fmt.Errorf("target file %s does not exist", "/abcdefg")},
+				{"abcdefg", os.O_RDONLY, "", fmt.Errorf("target file %s does not exist", "abcdefg")},
 				// open file for read or read write and check contents
-				{"/FOO/FILENA01", os.O_RDONLY, "filename_1\n", nil},
-				{"/FOO/FILENA75", os.O_RDONLY, "filename_75\n", nil},
+				{"FOO/FILENA01", os.O_RDONLY, "filename_1\n", nil},
+				{"FOO/FILENA75", os.O_RDONLY, "filename_75\n", nil},
 			}
 			runTests(t, fs, tests)
 		})
@@ -311,9 +320,12 @@ func TestSquashfsOpen(t *testing.T) {
 	if err != nil {
 		t.Errorf("Failed to get read-only squashfs filesystem: %v", err)
 	}
-	des, err := fs.ReadDir("/")
+	if _, err := fs.ReadDir("/"); err == nil {
+		t.Fatalf("Should have had an error with ReadDir(/)")
+	}
+	des, err := fs.ReadDir(".")
 	if err != nil {
-		t.Errorf("Failed to list squashfs filesystem: %v", err)
+		t.Fatalf("Failed to list squashfs filesystem: %v", err)
 	}
 	var dir = make(map[string]os.FileInfo, len(des))
 	for _, de := range des {
@@ -353,10 +365,8 @@ func TestSquashfsOpen(t *testing.T) {
 	if !ok {
 		t.Fatal("Wrong type")
 	}
-	_, err = fix.Open()
-	wantErr := fmt.Errorf("inode is of type 8, neither basic nor extended file")
-	if err.Error() != wantErr.Error() {
-		t.Errorf("Want error %q but got %q", wantErr, err)
+	if _, err := fix.Open(); err != nil {
+		t.Errorf("Unexpected error when opening directory: %v", err)
 	}
 }
 
@@ -414,7 +424,7 @@ func TestSquashfsCheckListing(t *testing.T) {
 		if line == "/" {
 			continue
 		}
-		listing[line] = struct{}{}
+		listing[strings.TrimPrefix(line, "/")] = struct{}{}
 	}
 	if err := scanner.Err(); err != nil {
 		t.Fatal(err)
@@ -465,10 +475,10 @@ func TestSquashfsCheckListing(t *testing.T) {
 			}
 			var wantTarget string
 			switch p {
-			case "/goodlink":
+			case "goodlink":
 				wantTarget = "README.md"
 				wantMode |= os.ModeSymlink
-			case "/emptylink":
+			case "emptylink":
 				wantTarget = "/a/b/c/d/ef/g/h"
 				wantMode |= os.ModeSymlink
 			}
@@ -482,8 +492,8 @@ func TestSquashfsCheckListing(t *testing.T) {
 			}
 			gotTarget, err := fix.Readlink()
 			if wantTarget == "" {
-				if err != stdfs.ErrNotExist {
-					t.Errorf("%s: ReadLink want error %q got error %q", p, stdfs.ErrNotExist, err)
+				if err != iofs.ErrNotExist {
+					t.Errorf("%s: ReadLink want error %q got error %q", p, iofs.ErrNotExist, err)
 				}
 			} else {
 				if err != nil {
@@ -496,7 +506,7 @@ func TestSquashfsCheckListing(t *testing.T) {
 		}
 	}
 
-	list("/")
+	list(".")
 
 	// listing should be empty now
 	for p := range listing {
@@ -605,7 +615,7 @@ func TestSquashfsReadFile(t *testing.T) {
 		name := strings.TrimPrefix(field[1], ".")
 		tests = append(tests, readTest{
 			name:   strings.TrimPrefix(name, "/"),
-			p:      name,
+			p:      strings.TrimPrefix(name, "/"),
 			size:   size,
 			md5sum: field[0],
 		})
@@ -709,8 +719,8 @@ func TestSquashfsReadDirXattr(t *testing.T) {
 		f      string
 		xattrs map[string]string
 	}{
-		{"/", "attrfile", map[string]string{"abc": "def", "myattr": "hello"}},
-		{"/", "README.md", map[string]string{}},
+		{".", "attrfile", map[string]string{"abc": "def", "myattr": "hello"}},
+		{".", "README.md", map[string]string{}},
 	}
 
 	for _, tt := range tests {
@@ -774,7 +784,7 @@ func TestSquashfsReadDirCornerCases(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fis, err := fs.ReadDir("/")
+	fis, err := fs.ReadDir(".")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -846,7 +856,7 @@ func TestCreateAndReadFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rw, err := fs.OpenFile("/test", os.O_CREATE|os.O_RDWR)
+	rw, err := fs.OpenFile("test", os.O_CREATE|os.O_RDWR)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -879,7 +889,7 @@ func TestCreateAndReadFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	f, err := fsr.OpenFile("/test", os.O_RDONLY)
+	f, err := fsr.OpenFile("test", os.O_RDONLY)
 	if err != nil {
 		t.Fatal(err)
 	}

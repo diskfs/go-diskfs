@@ -27,6 +27,11 @@ const (
 	fileSocket
 )
 
+const (
+	appleXattrPrefix     = "com.apple."
+	appleXattrProvenance = appleXattrPrefix + "provenance"
+)
+
 // FinalizeOptions options to pass to finalize
 type FinalizeOptions struct {
 	// Compressor which compressor to use, including, where relevant, options. Defaults ot CompressorGzip
@@ -462,8 +467,11 @@ func walkTree(workspace string) ([]*finalizeFileInfo, error) {
 		}
 		xattrs := map[string]string{}
 		for _, name := range xattrNames {
+			if strings.HasPrefix(name, appleXattrProvenance) {
+				continue
+			}
 			val, err := xattr.Get(fp, name)
-			if err != nil {
+			if err != nil && !os.IsNotExist(err) {
 				return fmt.Errorf("unable to get xattr %s for %s: %v", name, fp, err)
 			}
 			xattrs[name] = string(val)
