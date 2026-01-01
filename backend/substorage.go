@@ -10,6 +10,7 @@ type SubStorage struct {
 	underlying Storage
 	offset     int64
 	size       int64
+	path       string
 }
 
 func Sub(u Storage, offset, size int64) Storage {
@@ -17,6 +18,7 @@ func Sub(u Storage, offset, size int64) Storage {
 		underlying: u,
 		offset:     offset,
 		size:       size,
+		path:       u.Path(),
 	}
 }
 
@@ -74,6 +76,10 @@ func (s SubStorage) Writable() (WritableFile, error) {
 		offset:     s.offset,
 		size:       s.size,
 	}, nil
+}
+
+func (s SubStorage) Path() string {
+	return s.path
 }
 
 type subWritable struct {

@@ -12,10 +12,11 @@ import (
 
 type rawBackend struct {
 	storage  fs.File
+	path     string
 	readOnly bool
 }
 
-// Create a backend.Storage from provided fs.File
+// Create a backend.Storage from provided fs.File. Will not store any path.
 func New(f fs.File, readOnly bool) backend.Storage {
 	return rawBackend{
 		storage:  f,
@@ -49,6 +50,7 @@ func OpenFromPath(pathName string, readOnly bool) (backend.Storage, error) {
 	return rawBackend{
 		storage:  f,
 		readOnly: readOnly,
+		path:     pathName,
 	}, nil
 }
 
@@ -74,6 +76,7 @@ func CreateFromPath(pathName string, size int64) (backend.Storage, error) {
 	return rawBackend{
 		storage:  f,
 		readOnly: false,
+		path:     pathName,
 	}, nil
 }
 
@@ -124,4 +127,8 @@ func (f rawBackend) Seek(offset int64, whence int) (int64, error) {
 		return seeker.Seek(offset, whence)
 	}
 	return -1, backend.ErrNotSuitable
+}
+
+func (f rawBackend) Path() string {
+	return f.path
 }

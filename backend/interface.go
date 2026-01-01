@@ -30,4 +30,6 @@ type Storage interface {
 	Sys() (*os.File, error)
 	// file for read-write operations
 	Writable() (WritableFile, error)
+	// Path returns the path to the underlying storage, if any; returns empty string if not applicable
+	Path() string
 }
