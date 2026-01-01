@@ -101,9 +101,14 @@ func initDisk(b backend.Storage, sectorSize SectorSize) (*disk.Disk, error) {
 	}
 
 	// get device information
+	deviceType, err := disk.DetermineDeviceType(b)
+	if err != nil {
+		return nil, err
+	}
+
 	devInfo, err := b.Stat()
 	if err != nil {
-		return nil, fmt.Errorf("could not get info for device %s: %v", devInfo.Name(), err)
+		return nil, fmt.Errorf("could not get info for device: %v", err)
 	}
 
 	newDisk := &disk.Disk{
@@ -114,14 +119,13 @@ func initDisk(b backend.Storage, sectorSize SectorSize) (*disk.Disk, error) {
 		DefaultBlocks:     true,
 	}
 
-	mode := devInfo.Mode()
-	switch {
-	case mode.IsRegular():
+	switch deviceType {
+	case disk.DeviceTypeFile:
 		log.Debug("initDisk(): regular file")
 		if newDisk.Size <= 0 {
 			return nil, fmt.Errorf("could not get file size for device %s", devInfo.Name())
 		}
-	case mode&os.ModeDevice != 0:
+	case disk.DeviceTypeBlockDevice:
 		log.Debug("initDisk(): block device")
 		osFile, err := newDisk.Backend.Sys()
 		if err != nil {
@@ -145,7 +149,8 @@ func initDisk(b backend.Storage, sectorSize SectorSize) (*disk.Disk, error) {
 			newDisk.PhysicalBlocksize = pblksize
 			newDisk.DefaultBlocks = false
 		}
-
+	case disk.DeviceTypeUnknown:
+		return nil, fmt.Errorf("device %s is neither a block device nor a regular file", devInfo.Name())
 	default:
 		return nil, fmt.Errorf("device %s is neither a block device nor a regular file", devInfo.Name())
 	}
