@@ -60,8 +60,8 @@ func (m OpenModeOption) String() string {
 
 var openModeOptions = map[OpenModeOption]int{
 	ReadOnly:           os.O_RDONLY,
-	ReadWriteExclusive: os.O_RDWR | os.O_EXCL,
-	ReadWrite:          os.O_RDWR,
+	ReadWriteExclusive: os.O_RDWR | os.O_EXCL | os.O_SYNC,
+	ReadWrite:          os.O_RDWR | os.O_SYNC,
 }
 
 // SectorSize represents the sector size to use
