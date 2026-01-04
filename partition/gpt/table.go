@@ -224,17 +224,13 @@ func (t *Table) generateProtectiveMBR() []byte {
 // toPartitionArrayBytes write the bytes for the partition array
 func (t *Table) toPartitionArrayBytes() ([]byte, error) {
 	blocksize := uint64(t.LogicalSectorSize)
-	firstblock := t.LogicalSectorSize
-	nextstart := uint64(firstblock)
 
 	// go through the partitions, make sure Start/End/Size are correct, and each has a GUID
 	for i, part := range t.Partitions {
-		err := part.initEntry(blocksize, nextstart)
+		err := part.initEntry(blocksize)
 		if err != nil {
 			return nil, fmt.Errorf("could not initialize partition %d correctly: %v", i, err)
 		}
-
-		nextstart = part.End + 1
 	}
 
 	// generate the partition bytes
