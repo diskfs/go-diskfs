@@ -557,36 +557,65 @@ func TestChtimes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error opening file %s: %v", newfile, err)
 	}
-	fileImpl, ok := fileIntf.(*File)
-	if !ok {
-		t.Fatalf("could not cast to ext4.File")
-	}
-	ctime := fileImpl.createTime.Add(-30 * time.Minute)
-	atime := fileImpl.accessTime.Add(60 * time.Minute)
-	mtime := fileImpl.modifyTime.Add(120 * time.Minute)
+	fileIntf.Close()
 
-	if err := fs.Chtimes(newfile, ctime, atime, mtime); err != nil {
-		t.Fatalf("error changing times on file %s: %v", newfile, err)
-	}
-	// now check that it was updated
-	// get existing times
-	fileIntf, err = fs.OpenFile(newfile, os.O_RDONLY)
-	if err != nil {
-		t.Fatalf("error opening file %s: %v", newfile, err)
-	}
-	// ext4 only supports second-level time resolution
+	// ext4 supports 34-bit seconds and 30-bit nanoseconds
+	// We use 91 nanoseconds because it has the lowest 2 bits set (binary 1011011),
+	// which tests the bit-packing logic.
+	nano := 91
 
-	fileImpl, ok = fileIntf.(*File)
-	if !ok {
-		t.Fatalf("could not cast to ext4.File")
+	tests := []struct {
+		name string
+		t    time.Time
+	}{
+		{"1901-1969", time.Date(1930, 1, 1, 0, 0, 0, nano, time.UTC)},
+		{"1970-2038", time.Date(2026, 1, 1, 0, 0, 0, nano, time.UTC)},
+		{"2038-2106", time.Date(2050, 1, 1, 0, 0, 0, nano, time.UTC)},
+		{"2106-2174", time.Date(2120, 1, 1, 0, 0, 0, nano, time.UTC)},
+		{"2174-2242", time.Date(2200, 1, 1, 0, 0, 0, nano, time.UTC)},
+		{"2242-2310", time.Date(2280, 1, 1, 0, 0, 0, nano, time.UTC)},
+		{"2310-2378", time.Date(2350, 1, 1, 0, 0, 0, nano, time.UTC)},
+		{"2378-2446", time.Date(2440, 1, 1, 0, 0, 0, nano, time.UTC)},
 	}
-	if fileImpl.createTime.Unix() != ctime.Unix() {
-		t.Errorf("mismatched create time, actual %v expected %v", fileImpl.createTime, ctime)
-	}
-	if fileImpl.accessTime.Unix() != atime.Unix() {
-		t.Errorf("mismatched access time, actual %v expected %v", fileImpl.accessTime, atime)
-	}
-	if fileImpl.modifyTime.Unix() != mtime.Unix() {
-		t.Errorf("mismatched modify time, actual %v expected %v", fileImpl.modifyTime, mtime)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := fs.Chtimes(newfile, tt.t, tt.t, tt.t); err != nil {
+				t.Fatalf("error changing times on file %s: %v", newfile, err)
+			}
+
+			// now check that it was updated
+			fileIntf, err = fs.OpenFile(newfile, os.O_RDONLY)
+			if err != nil {
+				t.Fatalf("error opening file %s: %v", newfile, err)
+			}
+			defer fileIntf.Close()
+
+			fileImpl, ok := fileIntf.(*File)
+			if !ok {
+				t.Fatalf("could not cast to ext4.File")
+			}
+
+			if fileImpl.createTime.Unix() != tt.t.Unix() {
+				t.Errorf("mismatched create time seconds, actual %d (%v) expected %d (%v)", fileImpl.createTime.Unix(), fileImpl.createTime, tt.t.Unix(), tt.t)
+			}
+			if fileImpl.createTime.Nanosecond() != tt.t.Nanosecond() {
+				t.Errorf("mismatched create time nanoseconds, actual %d expected %d", fileImpl.createTime.Nanosecond(), tt.t.Nanosecond())
+			}
+
+			if fileImpl.accessTime.Unix() != tt.t.Unix() {
+				t.Errorf("mismatched access time seconds, actual %d (%v) expected %d (%v)", fileImpl.accessTime.Unix(), fileImpl.accessTime, tt.t.Unix(), tt.t)
+			}
+			if fileImpl.accessTime.Nanosecond() != tt.t.Nanosecond() {
+				t.Errorf("mismatched access time nanoseconds, actual %d expected %d", fileImpl.accessTime.Nanosecond(), tt.t.Nanosecond())
+			}
+
+			if fileImpl.modifyTime.Unix() != tt.t.Unix() {
+				t.Errorf("mismatched modify time seconds, actual %d (%v) expected %d (%v)", fileImpl.modifyTime.Unix(), fileImpl.modifyTime, tt.t.Unix(), tt.t)
+			}
+			if fileImpl.modifyTime.Nanosecond() != tt.t.Nanosecond() {
+				t.Errorf("mismatched modify time nanoseconds, actual %d expected %d", fileImpl.modifyTime.Nanosecond(), tt.t.Nanosecond())
+			}
+		})
 	}
 }
