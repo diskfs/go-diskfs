@@ -195,15 +195,15 @@ func inodeFromBytes(b []byte, sb *superblock, number uint32) (*inode, error) {
 	// Thus, the full 64-bit timestamp value is constructed as follows:
 	//  original 32 bits (0:4) are seconds. Add (to the left) 2 more bits from the 32
 	//  the remaining 30 bites are nanoseconds
-	accessTimeSeconds := uint64(binary.LittleEndian.Uint32(b[0x8:0xc]))
-	changeTimeSeconds := uint64(binary.LittleEndian.Uint32(b[0xc:0x10]))
-	modifyTimeSeconds := uint64(binary.LittleEndian.Uint32(b[0x10:0x14]))
-	createTimeSeconds := uint64(binary.LittleEndian.Uint32(b[0x90:0x94]))
+	accessTimeSeconds := int32(binary.LittleEndian.Uint32(b[0x8:0xc]))
+	changeTimeSeconds := int32(binary.LittleEndian.Uint32(b[0xc:0x10]))
+	modifyTimeSeconds := int32(binary.LittleEndian.Uint32(b[0x10:0x14]))
+	createTimeSeconds := int32(binary.LittleEndian.Uint32(b[0x90:0x94]))
 
-	accessTimeExtra := uint64(binary.LittleEndian.Uint32(b[0x8c:0x90]))
-	changeTimeExtra := uint64(binary.LittleEndian.Uint32(b[0x84:0x88]))
-	modifyTimeExtra := uint64(binary.LittleEndian.Uint32(b[0x88:0x8c]))
-	createTimeExtra := uint64(binary.LittleEndian.Uint32(b[0x94:0x98]))
+	accessTimeExtra := binary.LittleEndian.Uint32(b[0x8c:0x90])
+	changeTimeExtra := binary.LittleEndian.Uint32(b[0x84:0x88])
+	modifyTimeExtra := binary.LittleEndian.Uint32(b[0x88:0x8c])
+	createTimeExtra := binary.LittleEndian.Uint32(b[0x94:0x98])
 
 	accessTimeHigh := accessTimeExtra & 0x3
 	changeTimeHigh := changeTimeExtra & 0x3
