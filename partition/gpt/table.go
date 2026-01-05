@@ -225,18 +225,34 @@ func (t *Table) generateProtectiveMBR() []byte {
 func (t *Table) toPartitionArrayBytes() ([]byte, error) {
 	blocksize := uint64(t.LogicalSectorSize)
 
-	// go through the partitions, make sure Start/End/Size are correct, and each has a GUID
+	// go through the partitions, make sure Start/End/Size are correct, and each has a GUID.
+	// In addition, the Partition slice could be in order, or not, e.g. it might have partitions 1,3,4,7 only, yet the
+	// slice will have 4 positions. Or it could be out of order. So we need to write out the partition entries in
+	// order, and fill in blanks.
+	partMap := make(map[int]*Partition)
 	for i, part := range t.Partitions {
 		err := part.initEntry(blocksize)
 		if err != nil {
 			return nil, fmt.Errorf("could not initialize partition %d correctly: %v", i, err)
 		}
+		if part.Index < 1 || part.Index > t.partitionArraySize {
+			return nil, fmt.Errorf("partition %d has invalid index %d for partition array size %d", i, part.Index, t.partitionArraySize)
+		}
+		if _, exists := partMap[part.Index]; exists {
+			return nil, fmt.Errorf("duplicate partition index %d found", part.Index)
+		}
+		partMap[part.Index] = part
 	}
 
 	// generate the partition bytes
 	partSize := t.partitionEntrySize * uint32(t.partitionArraySize)
 	bpart := make([]byte, partSize)
-	for i, p := range t.Partitions {
+	for i := 0; i < t.partitionArraySize; i++ {
+		p, ok := partMap[i+1]
+		if !ok {
+			// unused partition
+			continue
+		}
 		// write the primary partition entry
 		b2, err := p.toBytes()
 		if err != nil {

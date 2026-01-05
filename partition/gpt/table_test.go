@@ -282,7 +282,7 @@ func TestTableWrite(t *testing.T) {
 		name := "EFI System Tester"
 		table := &gpt.Table{
 			Partitions: []*gpt.Partition{
-				{Start: partitionStart, End: partitionEnd, Type: gpt.EFISystemPartition, Name: name},
+				{Index: 1, Start: partitionStart, End: partitionEnd, Type: gpt.EFISystemPartition, Name: name},
 			},
 			LogicalSectorSize: sectorSize,
 			ProtectiveMBR:     true,
