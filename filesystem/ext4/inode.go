@@ -195,31 +195,29 @@ func inodeFromBytes(b []byte, sb *superblock, number uint32) (*inode, error) {
 	// Thus, the full 64-bit timestamp value is constructed as follows:
 	//  original 32 bits (0:4) are seconds. Add (to the left) 2 more bits from the 32
 	//  the remaining 30 bites are nanoseconds
-	accessTimeSeconds := uint64(binary.LittleEndian.Uint32(b[0x8:0xc]))
-	changeTimeSeconds := uint64(binary.LittleEndian.Uint32(b[0xc:0x10]))
-	modifyTimeSeconds := uint64(binary.LittleEndian.Uint32(b[0x10:0x14]))
-	createTimeSeconds := uint64(binary.LittleEndian.Uint32(b[0x90:0x94]))
+	accessTimeSeconds := int32(binary.LittleEndian.Uint32(b[0x8:0xc]))
+	changeTimeSeconds := int32(binary.LittleEndian.Uint32(b[0xc:0x10]))
+	modifyTimeSeconds := int32(binary.LittleEndian.Uint32(b[0x10:0x14]))
+	createTimeSeconds := int32(binary.LittleEndian.Uint32(b[0x90:0x94]))
 
-	accessTimeExtra := uint64(binary.LittleEndian.Uint32(b[0x8c:0x90]))
-	changeTimeExtra := uint64(binary.LittleEndian.Uint32(b[0x84:0x88]))
-	modifyTimeExtra := uint64(binary.LittleEndian.Uint32(b[0x88:0x8c]))
-	createTimeExtra := uint64(binary.LittleEndian.Uint32(b[0x94:0x98]))
+	accessTimeExtra := binary.LittleEndian.Uint32(b[0x8c:0x90])
+	changeTimeExtra := binary.LittleEndian.Uint32(b[0x84:0x88])
+	modifyTimeExtra := binary.LittleEndian.Uint32(b[0x88:0x8c])
+	createTimeExtra := binary.LittleEndian.Uint32(b[0x94:0x98])
 
-	accessTimeHigh := accessTimeExtra & 0x3
-	changeTimeHigh := changeTimeExtra & 0x3
-	modifyTimeHigh := modifyTimeExtra & 0x3
-	createTimeHigh := createTimeExtra & 0x3
+	decodeTimestamp := func(seconds int32, extra uint32) (int64, int64) {
+		// The formula derived from the kernel documentation table is:
+		// Decoded = int64(int32(lower)) + (int64(extra_bits) << 32)
+		sec := int64(seconds) + (int64(extra&0x3) << 32)
+		// Nanoseconds are in the upper 30 bits
+		nano := int64(extra >> 2)
+		return sec, nano
+	}
 
-	accessTimeSeconds = (accessTimeHigh << 32) | accessTimeSeconds
-	changeTimeSeconds = (changeTimeHigh << 32) | changeTimeSeconds
-	modifyTimeSeconds = (modifyTimeHigh << 32) | modifyTimeSeconds
-	createTimeSeconds = (createTimeHigh << 32) | createTimeSeconds
-
-	// now get the nanoseconds by using the upper 30 bites
-	accessTimeNanoseconds := accessTimeExtra >> 2
-	changeTimeNanoseconds := changeTimeExtra >> 2
-	modifyTimeNanoseconds := modifyTimeExtra >> 2
-	createTimeNanoseconds := createTimeExtra >> 2
+	atimeSec, atimeNano := decodeTimestamp(accessTimeSeconds, accessTimeExtra)
+	ctimeSec, ctimeNano := decodeTimestamp(changeTimeSeconds, changeTimeExtra)
+	mtimeSec, mtimeNano := decodeTimestamp(modifyTimeSeconds, modifyTimeExtra)
+	crtimeSec, crtimeNano := decodeTimestamp(createTimeSeconds, createTimeExtra)
 
 	flagsNum := binary.LittleEndian.Uint32(b[0x20:0x24])
 
@@ -287,10 +285,10 @@ func inodeFromBytes(b []byte, sb *superblock, number uint32) (*inode, error) {
 		version:                binary.LittleEndian.Uint64(version),
 		inodeSize:              binary.LittleEndian.Uint16(b[0x80:0x82]) + minInodeSize,
 		deletionTime:           binary.LittleEndian.Uint32(b[0x14:0x18]),
-		accessTime:             time.Unix(int64(accessTimeSeconds), int64(accessTimeNanoseconds)),
-		changeTime:             time.Unix(int64(changeTimeSeconds), int64(changeTimeNanoseconds)),
-		modifyTime:             time.Unix(int64(modifyTimeSeconds), int64(modifyTimeNanoseconds)),
-		createTime:             time.Unix(int64(createTimeSeconds), int64(createTimeNanoseconds)),
+		accessTime:             time.Unix(atimeSec, atimeNano),
+		changeTime:             time.Unix(ctimeSec, ctimeNano),
+		modifyTime:             time.Unix(mtimeSec, mtimeNano),
+		createTime:             time.Unix(crtimeSec, crtimeNano),
 		extendedAttributeBlock: binary.LittleEndian.Uint64(extendedAttributeBlock),
 		project:                binary.LittleEndian.Uint32(b[0x9c:0x100]),
 		extents:                allExtents,
@@ -332,17 +330,23 @@ func (i *inode) toBytes(sb *superblock) []byte {
 	binary.LittleEndian.PutUint64(version, i.version)
 	binary.LittleEndian.PutUint64(extendedAttributeBlock, i.extendedAttributeBlock)
 
-	// there is some odd stuff that ext4 does with nanoseconds. We might need this in the future.
+	// ext4 timestamps are 32 bits of seconds, plus an extra 32-bit field
+	// containing 30 bits of nanoseconds and 2 bits of extended seconds.
 	// See https://ext4.wiki.kernel.org/index.php/Ext4_Disk_Layout#Inode_Timestamps
-	// binary.LittleEndian.PutUint32(accessTime[4:8], (i.accessTimeNanoseconds<<2)&accessTime[4])
-	binary.LittleEndian.PutUint64(accessTime, uint64(i.accessTime.Unix()))
-	binary.LittleEndian.PutUint32(accessTime[4:8], uint32(i.accessTime.Nanosecond()))
-	binary.LittleEndian.PutUint64(createTime, uint64(i.createTime.Unix()))
-	binary.LittleEndian.PutUint32(createTime[4:8], uint32(i.createTime.Nanosecond()))
-	binary.LittleEndian.PutUint64(changeTime, uint64(i.changeTime.Unix()))
-	binary.LittleEndian.PutUint32(changeTime[4:8], uint32(i.changeTime.Nanosecond()))
-	binary.LittleEndian.PutUint64(modifyTime, uint64(i.modifyTime.Unix()))
-	binary.LittleEndian.PutUint32(modifyTime[4:8], uint32(i.modifyTime.Nanosecond()))
+	encodeAndWriteTimestamp := func(t time.Time, target []byte) {
+		seconds := t.Unix()
+		nanos := uint32(t.Nanosecond())
+		high := uint32((seconds-int64(int32(seconds)))>>32) & 0x3
+		extra := (nanos << 2) | high
+
+		binary.LittleEndian.PutUint32(target[0:4], uint32(seconds))
+		binary.LittleEndian.PutUint32(target[4:8], extra)
+	}
+
+	encodeAndWriteTimestamp(i.accessTime, accessTime)
+	encodeAndWriteTimestamp(i.createTime, createTime)
+	encodeAndWriteTimestamp(i.changeTime, changeTime)
+	encodeAndWriteTimestamp(i.modifyTime, modifyTime)
 
 	blocks := make([]byte, 8)
 	binary.LittleEndian.PutUint64(blocks, i.blocks)
