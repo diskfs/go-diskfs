@@ -3,6 +3,7 @@ package ext4
 import (
 	"encoding/binary"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/diskfs/go-diskfs/filesystem/ext4/crc"
@@ -67,6 +68,9 @@ const (
 	filePermissionsOtherExecute uint16 = 0x1
 	filePermissionsOtherWrite   uint16 = 0x2
 	filePermissionsOtherRead    uint16 = 0x4
+	filePermissionsSticky       uint16 = 0x200
+	filePermissionsGroupSetgid  uint16 = 0x400
+	filePermissionsOwnerSetuid  uint16 = 0x800
 )
 
 // mountOptions is a structure holding flags for an inode
@@ -104,6 +108,7 @@ type filePermissions struct {
 	read    bool
 	write   bool
 	execute bool
+	special bool
 }
 
 // inode is a structure holding the data about an inode
@@ -392,11 +397,74 @@ func (i *inode) toBytes(sb *superblock) []byte {
 	return b
 }
 
+func (i *inode) permissionsToMode() os.FileMode {
+	var mode os.FileMode
+
+	// Map filetype to filemode
+	switch i.fileType {
+	case fileTypeRegularFile:
+		// no extra bits for regular files
+	case fileTypeDirectory:
+		mode |= os.ModeDir
+	case fileTypeSymbolicLink:
+		mode |= os.ModeSymlink
+	case fileTypeCharacterDevice:
+		mode |= os.ModeDevice | os.ModeCharDevice
+	case fileTypeBlockDevice:
+		mode |= os.ModeDevice
+	case fileTypeFifo:
+		mode |= os.ModeNamedPipe
+	case fileTypeSocket:
+		mode |= os.ModeSocket
+	}
+
+	// Map permissions
+	if i.permissionsOwner.read {
+		mode |= 0o400
+	}
+	if i.permissionsOwner.write {
+		mode |= 0o200
+	}
+	if i.permissionsOwner.execute {
+		mode |= 0o100
+	}
+	if i.permissionsOwner.special {
+		mode |= os.ModeSetuid
+	}
+	if i.permissionsGroup.read {
+		mode |= 0o040
+	}
+	if i.permissionsGroup.write {
+		mode |= 0o020
+	}
+	if i.permissionsGroup.execute {
+		mode |= 0o010
+	}
+	if i.permissionsGroup.special {
+		mode |= os.ModeSetgid
+	}
+	if i.permissionsOther.read {
+		mode |= 0o004
+	}
+	if i.permissionsOther.write {
+		mode |= 0o002
+	}
+	if i.permissionsOther.execute {
+		mode |= 0o001
+	}
+	if i.permissionsOther.special {
+		mode |= os.ModeSticky
+	}
+
+	return mode
+}
+
 func parseOwnerPermissions(mode uint16) filePermissions {
 	return filePermissions{
 		execute: mode&filePermissionsOwnerExecute == filePermissionsOwnerExecute,
 		write:   mode&filePermissionsOwnerWrite == filePermissionsOwnerWrite,
 		read:    mode&filePermissionsOwnerRead == filePermissionsOwnerRead,
+		special: mode&filePermissionsOwnerSetuid == filePermissionsOwnerSetuid,
 	}
 }
 func parseGroupPermissions(mode uint16) filePermissions {
@@ -404,6 +472,7 @@ func parseGroupPermissions(mode uint16) filePermissions {
 		execute: mode&filePermissionsGroupExecute == filePermissionsGroupExecute,
 		write:   mode&filePermissionsGroupWrite == filePermissionsGroupWrite,
 		read:    mode&filePermissionsGroupRead == filePermissionsGroupRead,
+		special: mode&filePermissionsGroupSetgid == filePermissionsGroupSetgid,
 	}
 }
 func parseOtherPermissions(mode uint16) filePermissions {
@@ -411,6 +480,7 @@ func parseOtherPermissions(mode uint16) filePermissions {
 		execute: mode&filePermissionsOtherExecute == filePermissionsOtherExecute,
 		write:   mode&filePermissionsOtherWrite == filePermissionsOtherWrite,
 		read:    mode&filePermissionsOtherRead == filePermissionsOtherRead,
+		special: mode&filePermissionsSticky == filePermissionsSticky,
 	}
 }
 
@@ -425,6 +495,9 @@ func (fp *filePermissions) toOwnerInt() uint16 {
 	}
 	if fp.read {
 		mode |= filePermissionsOwnerRead
+	}
+	if fp.special {
+		mode |= filePermissionsOwnerSetuid
 	}
 	return mode
 }
@@ -441,6 +514,9 @@ func (fp *filePermissions) toOtherInt() uint16 {
 	if fp.read {
 		mode |= filePermissionsOtherRead
 	}
+	if fp.special {
+		mode |= filePermissionsSticky
+	}
 	return mode
 }
 
@@ -455,6 +531,9 @@ func (fp *filePermissions) toGroupInt() uint16 {
 	}
 	if fp.read {
 		mode |= filePermissionsGroupRead
+	}
+	if fp.special {
+		mode |= filePermissionsGroupSetgid
 	}
 	return mode
 }
