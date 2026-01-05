@@ -37,3 +37,17 @@ func NewMaxPartitionsExceededError(requested, maxPart int) *MaxPartitionsExceede
 		max:       maxPart,
 	}
 }
+
+type InvalidPartitionError struct {
+	requested int
+}
+
+func (e *InvalidPartitionError) Error() string {
+	return fmt.Sprintf("requested partition %d not found", e.requested)
+}
+
+func NewInvalidPartitionError(requested int) *InvalidPartitionError {
+	return &InvalidPartitionError{
+		requested: requested,
+	}
+}
