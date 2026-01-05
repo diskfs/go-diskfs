@@ -330,17 +330,23 @@ func (i *inode) toBytes(sb *superblock) []byte {
 	binary.LittleEndian.PutUint64(version, i.version)
 	binary.LittleEndian.PutUint64(extendedAttributeBlock, i.extendedAttributeBlock)
 
-	// there is some odd stuff that ext4 does with nanoseconds. We might need this in the future.
+	// ext4 timestamps are 32 bits of seconds, plus an extra 32-bit field
+	// containing 30 bits of nanoseconds and 2 bits of extended seconds.
 	// See https://ext4.wiki.kernel.org/index.php/Ext4_Disk_Layout#Inode_Timestamps
-	// binary.LittleEndian.PutUint32(accessTime[4:8], (i.accessTimeNanoseconds<<2)&accessTime[4])
-	binary.LittleEndian.PutUint64(accessTime, uint64(i.accessTime.Unix()))
-	binary.LittleEndian.PutUint32(accessTime[4:8], uint32(i.accessTime.Nanosecond()))
-	binary.LittleEndian.PutUint64(createTime, uint64(i.createTime.Unix()))
-	binary.LittleEndian.PutUint32(createTime[4:8], uint32(i.createTime.Nanosecond()))
-	binary.LittleEndian.PutUint64(changeTime, uint64(i.changeTime.Unix()))
-	binary.LittleEndian.PutUint32(changeTime[4:8], uint32(i.changeTime.Nanosecond()))
-	binary.LittleEndian.PutUint64(modifyTime, uint64(i.modifyTime.Unix()))
-	binary.LittleEndian.PutUint32(modifyTime[4:8], uint32(i.modifyTime.Nanosecond()))
+	encodeAndWriteTimestamp := func(t time.Time, target []byte) {
+		seconds := t.Unix()
+		nanos := uint32(t.Nanosecond())
+		high := uint32((seconds-int64(int32(seconds)))>>32) & 0x3
+		extra := (nanos << 2) | high
+
+		binary.LittleEndian.PutUint32(target[0:4], uint32(seconds))
+		binary.LittleEndian.PutUint32(target[4:8], extra)
+	}
+
+	encodeAndWriteTimestamp(i.accessTime, accessTime)
+	encodeAndWriteTimestamp(i.createTime, createTime)
+	encodeAndWriteTimestamp(i.changeTime, changeTime)
+	encodeAndWriteTimestamp(i.modifyTime, modifyTime)
 
 	blocks := make([]byte, 8)
 	binary.LittleEndian.PutUint64(blocks, i.blocks)
