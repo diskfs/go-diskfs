@@ -124,7 +124,7 @@ func TestPartition(t *testing.T) {
 		partitionEnd := partitionSize + partitionStart - 1
 		table := &gpt.Table{
 			Partitions: []*gpt.Partition{
-				{Start: partitionStart, End: partitionEnd, Type: gpt.EFISystemPartition, Name: "EFI System"},
+				{Index: 1, Start: partitionStart, End: partitionEnd, Type: gpt.EFISystemPartition, Name: "EFI System"},
 			},
 			LogicalSectorSize: sectorSize,
 		}

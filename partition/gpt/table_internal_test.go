@@ -1,6 +1,7 @@
 package gpt
 
 import (
+	"bytes"
 	"crypto/rand"
 	"fmt"
 	"io"
@@ -44,6 +45,186 @@ func GetValidTable() *Table {
 	// there are 127 Unused partitions, but those are ignored
 	table.Partitions = parts
 	return &table
+}
+
+func TestToPartitionArrayBytes(t *testing.T) {
+	t.Run("empty partition array", func(t *testing.T) {
+		table := GetValidTable()
+		table.Partitions = []*Partition{}
+		b, err := table.toPartitionArrayBytes()
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		expectedSize := int(table.partitionEntrySize) * table.partitionArraySize
+		if len(b) != expectedSize {
+			t.Errorf("unexpected byte slice size %d, expected %d", len(b), expectedSize)
+		}
+		for i := 0; i < table.partitionArraySize; i++ {
+			offset := i * int(table.partitionEntrySize)
+			entryBytes := b[offset : offset+int(table.partitionEntrySize)]
+			emptyEntry := make([]byte, table.partitionEntrySize)
+			if !bytes.Equal(entryBytes, emptyEntry) {
+				t.Errorf("expected empty partition entry at index %d, got %v", i, entryBytes)
+			}
+		}
+	})
+	t.Run("null partition array", func(t *testing.T) {
+		table := GetValidTable()
+		table.Partitions = nil
+		b, err := table.toPartitionArrayBytes()
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		expectedSize := int(table.partitionEntrySize) * table.partitionArraySize
+		if len(b) != expectedSize {
+			t.Errorf("unexpected byte slice size %d, expected %d", len(b), expectedSize)
+		}
+		for i := 0; i < table.partitionArraySize; i++ {
+			offset := i * int(table.partitionEntrySize)
+			entryBytes := b[offset : offset+int(table.partitionEntrySize)]
+			emptyEntry := make([]byte, table.partitionEntrySize)
+			if !bytes.Equal(entryBytes, emptyEntry) {
+				t.Errorf("expected empty partition entry at index %d, got %v", i, entryBytes)
+			}
+		}
+	})
+	t.Run("slice with duplicate indexes", func(t *testing.T) {
+		table := GetValidTable()
+		table.Partitions = []*Partition{
+			{
+				Index: 1,
+				Start: 4000,
+				End:   5000,
+				Size:  (5000 - 4000 + 1) * 512,
+				Name:  "Duplicate Index 1",
+			},
+			{
+				Index: 1,
+				Start: 6000,
+				End:   7000,
+				Size:  (7000 - 6000 + 1) * 512,
+				Name:  "Duplicate Index 1 Again",
+			},
+		}
+		_, err := table.toPartitionArrayBytes()
+		if err == nil {
+			t.Error("expected error due to duplicate partition indexes, got nil")
+		}
+	})
+	t.Run("negative index", func(t *testing.T) {
+		table := GetValidTable()
+		table.Partitions = []*Partition{
+			{
+				Index: -1,
+				Start: 4000,
+				End:   5000,
+				Size:  (5000 - 4000 + 1) * 512,
+				Name:  "Index -1",
+			},
+		}
+		_, err := table.toPartitionArrayBytes()
+		if err == nil {
+			t.Error("expected error due to negative partition index, got nil")
+		}
+	})
+	t.Run("zero index", func(t *testing.T) {
+		table := GetValidTable()
+		table.Partitions = []*Partition{
+			{
+				Index: 0,
+				Start: 4000,
+				End:   5000,
+				Size:  (5000 - 4000 + 1) * 512,
+				Name:  "Index 0",
+			},
+		}
+		_, err := table.toPartitionArrayBytes()
+		if err == nil {
+			t.Error("expected error due to zero partition index, got nil")
+		}
+	})
+	t.Run("index too large", func(t *testing.T) {
+		table := GetValidTable()
+		table.Partitions = []*Partition{
+			{
+				Index: table.partitionArraySize + 1,
+				Start: 4000,
+				End:   5000,
+				Size:  (5000 - 4000 + 1) * 512,
+				Name:  "Index Too Large",
+			},
+		}
+		_, err := table.toPartitionArrayBytes()
+		if err == nil {
+			t.Error("expected error due to partition index too large, got nil")
+		}
+	})
+	t.Run("normal slice in order", func(t *testing.T) {
+		table := GetValidTable()
+		table.Partitions = []*Partition{
+			{
+				Index: 1,
+				Start: 4000,
+				End:   5000,
+				Size:  (5000 - 4000 + 1) * 512,
+				Name:  "Index 1",
+				Type:  LinuxFilesystem,
+			},
+			{
+				Index: 2,
+				Start: 6000,
+				End:   7000,
+				Size:  (7000 - 6000 + 1) * 512,
+				Name:  "Index 2",
+				Type:  LinuxFilesystem,
+			},
+			{
+				Index: 3,
+				Start: 8000,
+				End:   9000,
+				Size:  (9000 - 8000 + 1) * 512,
+				Name:  "Index 3",
+				Type:  LinuxFilesystem,
+			},
+		}
+		_, err := table.toPartitionArrayBytes()
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+	t.Run("normal slice out of order", func(t *testing.T) {
+		table := GetValidTable()
+		table.Partitions = []*Partition{
+			{
+				Index: 3,
+				Start: 8000,
+				End:   9000,
+				Size:  (9000 - 8000 + 1) * 512,
+				Name:  "Index 3",
+				Type:  LinuxFilesystem,
+			},
+			{
+				Index: 8,
+				Start: 4000,
+				End:   5000,
+				Size:  (5000 - 4000 + 1) * 512,
+				Name:  "Index 8",
+				Type:  LinuxFilesystem,
+			},
+			{
+				Index: 2,
+				Start: 6000,
+				End:   7000,
+				Size:  (7000 - 6000 + 1) * 512,
+				Name:  "Index 2",
+				Type:  LinuxFilesystem,
+			},
+		}
+		_, err := table.toPartitionArrayBytes()
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
 }
 
 func TestTableFromBytes(t *testing.T) {
@@ -270,6 +451,7 @@ func TestRepairVerify(t *testing.T) {
 	table := &Table{
 		Partitions: []*Partition{
 			{
+				Index: 1,
 				Start: 2048,
 				End:   sizeBefore,
 				Type:  LinuxFilesystem,
