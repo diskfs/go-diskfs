@@ -184,7 +184,7 @@ func TestInitEntry(t *testing.T) {
 			Attributes: 0,
 			Type:       EFISystemPartition,
 		}
-		err := p.initEntry(512, 2048)
+		err := p.initEntry(512)
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
@@ -203,7 +203,7 @@ func TestInitEntry(t *testing.T) {
 			Attributes: 0,
 			Type:       EFISystemPartition,
 		}
-		err := p.initEntry(512, 2048)
+		err := p.initEntry(512)
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
@@ -222,7 +222,7 @@ func TestInitEntry(t *testing.T) {
 			Attributes: 0,
 			Type:       EFISystemPartition,
 		}
-		err := p.initEntry(512, 2048)
+		err := p.initEntry(512)
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
@@ -244,7 +244,7 @@ func TestInitEntry(t *testing.T) {
 			Attributes: 0,
 			Type:       EFISystemPartition,
 		}
-		err := p.initEntry(512, 2048)
+		err := p.initEntry(512)
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
@@ -257,7 +257,6 @@ func TestInitEntry(t *testing.T) {
 	})
 
 	t.Run("only size", func(t *testing.T) {
-		var starting uint64 = 2048
 		p := Partition{
 			Start:      0,
 			End:        0,
@@ -267,26 +266,13 @@ func TestInitEntry(t *testing.T) {
 			Attributes: 0,
 			Type:       EFISystemPartition,
 		}
-		err := p.initEntry(512, starting)
-		if err != nil {
-			t.Errorf("unexpected error: %v", err)
-		}
-		if p.End == 0 {
-			t.Errorf("Did not reset end even though 0")
-		}
-		if p.Start == 0 {
-			t.Errorf("Did not reset start even though 0")
-		}
-		if p.End != end {
-			t.Errorf("end set to %d instead of %d", p.End, end)
-		}
-		if p.Start != start {
-			t.Errorf("start set to %d instead of %d", p.Start, start)
+		err := p.initEntry(512)
+		if err == nil {
+			t.Errorf("expected error got none")
 		}
 	})
 
 	t.Run("mismatched sizes", func(t *testing.T) {
-		var starting uint64 = 2048
 		p := Partition{
 			Start:      start,
 			End:        end,
@@ -296,7 +282,7 @@ func TestInitEntry(t *testing.T) {
 			Attributes: 0,
 			Type:       EFISystemPartition,
 		}
-		err := p.initEntry(512, starting)
+		err := p.initEntry(512)
 		if err == nil {
 			t.Fatal("returned unexpected nil error")
 		}

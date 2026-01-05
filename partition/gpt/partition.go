@@ -241,7 +241,7 @@ func (p *Partition) ReadContents(f backend.File, out io.Writer) (int64, error) {
 }
 
 // initEntry adjust the Start/End/Size entries and ensure it has a GUID
-func (p *Partition) initEntry(blocksize, starting uint64) error {
+func (p *Partition) initEntry(blocksize uint64) error {
 	actualPart := p
 	if actualPart.Type == Unused {
 		return nil
@@ -268,6 +268,9 @@ func (p *Partition) initEntry(blocksize, starting uint64) error {
 	size, start, end := actualPart.Size, actualPart.Start, actualPart.End
 	calculatedSize := (end - start + 1) * blocksize
 	switch {
+	case start == 0:
+		// neither start nor end specified, we cannot do anything with it
+		return fmt.Errorf("invalid partition entry, start sector is 0")
 	case end >= start && size == calculatedSize:
 	case size == 0 && end >= start:
 		// provided specific start and end, so calculate size
@@ -275,12 +278,6 @@ func (p *Partition) initEntry(blocksize, starting uint64) error {
 	case size > 0 && size%blocksize == 0 && start > 0 && end == 0:
 		// provided specific start and size, so calculate end
 		actualPart.End = start + size/blocksize - 1
-	case size > 0 && size%blocksize == 0 && start == 0 && end == 0:
-		// we start right after the end of the previous
-		start = starting
-		end = start + size/blocksize - 1
-		actualPart.Start = start
-		actualPart.End = end
 	default:
 		return fmt.Errorf("invalid partition entry, size %d bytes does not match start sector %d and end sector %d", size, start, end)
 	}
