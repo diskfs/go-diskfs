@@ -13,6 +13,12 @@ type FileInfo struct {
 	name    string
 	size    int64
 	isDir   bool
+	sys     *StatT
+}
+
+type StatT struct {
+	UID uint32
+	GID uint32
 }
 
 // IsDir abbreviation for Mode().IsDir()
@@ -44,5 +50,5 @@ func (fi *FileInfo) Size() int64 {
 
 // Sys underlying data source - not supported yet and so will return nil
 func (fi *FileInfo) Sys() interface{} {
-	return nil
+	return fi.sys
 }

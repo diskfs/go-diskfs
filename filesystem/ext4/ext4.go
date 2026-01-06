@@ -779,18 +779,99 @@ func (fs *FileSystem) Chtimes(p string, ctime, atime, mtime time.Time) error {
 
 // Chmod changes the mode of the named file to mode. If the file is a symbolic link,
 // it changes the mode of the link's target.
-//
-//nolint:revive // parameters will be used eventually
 func (fs *FileSystem) Chmod(name string, mode os.FileMode) error {
-	return filesystem.ErrNotImplemented
+	if err := validatePath(name); err != nil {
+		return err
+	}
+
+	_, entry, err := fs.getEntryAndParent(name)
+	if err != nil {
+		return err
+	}
+	if entry == nil {
+		return fmt.Errorf("target file %s does not exist", name)
+	}
+
+	// get the inode
+	inodeNumber := entry.inode
+	inode, err := fs.readInode(inodeNumber)
+	if err != nil {
+		return fmt.Errorf("could not read inode number %d: %v", inodeNumber, err)
+	}
+
+	// if a symlink, follow it
+	if inode.fileType == fileTypeSymbolicLink {
+		linkTarget := inode.linkTarget
+		if !path.IsAbs(linkTarget) {
+			dir := path.Dir(name)
+			linkTarget = path.Join(dir, linkTarget)
+			linkTarget = path.Clean(linkTarget)
+		}
+		return fs.Chmod(linkTarget, mode)
+	}
+
+	// update permissions
+	perm := uint16(mode.Perm())
+	inode.permissionsOwner = parseOwnerPermissions(perm)
+	inode.permissionsGroup = parseGroupPermissions(perm)
+	inode.permissionsOther = parseOtherPermissions(perm)
+
+	// handle special bits (setuid, setgid, sticky)
+	if mode&os.ModeSetuid != 0 {
+		inode.permissionsOwner.special = true
+	}
+	if mode&os.ModeSetgid != 0 {
+		inode.permissionsGroup.special = true
+	}
+	if mode&os.ModeSticky != 0 {
+		inode.permissionsOther.special = true
+	}
+
+	return fs.writeInode(inode)
 }
 
 // Chown changes the numeric uid and gid of the named file. If the file is a symbolic link,
 // it changes the uid and gid of the link's target. A uid or gid of -1 means to not change that value
-//
-//nolint:revive // parameters will be used eventually
 func (fs *FileSystem) Chown(name string, uid, gid int) error {
-	return filesystem.ErrNotImplemented
+	if err := validatePath(name); err != nil {
+		return err
+	}
+
+	_, entry, err := fs.getEntryAndParent(name)
+	if err != nil {
+		return err
+	}
+	if entry == nil {
+		return fmt.Errorf("target file %s does not exist", name)
+	}
+
+	// get the inode
+	inodeNumber := entry.inode
+	inode, err := fs.readInode(inodeNumber)
+	if err != nil {
+		return fmt.Errorf("could not read inode number %d: %v", inodeNumber, err)
+	}
+
+	// if a symlink, follow it
+	if inode.fileType == fileTypeSymbolicLink {
+		linkTarget := inode.linkTarget
+		if !path.IsAbs(linkTarget) {
+			dir := path.Dir(name)
+			linkTarget = path.Join(dir, linkTarget)
+			linkTarget = path.Clean(linkTarget)
+		}
+		return fs.Chown(linkTarget, uid, gid)
+	}
+
+	// update uid and gid
+	if uid != -1 {
+		inode.owner = uint32(uid)
+	}
+	if gid != -1 {
+		inode.group = uint32(gid)
+	}
+
+	return fs.writeInode(inode)
 }
 
 // ReadDir return the contents of a given directory in a given filesystem.
@@ -1202,6 +1283,11 @@ func (fs *FileSystem) Stat(p string) (iofs.FileInfo, error) {
 		name:    entry.filename,
 		size:    int64(in.size),
 		isDir:   entry.fileType == dirFileTypeDirectory,
+		mode:    in.permissionsToMode(),
+		sys: &StatT{
+			UID: in.owner,
+			GID: in.group,
+		},
 	}, nil
 }
 

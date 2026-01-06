@@ -226,5 +226,10 @@ func (fl *File) Stat() (fs.FileInfo, error) {
 		name:    fl.filename,
 		size:    int64(fl.size),
 		isDir:   fl.directoryEntry.fileType == dirFileTypeDirectory,
+		mode:    fl.permissionsToMode(),
+		sys: &StatT{
+			UID: fl.owner,
+			GID: fl.group,
+		},
 	}, nil
 }

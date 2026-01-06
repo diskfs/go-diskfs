@@ -619,3 +619,168 @@ func TestChtimes(t *testing.T) {
 		})
 	}
 }
+
+func TestChmod(t *testing.T) {
+	outfile := testCreateImgCopyFrom(t, imgFile)
+	f, err := os.OpenFile(outfile, os.O_RDWR, 0)
+	if err != nil {
+		t.Fatalf("Error opening test image: %v", err)
+	}
+	defer f.Close()
+
+	b := file.New(f, false)
+	fs, err := Read(b, 100*MB, 0, 512)
+	if err != nil {
+		t.Fatalf("Error reading filesystem: %v", err)
+	}
+
+	targetFile := "shortfile.txt"
+	tests := []struct {
+		name string
+		mode os.FileMode
+	}{
+		{"0755", 0o755},
+		{"0644", 0o644},
+		{"0000", 0o000},
+		{"0777", 0o777},
+		{"sticky", 0o644 | os.ModeSticky},
+		{"setuid", 0o755 | os.ModeSetuid},
+		{"setgid", 0o755 | os.ModeSetgid},
+		{"all-special", 0o777 | os.ModeSticky | os.ModeSetuid | os.ModeSetgid},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := fs.Chmod(targetFile, tt.mode)
+			if err != nil {
+				t.Fatalf("Chmod failed: %v", err)
+			}
+
+			fi, err := fs.Stat(targetFile)
+			if err != nil {
+				t.Fatalf("Stat failed: %v", err)
+			}
+
+			if fi.Mode() != tt.mode {
+				t.Errorf("expected mode %v, got %v", tt.mode, fi.Mode())
+			}
+		})
+	}
+
+	t.Run("symlink", func(t *testing.T) {
+		link := "symlink.dat"
+		target := "random.dat"
+		mode := os.FileMode(0o600)
+
+		err := fs.Chmod(link, mode)
+		if err != nil {
+			t.Fatalf("Chmod on symlink failed: %v", err)
+		}
+
+		// Check target
+		fi, err := fs.Stat(target)
+		if err != nil {
+			t.Fatalf("Stat on target failed: %v", err)
+		}
+		if fi.Mode().Perm() != mode.Perm() {
+			t.Errorf("expected target mode %v, got %v", mode, fi.Mode())
+		}
+	})
+}
+
+func TestChown(t *testing.T) {
+	outfile := testCreateImgCopyFrom(t, imgFile)
+	f, err := os.OpenFile(outfile, os.O_RDWR, 0)
+	if err != nil {
+		t.Fatalf("Error opening test image: %v", err)
+	}
+	defer f.Close()
+
+	b := file.New(f, false)
+	fs, err := Read(b, 100*MB, 0, 512)
+	if err != nil {
+		t.Fatalf("Error reading filesystem: %v", err)
+	}
+
+	targetFile := "shortfile.txt"
+	tests := []struct {
+		name string
+		uid  int
+		gid  int
+	}{
+		{"change-both", 1000, 2000},
+		{"change-uid", 500, -1},
+		{"change-gid", -1, 600},
+		{"no-change", -1, -1},
+		{"root", 0, 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Get initial values if we are not changing them
+			fiOld, err := fs.Stat(targetFile)
+			if err != nil {
+				t.Fatalf("Stat failed: %v", err)
+			}
+			statOld, ok := fiOld.Sys().(*StatT)
+			if !ok {
+				t.Fatalf("Sys() did not return *StatT")
+			}
+
+			err = fs.Chown(targetFile, tt.uid, tt.gid)
+			if err != nil {
+				t.Fatalf("Chown failed: %v", err)
+			}
+
+			fi, err := fs.Stat(targetFile)
+			if err != nil {
+				t.Fatalf("Stat failed: %v", err)
+			}
+			stat, ok := fi.Sys().(*StatT)
+			if !ok {
+				t.Fatalf("Sys() did not return *StatT")
+			}
+
+			expectedUID := uint32(tt.uid)
+			if tt.uid == -1 {
+				expectedUID = statOld.UID
+			}
+			expectedGID := uint32(tt.gid)
+			if tt.gid == -1 {
+				expectedGID = statOld.GID
+			}
+
+			if stat.UID != expectedUID {
+				t.Errorf("expected uid %d, got %d", expectedUID, stat.UID)
+			}
+			if stat.GID != expectedGID {
+				t.Errorf("expected gid %d, got %d", expectedGID, stat.GID)
+			}
+		})
+	}
+
+	t.Run("symlink", func(t *testing.T) {
+		link := "symlink.dat"
+		target := "random.dat"
+		uid, gid := 123, 456
+
+		err := fs.Chown(link, uid, gid)
+		if err != nil {
+			t.Fatalf("Chown on symlink failed: %v", err)
+		}
+
+		// Check target
+		fi, err := fs.Stat(target)
+		if err != nil {
+			t.Fatalf("Stat on target failed: %v", err)
+		}
+		stat, ok := fi.Sys().(*StatT)
+		if !ok {
+			t.Fatalf("Sys() did not return *StatT")
+		}
+
+		if int(stat.UID) != uid || int(stat.GID) != gid {
+			t.Errorf("expected target uid:gid %d:%d, got %d:%d", uid, gid, stat.UID, stat.GID)
+		}
+	})
+}

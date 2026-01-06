@@ -49,5 +49,5 @@ dd if=superblock.bin count=2 skip=376 bs=1 2>/dev/null| hexdump -e '1/2 "%u"' > 
 # first, create a 1024-byte zero prefix
 dd if=/dev/zero of=ext4-offset.img bs=1024 count=1
 # then write the original image starting at offset 1024
-dd if=ext4.img of=ext4-offset.img bs=1 seek=1024 conv=notrunc
+dd if=ext4.img of=ext4-offset.img bs=1024 seek=1 conv=notrunc
 EOF
