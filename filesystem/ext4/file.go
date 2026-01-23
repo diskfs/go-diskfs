@@ -13,13 +13,14 @@ var _ fs.File = (*File)(nil)
 
 // File represents a single file in an ext4 filesystem
 type File struct {
-	*directoryEntry
 	*inode
 	isReadWrite bool
 	isAppend    bool
 	offset      int64
 	filesystem  *FileSystem
 	extents     extents
+	fileType    directoryFileType
+	filename    string
 }
 
 // Read reads up to len(b) bytes from the File.
@@ -124,9 +125,9 @@ func (fl *File) Write(b []byte) (int, error) {
 	if fl.size%blocksize > 0 {
 		newBlockCount++
 	}
-	blocksNeeded := newBlockCount - blockCount
-	bytesNeeded := blocksNeeded * blocksize
 	if newBlockCount > blockCount {
+		blocksNeeded := newBlockCount - blockCount
+		bytesNeeded := blocksNeeded * blocksize
 		newExtents, err := fl.filesystem.allocateExtents(bytesNeeded, &fl.extents)
 		if err != nil {
 			return 0, fmt.Errorf("could not allocate disk space for file %w", err)
@@ -225,7 +226,7 @@ func (fl *File) Stat() (fs.FileInfo, error) {
 		modTime: fl.modifyTime,
 		name:    fl.filename,
 		size:    int64(fl.size),
-		isDir:   fl.directoryEntry.fileType == dirFileTypeDirectory,
+		isDir:   fl.fileType == dirFileTypeDirectory,
 		mode:    fl.permissionsToMode(),
 		sys: &StatT{
 			UID: fl.owner,

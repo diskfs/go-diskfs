@@ -8,6 +8,7 @@ import (
 	"io"
 	iofs "io/fs"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"slices"
@@ -217,10 +218,10 @@ func testCreateImgCopyFrom(t *testing.T, src string) string {
 	return outfile
 }
 
-func testCreateEmptyFile(t *testing.T, size int64) *os.File {
+func testCreateEmptyFile(t *testing.T, size int64) (outfile string, f *os.File) {
 	t.Helper()
 	dir := t.TempDir()
-	outfile := filepath.Join(dir, "ext4.img")
+	outfile = filepath.Join(dir, "ext4.img")
 	f, err := os.Create(outfile)
 	if err != nil {
 		t.Fatalf("Error creating empty image file: %v", err)
@@ -231,7 +232,7 @@ func testCreateEmptyFile(t *testing.T, size int64) *os.File {
 	if err != nil {
 		t.Fatalf("Error truncating image file: %v", err)
 	}
-	return f
+	return outfile, f
 }
 
 func TestWriteFile(t *testing.T) {
@@ -528,13 +529,26 @@ func TestMkdir(t *testing.T) {
 }
 
 func TestCreate(t *testing.T) {
-	f := testCreateEmptyFile(t, 100*MB)
+	outfile, f := testCreateEmptyFile(t, 100*MB)
 	fs, err := Create(file.New(f, false), 100*MB, 0, 512, &Params{})
 	if err != nil {
 		t.Fatalf("Error creating ext4 filesystem: %v", err)
 	}
 	if fs == nil {
 		t.Fatalf("Expected non-nil filesystem after creation")
+	}
+	// Sync the file to disk before running e2fsck
+	if err := f.Sync(); err != nil {
+		t.Fatalf("Error syncing file: %v", err)
+	}
+	// check that the filesystem is valid using external tools
+	cmd := exec.Command("e2fsck", "-f", "-n", "-vv", outfile)
+	stdout := bytes.NewBuffer(nil)
+	stderr := bytes.NewBuffer(nil)
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("e2fsck failed: %v,\nstdout:\n%s,\n\nstderr:\n%s", err, stdout.String(), stderr.String())
 	}
 }
 

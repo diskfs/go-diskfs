@@ -39,7 +39,9 @@ func (e *extent) equal(a *extent) bool {
 	return *e == *a
 }
 
-// blockCount how many blocks are covered in the extents
+// blockCount how many filesystem blocks are covered in the extents.
+// Remember that these are filesystem blocks, which can vary, not the fixed 512-byte sectors on disk,
+// often used in superblock or inode in various places.
 //
 //nolint:unused // useful function for future
 func (e extents) blockCount() uint64 {

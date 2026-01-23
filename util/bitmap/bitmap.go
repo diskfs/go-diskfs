@@ -25,13 +25,26 @@ func FromBytes(b []byte) *Bitmap {
 	return &bm
 }
 
-// New creates a new bitmap of size bytes; it is not in bits to force the caller to have
+// NewBytes creates a new bitmap of size bytes; it is not in bits to force the caller to have
 // a complete set
-func New(bytes int) *Bitmap {
+func NewBytes(nbytes int) *Bitmap {
+	if nbytes < 0 {
+		nbytes = 0
+	}
 	bm := Bitmap{
-		bits: make([]byte, bytes),
+		bits: make([]byte, nbytes),
 	}
 	return &bm
+}
+
+// NewBits creates a new bitmap that can address nBits entries.
+// All bits are initially 0 (free).
+func NewBits(nBits int) *Bitmap {
+	if nBits < 0 {
+		nBits = 0
+	}
+	nBytes := (nBits + 7) / 8
+	return NewBytes(nBytes)
 }
 
 // ToBytes returns raw bytes underlying the bitmap
@@ -51,6 +64,9 @@ func (bm *Bitmap) FromBytes(b []byte) {
 
 // IsSet check if a specific bit location is set
 func (bm *Bitmap) IsSet(location int) (bool, error) {
+	if location < 0 {
+		return false, fmt.Errorf("location %d is negative", location)
+	}
 	byteNumber, bitNumber := findBitForIndex(location)
 	if byteNumber > len(bm.bits) {
 		return false, fmt.Errorf("location %d is not in %d size bitmap", location, len(bm.bits)*8)
@@ -61,8 +77,11 @@ func (bm *Bitmap) IsSet(location int) (bool, error) {
 
 // Clear a specific bit location
 func (bm *Bitmap) Clear(location int) error {
+	if location < 0 {
+		return fmt.Errorf("location %d is negative", location)
+	}
 	byteNumber, bitNumber := findBitForIndex(location)
-	if byteNumber > len(bm.bits) {
+	if byteNumber >= len(bm.bits) {
 		return fmt.Errorf("location %d is not in %d size bitmap", location, len(bm.bits)*8)
 	}
 	mask := byte(0x1) << bitNumber
@@ -73,8 +92,11 @@ func (bm *Bitmap) Clear(location int) error {
 
 // Set a specific bit location
 func (bm *Bitmap) Set(location int) error {
+	if location < 0 {
+		return fmt.Errorf("location %d is negative", location)
+	}
 	byteNumber, bitNumber := findBitForIndex(location)
-	if byteNumber > len(bm.bits) {
+	if byteNumber >= len(bm.bits) {
 		return fmt.Errorf("location %d is not in %d size bitmap", location, len(bm.bits)*8)
 	}
 	mask := byte(0x1) << bitNumber
@@ -86,29 +108,45 @@ func (bm *Bitmap) Set(location int) error {
 // Begins at start, so if you want to find the first free bit, pass start=1.
 // Returns -1 if none found.
 func (bm *Bitmap) FirstFree(start int) int {
-	var location = -1
-	candidates := bm.bits[start/8:]
-	for i, b := range candidates {
-		// if all used, continue to next byte
-		if b&0xff == 0xff {
-			continue
-		}
-		// not all used, so find first bit set to 0
-		for j := uint8(0); j < 8; j++ {
-			mask := byte(0x1) << j
-			if b&mask != mask {
-				location = 8*i + int(j)
-				break
+	if start < 0 {
+		start = 0
+	}
+	totalBits := len(bm.bits) * 8
+	if start >= totalBits {
+		return -1
+	}
+	// Start scanning at the relevant byte, but ensure we don't return a bit < start.
+	byteIdx := start / 8
+	bitStart := uint8(start % 8)
+
+	// First partial byte
+	b := bm.bits[byteIdx]
+	if b != 0xff {
+		for j := bitStart; j < 8; j++ {
+			if (b & (byte(1) << j)) == 0 {
+				return byteIdx*8 + int(j)
 			}
 		}
-		break
 	}
-	return location
+
+	// Remaining full bytes
+	for i := byteIdx + 1; i < len(bm.bits); i++ {
+		b = bm.bits[i]
+		if b == 0xff {
+			continue
+		}
+		for j := uint8(0); j < 8; j++ {
+			if (b & (byte(1) << j)) == 0 {
+				return i*8 + int(j)
+			}
+		}
+	}
+
+	return -1
 }
 
 // FirstSet returns location of first set bit in the bitmap
 func (bm *Bitmap) FirstSet() int {
-	var location = -1
 	for i, b := range bm.bits {
 		// if all free, continue to next
 		if b == 0x00 {
@@ -116,16 +154,12 @@ func (bm *Bitmap) FirstSet() int {
 		}
 		// not all free, so find first bit set to 1
 		for j := uint8(0); j < 8; j++ {
-			mask := byte(0x1) << j
-			mask = ^mask
-			if b|mask != mask {
-				location = 8*i + (8 - int(j))
-				break
+			if (b & (byte(1) << j)) != 0 {
+				return i*8 + int(j)
 			}
 		}
-		break
 	}
-	return location
+	return -1
 }
 
 // FreeList returns a slicelist of contiguous free locations by location.
