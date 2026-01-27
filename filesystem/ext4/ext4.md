@@ -1,7 +1,7 @@
 # ext4
 This file describes the layout on disk of ext4. It is a living document and probably will be deleted rather than committed to git.
 
-The primary reference document is [here](https://ext4.wiki.kernel.org/index.php/Ext4_Disk_Layout).
+The primary reference document is [here](https://docs.kernel.org/filesystems/ext4/), with the old version [here](https://ext4.wiki.kernel.org/index.php/Ext4_Disk_Layout).
 
 Also useful are:
 
