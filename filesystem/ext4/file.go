@@ -137,6 +137,11 @@ func (fl *File) Write(b []byte) (int, error) {
 			return 0, fmt.Errorf("could not convert extents into tree: %w", err)
 		}
 		fl.inode.extents = extentTreeParsed
+		updatedExtents, err := fl.inode.extents.blocks(fl.filesystem)
+		if err != nil {
+			return 0, fmt.Errorf("could not read updated extents: %w", err)
+		}
+		fl.extents = updatedExtents
 		fl.blocks = newBlockCount
 	}
 

@@ -65,15 +65,24 @@ const (
 	defaultLogGroupsPerFlex int = 3
 
 	// fixed inodes
-	rootInode       uint32 = 2
-	userQuotaInode  uint32 = 3
-	groupQuotaInode uint32 = 4
-	journalInode    uint32 = 8
-	lostFoundInode         = 11 // traditional
+	rootInode              uint32 = 2
+	userQuotaInode         uint32 = 3
+	groupQuotaInode        uint32 = 4
+	bootLoaderIndoe        uint32 = 5
+	undeleteDirectoryInode uint32 = 6
+	groupDescriptorsInode  uint32 = 7
+	journalInode           uint32 = 8
+	excludeInode           uint32 = 9
+	replicaInode           uint32 = 10
+	lostFoundInode                = 11 // traditional
 
 	// journal info
 	journalMaxSize int64 = 128 * MB
 	journalMinSize int64 = 4 * MB
+
+	// reserved GDT info
+	gdtMaxReservedBlocks      uint64 = 256
+	gdtDefaultMaxGrowthFactor uint64 = 1024
 )
 
 type Params struct {
@@ -394,11 +403,11 @@ func Create(b backend.Storage, size, start, sectorsize int64, p *Params) (*FileS
 
 	// calculate the maximum number of block groups
 	// maxBlockGroups = (maxFSSize) / (blocksPerGroup * blocksize)
-	// TODO: If we enable resize_inode feature, calculate proper reservedGDTBlocks
-	// For now, set to 0 since we don't support online resizing
-	reservedGDTBlocks := uint64(0)
-	if reservedGDTBlocks > math.MaxUint16 {
-		return nil, fmt.Errorf("too many reserved blocks calculated for group descriptor table")
+	// TODO: Properly support resize_inode; for now avoid reserved GDT blocks unless explicitly enabled.
+	var reservedGDTBlocks uint64
+	if fflags.reservedGDTBlocksForExpansion {
+		maxGrowthFilesystemSizeBytes := uint64(size) * gdtDefaultMaxGrowthFactor
+		reservedGDTBlocks = min(maxGrowthFilesystemSizeBytes/uint64(blocksize), gdtMaxReservedBlocks)
 	}
 
 	var (
@@ -546,7 +555,7 @@ func Create(b backend.Storage, size, start, sectorsize int64, p *Params) (*FileS
 		userQuotaInode:               userQuotaInode,
 		groupQuotaInode:              groupQuotaInode,
 		projectQuotaInode:            projectQuotaInode,
-		logGroupsPerFlex:             uint64(logGroupsPerFlex),
+		logGroupsPerFlex:             uint64(1 << logGroupsPerFlex),
 	}
 
 	gdt := buildGroupDescriptorsFromSuperblock(&sb)
@@ -562,11 +571,6 @@ func Create(b backend.Storage, size, start, sectorsize int64, p *Params) (*FileS
 		backend:           fsBackend,
 		backupSuperblocks: backupSuperblocks,
 	}
-
-	// Account for root directory block allocation
-	// The root directory will allocate 1 block during initFile
-	sb.freeBlocks--
-	gdt.descriptors[0].freeBlocks--
 
 	// allocate root in the first group descriptor
 	bg0 := &gdt.descriptors[0]
@@ -619,15 +623,32 @@ func Create(b backend.Storage, size, start, sectorsize int64, p *Params) (*FileS
 		}
 	}
 
+	// create resize inode only if the feature is enabled
+	if fs.superblock.features.reservedGDTBlocksForExpansion && fs.superblock.reservedGDTBlocks > 0 {
+		if err := fs.initResizeInode(); err != nil {
+			return nil, fmt.Errorf("could not initialize resize inode: %w", err)
+		}
+	}
+
 	// create root directory
 	if err := fs.initFile(
 		rootInode, rootInode, fileTypeDirectory,
-		filePermissions{read: true, execute: true},
 		filePermissions{read: true, execute: true, write: true},
+		filePermissions{read: true, execute: true},
 		filePermissions{read: true, execute: true},
 		0, 0,
 	); err != nil {
 		return nil, fmt.Errorf("could not initialize root directory: %w", err)
+	}
+
+	// Recompute free blocks from group descriptors to keep superblock consistent.
+	var totalFreeBlocks uint64
+	for _, gd := range fs.groupDescriptors.descriptors {
+		totalFreeBlocks += uint64(gd.freeBlocks)
+	}
+	fs.superblock.freeBlocks = totalFreeBlocks
+	if err := fs.writeSuperblock(); err != nil {
+		return nil, fmt.Errorf("error writing Superblock: %v", err)
 	}
 	// there is nothing in there
 	return fs, nil
@@ -1712,7 +1733,7 @@ func (fs *FileSystem) mkDirEntry(parent *Directory, name string, isDir bool) (*d
 	if err := fs.initFile(
 		inodeNumber, parentInode.number,
 		fileType,
-		parentInode.permissionsGroup, parentInode.permissionsOwner, parentInode.permissionsOther,
+		parentInode.permissionsOwner, parentInode.permissionsGroup, parentInode.permissionsOther,
 		parentInode.owner, parentInode.group,
 	); err != nil {
 		return nil, fmt.Errorf("could not initialize file %s: %w", name, err)
@@ -1722,7 +1743,7 @@ func (fs *FileSystem) mkDirEntry(parent *Directory, name string, isDir bool) (*d
 	return &de, nil
 }
 
-func (fs *FileSystem) initFile(inodeNumber, parentInodeNumber uint32, ft fileType, permissionsGroup, permissionsOwner, permissionsOther filePermissions, owner, group uint32) error {
+func (fs *FileSystem) initFile(inodeNumber, parentInodeNumber uint32, ft fileType, permissionsOwner, permissionsGroup, permissionsOther filePermissions, owner, group uint32) error {
 	// write the inode for the new entry out
 	// get extents for the file - prefer in the same block group as the inode, if possible
 	var (
@@ -1746,6 +1767,9 @@ func (fs *FileSystem) initFile(inodeNumber, parentInodeNumber uint32, ft fileTyp
 		extentsFSBlockCount := newExtents.blockCount()
 		extentsInodeBlockCount = extentsFSBlockCount * uint64(fs.superblock.blockSize) / 512
 		hardLinks = 2
+	} else {
+		// zero-length regular files still need an extent header
+		extentTreeParsed = extentsBlockFinderFromExtents(nil, fs.superblock.blockSize)
 	}
 	// normally, after getting a tree from extents, you would need to then allocate all of the blocks
 	//    in the extent tree - leafs and intermediate. However, because we are allocating a new directory
@@ -2001,11 +2025,12 @@ func (fs *FileSystem) allocateExtents(size uint64, previous *extents) (*extents,
 		// create possible extents by size
 		// Step 3: Group contiguous blocks into extents
 		var extents []extent
+		groupStart := uint64(fs.superblock.firstDataBlock) + uint64(i)*uint64(blocksPerGroup)
 		for _, freeBlock := range blockList {
 			start, length := freeBlock.Position, freeBlock.Count
 			for length > 0 {
 				extentLength := min(length, int(maxBlocksPerExtent))
-				extents = append(extents, extent{startingBlock: uint64(start) + uint64(i)*uint64(blocksPerGroup), count: uint16(extentLength)})
+				extents = append(extents, extent{startingBlock: uint64(start) + groupStart, count: uint16(extentLength)})
 				start += extentLength
 				length -= extentLength
 			}
@@ -2032,7 +2057,7 @@ func (fs *FileSystem) allocateExtents(size uint64, previous *extents) (*extents,
 			for block := extentToAdd.startingBlock; block < extentToAdd.startingBlock+uint64(extentToAdd.count); block++ {
 				// determine what block group this block is in, and read the bitmap for that blockgroup
 				// the extent lists the absolute block number, but the bitmap is relative to the block group
-				blockInGroup := block - uint64(i)*uint64(blocksPerGroup)
+				blockInGroup := block - groupStart
 				if err := bs.Set(int(blockInGroup)); err != nil {
 					return nil, fmt.Errorf("could not set block bitmap for block %d: %v", i, err)
 				}
@@ -2173,7 +2198,7 @@ func (fs *FileSystem) incrGDFreeBlocks(group int, count int32) error {
 	if group >= len(fs.groupDescriptors.descriptors) {
 		return fmt.Errorf("block group %d does not exist", group)
 	}
-	gd := fs.groupDescriptors.descriptors[group]
+	gd := &fs.groupDescriptors.descriptors[group]
 	switch {
 	case count > 0:
 		gd.freeBlocks += uint32(count)
@@ -2186,11 +2211,6 @@ func (fs *FileSystem) incrGDFreeBlocks(group int, count int32) error {
 	default:
 		// no change
 	}
-	if count > 0 {
-		gd.freeBlocks += uint32(count)
-	} else {
-	}
-	gd.freeBlocks += uint32(count)
 
 	return fs.writeGDT()
 }
@@ -2411,7 +2431,7 @@ func (fs *FileSystem) initGroupDescriptorTables() error {
 		// the size of the bitmap should match the number of blocks in this group
 		// but padded (with 1s) to the nearest block size
 		blocksPerGroup := uint64(fs.superblock.blocksPerGroup)
-		groupStart := uint64(i) * blocksPerGroup
+		groupStart := uint64(fs.superblock.firstDataBlock) + uint64(i)*blocksPerGroup
 		remaining := fs.superblock.blockCount - groupStart
 		blocksInGroup := blocksPerGroup
 		if remaining < blocksPerGroup {
@@ -2427,7 +2447,7 @@ func (fs *FileSystem) initGroupDescriptorTables() error {
 		}
 
 		// Mark metadata blocks as used in this group
-		firstBlockOfGroup := uint64(i) * uint64(fs.superblock.blocksPerGroup)
+		firstBlockOfGroup := uint64(fs.superblock.firstDataBlock) + uint64(i)*uint64(fs.superblock.blocksPerGroup)
 
 		// Check if this group has superblock backup
 		hasSuperBackup := false
@@ -2444,13 +2464,8 @@ func (fs *FileSystem) initGroupDescriptorTables() error {
 		metaBlocks := uint64(0)
 		if hasSuperBackup {
 			gdtBlocks := (groupCount*uint64(fs.superblock.groupDescriptorSize) + uint64(fs.superblock.blockSize) - 1) / uint64(fs.superblock.blockSize)
-			metaBlocks = 1 + gdtBlocks
+			metaBlocks = 1 + gdtBlocks + uint64(fs.superblock.reservedGDTBlocks)
 		}
-		if i == 0 && fs.superblock.firstDataBlock > 0 {
-			// First group has boot block when firstDataBlock > 0 (1KiB blocks)
-			metaBlocks += uint64(fs.superblock.firstDataBlock)
-		}
-
 		// Mark superblock and GDT blocks as used
 		for j := uint64(0); j < metaBlocks; j++ {
 			blockBitmap.Set(int(j))
@@ -2481,7 +2496,7 @@ func (fs *FileSystem) initGroupDescriptorTables() error {
 
 		// For flex_bg, we need to mark metadata from ALL groups in the flex group
 		// that are stored in this group's block range
-		flexSize := 1 << fs.superblock.logGroupsPerFlex
+		flexSize := int(fs.superblock.logGroupsPerFlex)
 		myFlex := i / flexSize
 		if fs.superblock.features.flexBlockGroups {
 			// Iterate through all groups and mark their metadata if it falls in this group's range
@@ -2583,6 +2598,147 @@ func (fs *FileSystem) initGroupDescriptorTables() error {
 	return nil
 }
 
+func (fs *FileSystem) initResizeInode() error {
+	now := time.Now()
+	writable, err := fs.backend.Writable()
+	if err != nil {
+		return err
+	}
+
+	blocksPerGroup := uint64(fs.superblock.blocksPerGroup)
+	groupCount := fs.superblock.blockGroupCount()
+	gdtPerBlock := fs.superblock.blockSize / uint32(fs.superblock.groupDescriptorSize)
+	gdtActiveBlocks := groupCount / uint64(gdtPerBlock)
+	if groupCount%uint64(gdtPerBlock) != 0 {
+		gdtActiveBlocks++
+	}
+	// Use reserved GDT blocks in group 0 for indirect blocks and backup groups for data.
+	var (
+		blockPointers  [15]uint32
+		allocatedCount uint64
+	)
+
+	writePointerBlock := func(block uint64, ptrs []uint32) error {
+		buf := make([]byte, fs.superblock.blockSize)
+		for i, p := range ptrs {
+			base := i * 4
+			binary.LittleEndian.PutUint32(buf[base:base+4], p)
+		}
+		_, err := writable.WriteAt(buf, int64(block)*int64(fs.superblock.blockSize))
+		return err
+	}
+
+	allocateIndirectBlock := func() (uint64, error) {
+		exts, err := fs.allocateExtents(uint64(fs.superblock.blockSize), nil)
+		if err != nil {
+			return 0, err
+		}
+		return (*exts)[0].startingBlock, nil
+	}
+
+	backupGroups := calculateBackupSuperblockGroups(int64(groupCount))
+	var backupStarts []uint32
+	for _, bg := range backupGroups {
+		if bg == 0 {
+			continue
+		}
+		g := uint64(bg)
+		groupStart := g * blocksPerGroup
+		if groupStart >= fs.superblock.blockCount {
+			continue
+		}
+		groupBlocks := blocksPerGroup
+		remaining := fs.superblock.blockCount - groupStart
+		if remaining < groupBlocks {
+			groupBlocks = remaining
+		}
+		reservedStart := groupStart + uint64(fs.superblock.firstDataBlock) + 1 + gdtActiveBlocks
+		if reservedStart >= groupStart+groupBlocks {
+			continue
+		}
+		backupStarts = append(backupStarts, uint32(reservedStart))
+	}
+	if len(backupStarts) == 0 {
+		return fmt.Errorf("no backup groups available for resize inode data blocks")
+	}
+
+	// double indirect block
+	doubleBlock, err := allocateIndirectBlock()
+	if err != nil {
+		return fmt.Errorf("could not allocate resize inode double indirect block: %w", err)
+	}
+	blockPointers[13] = uint32(doubleBlock)
+
+	var secondLevelBlocks []uint32
+	indirectBase := uint64(fs.superblock.firstDataBlock) + 1 + gdtActiveBlocks
+	indirectLimit := indirectBase + uint64(fs.superblock.reservedGDTBlocks) - 1
+	// first indirect block is the last reserved GDT block (offset 255), then the rest in order.
+	lastIndirect := indirectLimit
+	offset := uint32(fs.superblock.reservedGDTBlocks - 1)
+	indBlock := lastIndirect
+	ptrs := make([]uint32, len(backupStarts))
+	for i, start := range backupStarts {
+		ptrs[i] = start + offset
+	}
+	if err := writePointerBlock(indBlock, ptrs); err != nil {
+		return fmt.Errorf("could not write resize inode indirect block: %w", err)
+	}
+	secondLevelBlocks = append(secondLevelBlocks, uint32(indBlock))
+
+	for offset = 0; indirectBase < indirectLimit; offset++ {
+		indBlock = indirectBase
+		indirectBase++
+		ptrs := make([]uint32, len(backupStarts))
+		for i, start := range backupStarts {
+			ptrs[i] = start + offset
+		}
+		if err := writePointerBlock(indBlock, ptrs); err != nil {
+			return fmt.Errorf("could not write resize inode indirect block: %w", err)
+		}
+		secondLevelBlocks = append(secondLevelBlocks, uint32(indBlock))
+	}
+	if err := writePointerBlock(doubleBlock, secondLevelBlocks); err != nil {
+		return fmt.Errorf("could not write resize inode double indirect block: %w", err)
+	}
+
+	dataBlocks := uint64(len(backupStarts)) * uint64(fs.superblock.reservedGDTBlocks)
+	indirectBlocks := uint64(fs.superblock.reservedGDTBlocks) + 1 // 256 second-level + double
+	allocatedCount = dataBlocks + indirectBlocks
+
+	flexGroups := fs.superblock.logGroupsPerFlex
+	sizeBlocks := blocksPerGroup*flexGroups + uint64(fs.superblock.reservedGDTBlocks) + 12
+	sizeBytes := sizeBlocks * uint64(fs.superblock.blockSize)
+	allocatedBlocks := allocatedCount * uint64(fs.superblock.blockSize) / 512
+	in := inode{
+		number:           groupDescriptorsInode,
+		permissionsOwner: filePermissions{read: true, write: true},
+		permissionsGroup: filePermissions{},
+		permissionsOther: filePermissions{},
+		fileType:         fileTypeRegularFile,
+		owner:            0,
+		group:            0,
+		size:             sizeBytes,
+		hardLinks:        1,
+		blocks:           allocatedBlocks,
+		flags: &inodeFlags{
+			usesExtents: false,
+		},
+		nfsFileVersion:         0,
+		version:                0,
+		inodeSize:              fs.superblock.inodeSize,
+		deletionTime:           0,
+		accessTime:             now,
+		changeTime:             now,
+		createTime:             now,
+		modifyTime:             now,
+		extendedAttributeBlock: 0,
+		project:                0,
+		blockPointers:          blockPointers,
+	}
+	// write the inode to disk
+	return fs.writeInode(&in)
+}
+
 func calculateGDTBytes(gdt groupDescriptors, superblockCount int, checksumType gdtChecksumType, hashSeed uint32) uint64 {
 	singleTable := gdt.toBytes(checksumType, hashSeed)
 	return uint64(len(singleTable)) * uint64(superblockCount)
@@ -2626,7 +2782,7 @@ func buildGroupDescriptorsFromSuperblock(sb *superblock) groupDescriptors {
 	useFlexBg := sb.features.flexBlockGroups
 	flexSize := uint64(1)
 	if useFlexBg {
-		flexSize = 1 << sb.logGroupsPerFlex
+		flexSize = sb.logGroupsPerFlex
 	}
 
 	descs := make([]groupDescriptor, groups)
@@ -2636,7 +2792,7 @@ func buildGroupDescriptorsFromSuperblock(sb *superblock) groupDescriptors {
 		d.number = uint16(g)
 		d.size = descSize
 
-		firstBlockOfGroup := uint64(g) * blocksPerGroup
+		firstBlockOfGroup := uint64(sb.firstDataBlock) + uint64(g)*blocksPerGroup
 		// Determine if this group holds a SB+GDT backup.
 		hasSuperBackup := false
 		if useMetaBg {
@@ -2652,10 +2808,6 @@ func buildGroupDescriptorsFromSuperblock(sb *superblock) groupDescriptors {
 				(uint64(groups)*uint64(descSize) + uint64(sb.blockSize) - 1) /
 					uint64(sb.blockSize)
 			metaBlocks = 1 + gdtBlocks + uint64(sb.reservedGDTBlocks)
-		}
-		if g == 0 && sb.firstDataBlock > 0 {
-			// Account for boot block when firstDataBlock > 0 (1KiB blocks)
-			metaBlocks += uint64(sb.firstDataBlock)
 		}
 
 		// flex_bg owner group
@@ -2703,7 +2855,7 @@ func buildGroupDescriptorsFromSuperblock(sb *superblock) groupDescriptors {
 
 		// Free blocks accounting
 		// Last group may be partial, so compute actual blocks in group
-		groupStart := uint64(g) * blocksPerGroup
+		groupStart := uint64(sb.firstDataBlock) + uint64(g)*blocksPerGroup
 		remaining := sb.blockCount - groupStart
 		blocksInGroup := blocksPerGroup
 		if remaining < blocksPerGroup {

@@ -251,6 +251,7 @@ var defaultFeatureFlags = featureFlags{
 	fs64Bit:                        true,
 	extendedAttributes:             true,
 	directoryEntriesRecordFileType: true,
+	reservedGDTBlocksForExpansion:  true,
 }
 
 type FeatureOpt func(*featureFlags)
