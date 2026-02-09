@@ -275,7 +275,7 @@ func inodeFromBytes(b []byte, sb *superblock, number uint32) (*inode, error) {
 	}
 
 	var blockPointers [15]uint32
-	if !flags.usesExtents && !(fileType == fileTypeSymbolicLink && fileSizeNum < 60) {
+	if !flags.usesExtents && (fileType != fileTypeSymbolicLink || fileSizeNum >= 60) {
 		for i := 0; i < 15; i++ {
 			offset := i * 4
 			blockPointers[i] = binary.LittleEndian.Uint32(extentInfo[offset : offset+4])

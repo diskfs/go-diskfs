@@ -675,8 +675,7 @@ func writeNodeToDisk(node extentBlockFinder, fs *FileSystem, parent *extentInter
 	if parent == nil {
 		return nil
 	}
-	var blockNumber uint64
-	blockNumber = getBlockNumberFromNode(node, parent)
+	blockNumber := getBlockNumberFromNode(node, parent)
 
 	if blockNumber == 0 {
 		return fmt.Errorf("block number not found for node")

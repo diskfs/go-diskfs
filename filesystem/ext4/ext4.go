@@ -230,16 +230,14 @@ func Create(b backend.Storage, size, start, sectorsize int64, p *Params) (*FileS
 	freeBlocks := numblocks
 
 	// cluster semantics
-	clusterSize := p.ClusterSize
-	clustersPerGroup := blocksPerGroup
-
+	var clusterSize int64
+	var clustersPerGroup uint32
 	if fflags.bigalloc {
 		return nil, fmt.Errorf("bigalloc not yet supported")
-	} else {
-		// non-bigalloc: cluster == block
-		clusterSize = int64(blocksize)
-		clustersPerGroup = blocksPerGroup
 	}
+	// non-bigalloc: cluster == block
+	clusterSize = int64(blocksize)
+	clustersPerGroup = blocksPerGroup
 
 	// use our inode ratio to determine how many inodes we should have
 	inodeRatio := p.InodeRatio
@@ -391,7 +389,7 @@ func Create(b backend.Storage, size, start, sectorsize int64, p *Params) (*FileS
 	}
 
 	// group descriptor size could be 32 or 64, depending on option
-	var gdSize uint16
+	gdSize := groupDescriptorSize
 	if fflags.fs64Bit {
 		gdSize = groupDescriptorSize64Bit
 	}
@@ -579,14 +577,7 @@ func Create(b backend.Storage, size, start, sectorsize int64, p *Params) (*FileS
 
 	// reserved inodes need to be marked (inodes 1-10 are truly reserved, including root at 2)
 	reservedInodes := firstNonReservedInode - 1 // inodes 1-10
-	bg0.freeInodes -= uint32(reservedInodes)
-
-	// how big should the GDT be?
-	gdSize = groupDescriptorSize // size of a single group descriptor
-	if sb.features.fs64Bit {
-		gdSize = groupDescriptorSize64Bit
-	}
-	// now calculate how many there should be in total
+	bg0.freeInodes -= reservedInodes
 
 	gdtByteCount := calculateGDTBytes(gdt, len(backupSuperblocks), sb.gdtChecksumType(), sb.checksumSeed)
 	// gdtByteCount is in bytes; convert to blocks for freeBlocks accounting
@@ -1872,8 +1863,6 @@ func (fs *FileSystem) allocateInode(parent uint32, requested int) (uint32, error
 		inodeNumber = requested
 	case parent == 0:
 		inodeNumber = 2
-	default:
-		inodeNumber = -1
 	}
 
 	writableFile, err := fs.backend.Writable()
@@ -2356,7 +2345,7 @@ func (fs *FileSystem) initJournal() error {
 
 	// Populate the journal file with a valid jbd2 journal superblock
 	// Create a journal superblock
-	journalSuperblock := NewJournalSuperblock(uint32(fs.superblock.blockSize), uint32(journalBlocks))
+	journalSuperblock := NewJournalSuperblock(fs.superblock.blockSize, uint32(journalBlocks))
 	// Set the UUID to match the filesystem UUID
 	if fs.superblock.uuid != nil {
 		journalSuperblock.uuid = fs.superblock.uuid
@@ -2419,6 +2408,195 @@ func (fs *FileSystem) initJournal() error {
 	return nil
 }
 
+func setBitmapOrErr(bm *bitmap.Bitmap, location int, context string) error {
+	if err := bm.Set(location); err != nil {
+		return fmt.Errorf("%s: %w", context, err)
+	}
+	return nil
+}
+
+func (fs *FileSystem) buildBlockBitmapForGroup(i int, gd *groupDescriptor, groupCount uint64) (*bitmap.Bitmap, error) {
+	blocksPerGroup := uint64(fs.superblock.blocksPerGroup)
+	groupStart := uint64(fs.superblock.firstDataBlock) + uint64(i)*blocksPerGroup
+	remaining := fs.superblock.blockCount - groupStart
+	blocksInGroup := blocksPerGroup
+	if remaining < blocksPerGroup {
+		blocksInGroup = remaining
+	}
+	blockBitmapSize := int(blocksInGroup)
+	blockBitmapBlocks := (blockBitmapSize + int(fs.superblock.blockSize)*8 - 1) / (int(fs.superblock.blockSize) * 8)
+	blockBitmapSize = blockBitmapBlocks * int(fs.superblock.blockSize) * 8
+	blockBitmap := bitmap.NewBits(blockBitmapSize)
+	if err := fs.markBlockBitmapPadding(blockBitmap, i, blocksInGroup, blockBitmapSize); err != nil {
+		return nil, err
+	}
+	if err := fs.markSuperBackupMetadata(blockBitmap, i, groupCount); err != nil {
+		return nil, err
+	}
+
+	firstBlockOfGroup := groupStart
+	if fs.superblock.features.flexBlockGroups {
+		if err := fs.markFlexMetadataBlocks(blockBitmap, i, firstBlockOfGroup); err != nil {
+			return nil, err
+		}
+		return blockBitmap, nil
+	}
+	if err := fs.markNonFlexMetadataBlocks(blockBitmap, i, gd, firstBlockOfGroup); err != nil {
+		return nil, err
+	}
+
+	return blockBitmap, nil
+}
+
+func (fs *FileSystem) markBlockBitmapPadding(blockBitmap *bitmap.Bitmap, groupIndex int, blocksInGroup uint64, blockBitmapSize int) error {
+	for j := int(blocksInGroup); j < blockBitmapSize; j++ {
+		if err := setBitmapOrErr(blockBitmap, j, fmt.Sprintf("group %d block bitmap padding", groupIndex)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (fs *FileSystem) markSuperBackupMetadata(blockBitmap *bitmap.Bitmap, groupIndex int, groupCount uint64) error {
+	// Check if this group has superblock backup
+	hasSuperBackup := false
+	firstMetaBG := fs.superblock.firstMetablockGroup
+	switch {
+	case groupIndex == 0 || groupIndex == 1:
+		hasSuperBackup = true
+	case firstMetaBG > 0:
+		hasSuperBackup = uint64(groupIndex) >= uint64(firstMetaBG) && (uint64(groupIndex)%uint64(firstMetaBG)) == 0
+	default:
+		hasSuperBackup = checkSuperBackup(uint64(groupIndex))
+	}
+
+	metaBlocks := uint64(0)
+	if hasSuperBackup {
+		gdtBlocks := (groupCount*uint64(fs.superblock.groupDescriptorSize) + uint64(fs.superblock.blockSize) - 1) / uint64(fs.superblock.blockSize)
+		metaBlocks = 1 + gdtBlocks + uint64(fs.superblock.reservedGDTBlocks)
+	}
+	// Mark superblock and GDT blocks as used
+	for j := uint64(0); j < metaBlocks; j++ {
+		if err := setBitmapOrErr(blockBitmap, int(j), fmt.Sprintf("group %d metadata", groupIndex)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (fs *FileSystem) markFlexMetadataBlocks(blockBitmap *bitmap.Bitmap, groupIndex int, firstBlockOfGroup uint64) error {
+	// For flex_bg, we need to mark metadata from ALL groups in the flex group
+	// that are stored in this group's block range
+	flexSize := int(fs.superblock.logGroupsPerFlex)
+	myFlex := groupIndex / flexSize
+	// Iterate through all groups and mark their metadata if it falls in this group's range
+	for j, otherGd := range fs.groupDescriptors.descriptors {
+		if j/flexSize != myFlex {
+			continue
+		}
+
+		// Check if block bitmap is in this group's range
+		if otherGd.blockBitmapLocation >= firstBlockOfGroup &&
+			otherGd.blockBitmapLocation < firstBlockOfGroup+uint64(fs.superblock.blocksPerGroup) {
+			blockOffset := otherGd.blockBitmapLocation - firstBlockOfGroup
+			if err := setBitmapOrErr(blockBitmap, int(blockOffset), fmt.Sprintf("group %d block bitmap", groupIndex)); err != nil {
+				return err
+			}
+		}
+
+		// Check if inode bitmap is in this group's range
+		if otherGd.inodeBitmapLocation >= firstBlockOfGroup &&
+			otherGd.inodeBitmapLocation < firstBlockOfGroup+uint64(fs.superblock.blocksPerGroup) {
+			blockOffset := otherGd.inodeBitmapLocation - firstBlockOfGroup
+			if err := setBitmapOrErr(blockBitmap, int(blockOffset), fmt.Sprintf("group %d inode bitmap", groupIndex)); err != nil {
+				return err
+			}
+		}
+
+		inodeTableBlocks := groupDescriptorInodeTableBlocks(j, fs.superblock)
+		// Check if inode table is in this group's range
+		inodeTableStart := otherGd.inodeTableLocation
+		inodeTableEnd := inodeTableStart + inodeTableBlocks
+
+		// Mark all blocks of the inode table that fall in this group's range
+		for block := inodeTableStart; block < inodeTableEnd; block++ {
+			if block >= firstBlockOfGroup && block < firstBlockOfGroup+uint64(fs.superblock.blocksPerGroup) {
+				blockOffset := block - firstBlockOfGroup
+				if err := setBitmapOrErr(blockBitmap, int(blockOffset), fmt.Sprintf("group %d inode table", groupIndex)); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (fs *FileSystem) markNonFlexMetadataBlocks(blockBitmap *bitmap.Bitmap, groupIndex int, gd *groupDescriptor, firstBlockOfGroup uint64) error {
+	// Non-flex_bg: only mark this group's own metadata
+	// Mark bitmap blocks and inode table blocks as used
+	// Block bitmap, inode bitmap, and inode table locations are relative to group start
+	blockBitmapBlock := gd.blockBitmapLocation - firstBlockOfGroup
+	inodeBitmapBlock := gd.inodeBitmapLocation - firstBlockOfGroup
+	inodeTableBlock := gd.inodeTableLocation - firstBlockOfGroup
+
+	// Mark block bitmap block
+	if blockBitmapBlock < uint64(fs.superblock.blocksPerGroup) {
+		if err := setBitmapOrErr(blockBitmap, int(blockBitmapBlock), fmt.Sprintf("group %d block bitmap", groupIndex)); err != nil {
+			return err
+		}
+	}
+
+	// Mark inode bitmap block
+	if inodeBitmapBlock < uint64(fs.superblock.blocksPerGroup) {
+		if err := setBitmapOrErr(blockBitmap, int(inodeBitmapBlock), fmt.Sprintf("group %d inode bitmap", groupIndex)); err != nil {
+			return err
+		}
+	}
+
+	// Mark inode table blocks
+	inodeTableBlocks := groupDescriptorInodeTableBlocks(groupIndex, fs.superblock)
+	for j := uint64(0); j < inodeTableBlocks; j++ {
+		if inodeTableBlock+j < uint64(fs.superblock.blocksPerGroup) {
+			if err := setBitmapOrErr(blockBitmap, int(inodeTableBlock+j), fmt.Sprintf("group %d inode table", groupIndex)); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func (fs *FileSystem) buildInodeBitmapForGroup(i int) (*bitmap.Bitmap, error) {
+	// Initialize inode bitmap - all inodes free initially
+	// the size of the bitmap should match the number of inodes per group
+	// but padded (with 1s) to the nearest block size
+	inodeBitmapSize := int(fs.superblock.inodesPerGroup)
+	inodeBitmapBlocks := (inodeBitmapSize + int(fs.superblock.blockSize)*8 - 1) / (int(fs.superblock.blockSize) * 8)
+	inodeBitmapSize = inodeBitmapBlocks * int(fs.superblock.blockSize) * 8
+	inodeBitmap := bitmap.NewBits(inodeBitmapSize)
+	// set 1 padding on anything past inodesPerGroup
+	for j := int(fs.superblock.inodesPerGroup); j < inodeBitmapSize; j++ {
+		if err := setBitmapOrErr(inodeBitmap, j, fmt.Sprintf("group %d inode bitmap padding", i)); err != nil {
+			return nil, err
+		}
+	}
+
+	// Mark reserved inodes as used (inodes 1-10 are reserved, 11 onwards are available)
+	if i == 0 {
+		// First group has reserved inodes (1-10)
+		// Note: lostFoundInode (11) is NOT reserved, it's created as a directory
+		for j := 1; j < int(firstNonReservedInode); j++ {
+			if j < int(fs.superblock.inodesPerGroup) {
+				if err := setBitmapOrErr(inodeBitmap, j-1, fmt.Sprintf("group %d reserved inode %d", i, j)); err != nil {
+					return nil, err
+				}
+			}
+		}
+	}
+
+	return inodeBitmap, nil
+}
+
 func (fs *FileSystem) initGroupDescriptorTables() error {
 	writable, err := fs.backend.Writable()
 	if err != nil {
@@ -2426,138 +2604,15 @@ func (fs *FileSystem) initGroupDescriptorTables() error {
 	}
 	// Initialize and write bitmaps and inode tables for each block group
 	groupCount := fs.superblock.blockGroupCount()
-	for i, gd := range fs.groupDescriptors.descriptors {
-		// Initialize block bitmap - all blocks free initially
-		// the size of the bitmap should match the number of blocks in this group
-		// but padded (with 1s) to the nearest block size
-		blocksPerGroup := uint64(fs.superblock.blocksPerGroup)
-		groupStart := uint64(fs.superblock.firstDataBlock) + uint64(i)*blocksPerGroup
-		remaining := fs.superblock.blockCount - groupStart
-		blocksInGroup := blocksPerGroup
-		if remaining < blocksPerGroup {
-			blocksInGroup = remaining
+	for i := range fs.groupDescriptors.descriptors {
+		gd := &fs.groupDescriptors.descriptors[i]
+		blockBitmap, err := fs.buildBlockBitmapForGroup(i, gd, groupCount)
+		if err != nil {
+			return err
 		}
-		blockBitmapSize := int(blocksInGroup)
-		blockBitmapBlocks := (blockBitmapSize + int(fs.superblock.blockSize)*8 - 1) / (int(fs.superblock.blockSize) * 8)
-		blockBitmapSize = blockBitmapBlocks * int(fs.superblock.blockSize) * 8
-		blockBitmap := bitmap.NewBits(blockBitmapSize)
-		// set 1 padding on anything past blocksPerGroup
-		for j := int(blocksInGroup); j < blockBitmapSize; j++ {
-			blockBitmap.Set(j)
-		}
-
-		// Mark metadata blocks as used in this group
-		firstBlockOfGroup := uint64(fs.superblock.firstDataBlock) + uint64(i)*uint64(fs.superblock.blocksPerGroup)
-
-		// Check if this group has superblock backup
-		hasSuperBackup := false
-		firstMetaBG := fs.superblock.firstMetablockGroup
-		switch {
-		case i == 0 || i == 1:
-			hasSuperBackup = true
-		case firstMetaBG > 0:
-			hasSuperBackup = uint64(i) >= uint64(firstMetaBG) && (uint64(i)%uint64(firstMetaBG)) == 0
-		default:
-			hasSuperBackup = checkSuperBackup(uint64(i))
-		}
-
-		metaBlocks := uint64(0)
-		if hasSuperBackup {
-			gdtBlocks := (groupCount*uint64(fs.superblock.groupDescriptorSize) + uint64(fs.superblock.blockSize) - 1) / uint64(fs.superblock.blockSize)
-			metaBlocks = 1 + gdtBlocks + uint64(fs.superblock.reservedGDTBlocks)
-		}
-		// Mark superblock and GDT blocks as used
-		for j := uint64(0); j < metaBlocks; j++ {
-			blockBitmap.Set(int(j))
-		}
-
-		// Initialize inode bitmap - all inodes free initially
-		// the size of the bitmap should match the number of inodes per group
-		// but padded (with 1s) to the nearest block size
-		inodeBitmapSize := int(fs.superblock.inodesPerGroup)
-		inodeBitmapBlocks := (inodeBitmapSize + int(fs.superblock.blockSize)*8 - 1) / (int(fs.superblock.blockSize) * 8)
-		inodeBitmapSize = inodeBitmapBlocks * int(fs.superblock.blockSize) * 8
-		inodeBitmap := bitmap.NewBits(inodeBitmapSize)
-		// set 1 padding on anything past inodesPerGroup
-		for j := int(fs.superblock.inodesPerGroup); j < inodeBitmapSize; j++ {
-			inodeBitmap.Set(j)
-		}
-
-		// Mark reserved inodes as used (inodes 1-10 are reserved, 11 onwards are available)
-		if i == 0 {
-			// First group has reserved inodes (1-10)
-			// Note: lostFoundInode (11) is NOT reserved, it's created as a directory
-			for j := 1; j < int(firstNonReservedInode); j++ {
-				if j < int(fs.superblock.inodesPerGroup) {
-					inodeBitmap.Set(j - 1) // bitmap is 0-indexed, inodes are 1-indexed
-				}
-			}
-		}
-
-		// For flex_bg, we need to mark metadata from ALL groups in the flex group
-		// that are stored in this group's block range
-		flexSize := int(fs.superblock.logGroupsPerFlex)
-		myFlex := i / flexSize
-		if fs.superblock.features.flexBlockGroups {
-			// Iterate through all groups and mark their metadata if it falls in this group's range
-			for j, otherGd := range fs.groupDescriptors.descriptors {
-				if j/flexSize != myFlex {
-					continue
-				}
-
-				// Check if block bitmap is in this group's range
-				if otherGd.blockBitmapLocation >= firstBlockOfGroup &&
-					otherGd.blockBitmapLocation < firstBlockOfGroup+uint64(fs.superblock.blocksPerGroup) {
-					blockOffset := otherGd.blockBitmapLocation - firstBlockOfGroup
-					blockBitmap.Set(int(blockOffset))
-				}
-
-				// Check if inode bitmap is in this group's range
-				if otherGd.inodeBitmapLocation >= firstBlockOfGroup &&
-					otherGd.inodeBitmapLocation < firstBlockOfGroup+uint64(fs.superblock.blocksPerGroup) {
-					blockOffset := otherGd.inodeBitmapLocation - firstBlockOfGroup
-					blockBitmap.Set(int(blockOffset))
-				}
-
-				inodeTableBlocks := groupDescriptorInodeTableBlocks(j, fs.superblock)
-
-				// Check if inode table is in this group's range
-				inodeTableStart := otherGd.inodeTableLocation
-				inodeTableEnd := inodeTableStart + inodeTableBlocks
-
-				// Mark all blocks of the inode table that fall in this group's range
-				for block := inodeTableStart; block < inodeTableEnd; block++ {
-					if block >= firstBlockOfGroup && block < firstBlockOfGroup+uint64(fs.superblock.blocksPerGroup) {
-						blockOffset := block - firstBlockOfGroup
-						blockBitmap.Set(int(blockOffset))
-					}
-				}
-			}
-		} else {
-			// Non-flex_bg: only mark this group's own metadata
-			// Mark bitmap blocks and inode table blocks as used
-			// Block bitmap, inode bitmap, and inode table locations are relative to group start
-			blockBitmapBlock := gd.blockBitmapLocation - firstBlockOfGroup
-			inodeBitmapBlock := gd.inodeBitmapLocation - firstBlockOfGroup
-			inodeTableBlock := gd.inodeTableLocation - firstBlockOfGroup
-
-			// Mark block bitmap block
-			if blockBitmapBlock < uint64(fs.superblock.blocksPerGroup) {
-				blockBitmap.Set(int(blockBitmapBlock))
-			}
-
-			// Mark inode bitmap block
-			if inodeBitmapBlock < uint64(fs.superblock.blocksPerGroup) {
-				blockBitmap.Set(int(inodeBitmapBlock))
-			}
-
-			// Mark inode table blocks
-			inodeTableBlocks := (uint64(fs.superblock.inodesPerGroup)*uint64(fs.superblock.inodeSize) + uint64(fs.superblock.blockSize) - 1) / uint64(fs.superblock.blockSize)
-			for j := uint64(0); j < inodeTableBlocks; j++ {
-				if inodeTableBlock+j < uint64(fs.superblock.blocksPerGroup) {
-					blockBitmap.Set(int(inodeTableBlock + j))
-				}
-			}
+		inodeBitmap, err := fs.buildInodeBitmapForGroup(i)
+		if err != nil {
+			return err
 		}
 
 		// Write block bitmap
@@ -2637,7 +2692,7 @@ func (fs *FileSystem) initResizeInode() error {
 	}
 
 	backupGroups := calculateBackupSuperblockGroups(int64(groupCount))
-	var backupStarts []uint32
+	backupStarts := make([]uint32, 0, len(backupGroups))
 	for _, bg := range backupGroups {
 		if bg == 0 {
 			continue

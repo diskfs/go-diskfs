@@ -152,12 +152,12 @@ func TestJournalSuperblockFromBytes(t *testing.T) {
 	binary.BigEndian.PutUint32(b[0x20:0x24], 0)    // errno
 
 	// V2 fields
-	binary.BigEndian.PutUint32(b[0x24:0x28], jbd2CompatFeatureChecksum)         // compatFeatures
-	binary.BigEndian.PutUint32(b[0x28:0x2c], jbd2IncompatFeature64Bit)          // incompatFeatures
-	binary.BigEndian.PutUint32(b[0x2c:0x30], 0)                                  // roCompatFeatures
-	binary.BigEndian.PutUint32(b[0x40:0x44], 1)                                  // nrUsers
-	binary.BigEndian.PutUint32(b[0x48:0x4c], 32768)                              // maxTransaction
-	binary.BigEndian.PutUint32(b[0x4c:0x50], 32768)                              // maxTransData
+	binary.BigEndian.PutUint32(b[0x24:0x28], jbd2CompatFeatureChecksum) // compatFeatures
+	binary.BigEndian.PutUint32(b[0x28:0x2c], jbd2IncompatFeature64Bit)  // incompatFeatures
+	binary.BigEndian.PutUint32(b[0x2c:0x30], 0)                         // roCompatFeatures
+	binary.BigEndian.PutUint32(b[0x40:0x44], 1)                         // nrUsers
+	binary.BigEndian.PutUint32(b[0x48:0x4c], 32768)                     // maxTransaction
+	binary.BigEndian.PutUint32(b[0x4c:0x50], 32768)                     // maxTransData
 	b[0x50] = checksumTypeCRC32C
 
 	// UUID
@@ -417,7 +417,7 @@ func TestNewJournalSuperblock(t *testing.T) {
 
 // TestJournalCommitBlock tests commit block operations
 func TestJournalCommitBlock(t *testing.T) {
-	cb := NewJournalCommitBlock(42)
+	cb := newJournalCommitBlock(42)
 
 	if cb.header.blockType != journalBlockTypeCommit {
 		t.Errorf("blockType = %d, want %d", cb.header.blockType, journalBlockTypeCommit)
@@ -456,7 +456,7 @@ func TestJournalCommitBlock(t *testing.T) {
 
 // TestJournalCommitBlockRoundTrip tests commit block serialization
 func TestJournalCommitBlockRoundTrip(t *testing.T) {
-	original := NewJournalCommitBlock(123)
+	original := newJournalCommitBlock(123)
 	testTime := time.Unix(1609459200, 987654321)
 	original.SetCommitTime(testTime)
 
@@ -481,7 +481,7 @@ func TestJournalCommitBlockRoundTrip(t *testing.T) {
 
 // TestJournalRevokeBlock tests revocation block operations
 func TestJournalRevokeBlock(t *testing.T) {
-	rb := NewJournalRevokeBlock(50)
+	rb := newJournalRevokeBlock(50)
 
 	if rb.header.blockType != journalBlockTypeRevoke {
 		t.Errorf("blockType = %d, want %d", rb.header.blockType, journalBlockTypeRevoke)
@@ -530,7 +530,7 @@ func TestJournalRevokeBlockSerialization(t *testing.T) {
 		uuid:             &testUUID,
 	}
 
-	rb := NewJournalRevokeBlock(25)
+	rb := newJournalRevokeBlock(25)
 	rb.AddBlock(100)
 	rb.AddBlock(200)
 
@@ -561,7 +561,7 @@ func TestJournalRevokeBlockSerialization(t *testing.T) {
 
 // TestJournalDescriptorBlock tests descriptor block operations
 func TestJournalDescriptorBlock(t *testing.T) {
-	db := NewJournalDescriptorBlock(75)
+	db := newJournalDescriptorBlock(75)
 
 	if db.header.blockType != journalBlockTypeDescriptor {
 		t.Errorf("blockType = %d, want %d", db.header.blockType, journalBlockTypeDescriptor)
@@ -593,7 +593,7 @@ func TestJournalDescriptorBlockSerialization(t *testing.T) {
 		uuid:             &testUUID,
 	}
 
-	db := NewJournalDescriptorBlock(100)
+	db := newJournalDescriptorBlock(100)
 
 	// Create some block tags
 	tag1 := &journalBlockTag{
@@ -644,10 +644,7 @@ func TestBlockTagSerialization(t *testing.T) {
 		checksum: 0xDEADBEEF,
 	}
 
-	b, err := tag.toBytes(false, superblock)
-	if err != nil {
-		t.Fatalf("toBytes() error = %v", err)
-	}
+	b := tag.toBytes(false, superblock)
 
 	// Should be: 4 bytes lower blockNr + 4 bytes flags + 4 bytes upper blockNr + 4 bytes checksum = 16 bytes
 	expectedSize := 16
@@ -663,8 +660,8 @@ func TestBlockTagSerialization(t *testing.T) {
 
 	// Verify upper block number
 	upper := binary.BigEndian.Uint32(b[0x8:0xc])
-	if upper != uint32((tag.blockNr>>32)&0xffffffff) {
-		t.Errorf("upper blockNr = %x, want %x", upper, uint32((tag.blockNr>>32)&0xffffffff))
+	if uint64(upper) != tag.blockNr>>32 {
+		t.Errorf("upper blockNr = %x, want %x", upper, uint32(tag.blockNr>>32))
 	}
 
 	// Verify checksum
@@ -689,10 +686,7 @@ func TestBlockTagLastFlag(t *testing.T) {
 	}
 
 	// Serialize with isLast=true
-	b, err := tag.toBytes(true, superblock)
-	if err != nil {
-		t.Fatalf("toBytes() error = %v", err)
-	}
+	b := tag.toBytes(true, superblock)
 
 	// Verify flags field has last flag set
 	flags := binary.BigEndian.Uint32(b[0x4:0x8])
@@ -704,7 +698,7 @@ func TestBlockTagLastFlag(t *testing.T) {
 // TestGetBlockTagSize tests the block tag size calculation
 func TestGetBlockTagSize(t *testing.T) {
 	testUUID, _ := uuid.NewRandom()
-	
+
 	tests := []struct {
 		name        string
 		superblock  *JournalSuperblock
