@@ -491,7 +491,7 @@ func (sb *superblock) toBytes() ([]byte, error) {
 	binary.LittleEndian.PutUint32(b[0x10:0x14], sb.freeInodes)
 	binary.LittleEndian.PutUint32(b[0x14:0x18], sb.firstDataBlock)
 	// blockSize must be power-of-two and >= 1024
-	logBlockSize := uint32(bits.TrailingZeros32(uint32(sb.blockSize))) - 10
+	logBlockSize := uint32(bits.TrailingZeros32(sb.blockSize)) - 10
 	binary.LittleEndian.PutUint32(b[0x18:0x1c], logBlockSize)
 
 	if sb.blockSize < 1024 || sb.blockSize&(sb.blockSize-1) != 0 {

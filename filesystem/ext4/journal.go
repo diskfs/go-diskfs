@@ -255,7 +255,8 @@ func (js *JournalSuperblock) ToBytes() ([]byte, error) {
 	// 160 bytes padding at 0x5c:0xfc
 
 	// Calculate and write checksum
-	if js.incompatFeatures&jbd2IncompatFeatureChecksumV3 != 0 {
+	switch {
+	case js.incompatFeatures&jbd2IncompatFeatureChecksumV3 != 0:
 		// V3 checksum: CRC32C of UUID + superblock up to checksum field
 		if js.uuid != nil {
 			binary.BigEndian.PutUint32(b[0xfc:0x100], 0)
@@ -263,7 +264,7 @@ func (js *JournalSuperblock) ToBytes() ([]byte, error) {
 			checksum = crc.CRC32c(checksum, b[:0xfc])
 			binary.BigEndian.PutUint32(b[0xfc:0x100], checksum)
 		}
-	} else if js.compatFeatures&jbd2CompatFeatureChecksum != 0 {
+	case js.compatFeatures&jbd2CompatFeatureChecksum != 0:
 		// V2 checksum: same calculation
 		if js.uuid != nil {
 			binary.BigEndian.PutUint32(b[0xfc:0x100], 0)
@@ -271,7 +272,7 @@ func (js *JournalSuperblock) ToBytes() ([]byte, error) {
 			checksum = crc.CRC32c(checksum, b[:0xfc])
 			binary.BigEndian.PutUint32(b[0xfc:0x100], checksum)
 		}
-	} else {
+	default:
 		binary.BigEndian.PutUint32(b[0xfc:0x100], js.checksum)
 	}
 
@@ -348,7 +349,7 @@ func journalDescriptorBlockFromBytes(b []byte, superblock *JournalSuperblock) (*
 		superblock.incompatFeatures&jbd2IncompatFeatureChecksumV3 != 0) {
 		if len(b) >= 4 {
 			tail := &journalBlockTail{
-				checksum: binary.BigEndian.Uint32(b[len(b)-4 : len(b)]),
+				checksum: binary.BigEndian.Uint32(b[len(b)-4:]),
 			}
 			dblock.tail = tail
 		}
@@ -392,7 +393,6 @@ func parseBlockTag(b []byte, superblock *JournalSuperblock) (*journalBlockTag, e
 		if len(b) >= offset+16 {
 			tag.uuid = make([]byte, 16)
 			copy(tag.uuid, b[offset:offset+16])
-			offset += 16
 		}
 	}
 
@@ -434,10 +434,7 @@ func (dblock *journalDescriptorBlock) ToBytes(superblock *JournalSuperblock, blo
 	// Write tags
 	offset := 12
 	for i, tag := range dblock.tags {
-		tagBytes, err := tag.toBytes(i == len(dblock.tags)-1, superblock)
-		if err != nil {
-			return nil, err
-		}
+		tagBytes := tag.toBytes(i == len(dblock.tags)-1, superblock)
 		if offset+len(tagBytes) > len(b)-4 { // Reserve 4 bytes for tail if needed
 			break
 		}
@@ -448,7 +445,7 @@ func (dblock *journalDescriptorBlock) ToBytes(superblock *JournalSuperblock, blo
 	// Write block tail if checksums are enabled
 	if dblock.tail != nil {
 		if offset+4 <= len(b) {
-			binary.BigEndian.PutUint32(b[len(b)-4:len(b)], dblock.tail.checksum)
+			binary.BigEndian.PutUint32(b[len(b)-4:], dblock.tail.checksum)
 		}
 	}
 
@@ -456,7 +453,7 @@ func (dblock *journalDescriptorBlock) ToBytes(superblock *JournalSuperblock, blo
 }
 
 // toBytes converts a journalBlockTag to bytes
-func (tag *journalBlockTag) toBytes(isLast bool, superblock *JournalSuperblock) ([]byte, error) {
+func (tag *journalBlockTag) toBytes(isLast bool, superblock *JournalSuperblock) []byte {
 	size := getBlockTagSize(superblock, tag)
 	b := make([]byte, size)
 
@@ -486,7 +483,7 @@ func (tag *journalBlockTag) toBytes(isLast bool, superblock *JournalSuperblock) 
 		copy(b[offset:offset+16], tag.uuid)
 	}
 
-	return b, nil
+	return b
 }
 
 // journalCommitBlock methods
@@ -605,7 +602,7 @@ func journalRevokeBlockFromBytes(b []byte, superblock *JournalSuperblock) (*jour
 		superblock.incompatFeatures&jbd2IncompatFeatureChecksumV3 != 0) {
 		if len(b) >= 4 {
 			tail := &journalBlockTail{
-				checksum: binary.BigEndian.Uint32(b[len(b)-4 : len(b)]),
+				checksum: binary.BigEndian.Uint32(b[len(b)-4:]),
 			}
 			rblock.tail = tail
 		}
@@ -657,7 +654,7 @@ func (rblock *journalRevokeBlock) ToBytes(superblock *JournalSuperblock, blockSi
 
 	// Write block tail if checksums are enabled
 	if rblock.tail != nil && offset+4 <= len(b) {
-		binary.BigEndian.PutUint32(b[len(b)-4:len(b)], rblock.tail.checksum)
+		binary.BigEndian.PutUint32(b[len(b)-4:], rblock.tail.checksum)
 	}
 
 	return b, nil
@@ -672,7 +669,7 @@ func (rblock *journalRevokeBlock) AddBlock(blockNum uint64) {
 // NewJournalSuperblock creates a new empty journal superblock with default values
 // blockSize is the filesystem block size in bytes
 // journalBlocks is the total number of blocks in the journal
-func NewJournalSuperblock(blockSize uint32, journalBlocks uint32) *JournalSuperblock {
+func NewJournalSuperblock(blockSize, journalBlocks uint32) *JournalSuperblock {
 	newUUID, _ := uuid.NewRandom()
 	return &JournalSuperblock{
 		header: &journalHeader{
@@ -701,8 +698,8 @@ func NewJournalSuperblock(blockSize uint32, journalBlocks uint32) *JournalSuperb
 	}
 }
 
-// NewJournalDescriptorBlock creates a new descriptor block with the given sequence number
-func NewJournalDescriptorBlock(sequence uint32) *journalDescriptorBlock {
+// newJournalDescriptorBlock creates a new descriptor block with the given sequence number
+func newJournalDescriptorBlock(sequence uint32) *journalDescriptorBlock {
 	return &journalDescriptorBlock{
 		header: &journalHeader{
 			magic:     journalMagic,
@@ -713,8 +710,8 @@ func NewJournalDescriptorBlock(sequence uint32) *journalDescriptorBlock {
 	}
 }
 
-// NewJournalCommitBlock creates a new commit block with the given sequence number
-func NewJournalCommitBlock(sequence uint32) *journalCommitBlock {
+// newJournalCommitBlock creates a new commit block with the given sequence number
+func newJournalCommitBlock(sequence uint32) *journalCommitBlock {
 	return &journalCommitBlock{
 		header: &journalHeader{
 			magic:     journalMagic,
@@ -726,8 +723,8 @@ func NewJournalCommitBlock(sequence uint32) *journalCommitBlock {
 	}
 }
 
-// NewJournalRevokeBlock creates a new revoke block with the given sequence number
-func NewJournalRevokeBlock(sequence uint32) *journalRevokeBlock {
+// newJournalRevokeBlock creates a new revoke block with the given sequence number
+func newJournalRevokeBlock(sequence uint32) *journalRevokeBlock {
 	return &journalRevokeBlock{
 		header: &journalHeader{
 			magic:     journalMagic,
