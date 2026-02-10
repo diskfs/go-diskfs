@@ -136,6 +136,7 @@ type inode struct {
 	inodeSize              uint16
 	project                uint32
 	extents                extentBlockFinder
+	blockPointers          [15]uint32
 	linkTarget             string
 }
 
@@ -263,13 +264,21 @@ func inodeFromBytes(b []byte, sb *superblock, number uint32) (*inode, error) {
 	)
 	if fileType == fileTypeSymbolicLink && fileSizeNum < 60 {
 		linkTarget = string(extentInfo[:fileSizeNum])
-	} else {
+	} else if flags.usesExtents {
 		// parse the extent information in the inode to get the root of the extents tree
 		// we do not walk the entire tree, to get a slice of blocks for the file.
 		// If we want to do that, we call the extentBlockFinder.blocks() method
 		allExtents, err = parseExtents(extentInfo, sb.blockSize, 0, uint32(blocks))
 		if err != nil {
 			return nil, fmt.Errorf("error parsing extent tree: %v", err)
+		}
+	}
+
+	var blockPointers [15]uint32
+	if !flags.usesExtents && (fileType != fileTypeSymbolicLink || fileSizeNum >= 60) {
+		for i := 0; i < 15; i++ {
+			offset := i * 4
+			blockPointers[i] = binary.LittleEndian.Uint32(extentInfo[offset : offset+4])
 		}
 	}
 
@@ -297,6 +306,7 @@ func inodeFromBytes(b []byte, sb *superblock, number uint32) (*inode, error) {
 		extendedAttributeBlock: binary.LittleEndian.Uint64(extendedAttributeBlock),
 		project:                binary.LittleEndian.Uint32(b[0x9c:0x100]),
 		extents:                allExtents,
+		blockPointers:          blockPointers,
 		linkTarget:             linkTarget,
 	}
 	checksum := binary.LittleEndian.Uint32(checksumBytes)
@@ -369,7 +379,14 @@ func (i *inode) toBytes(sb *superblock) []byte {
 	copy(b[0x1c:0x20], blocks[0:4])
 	binary.LittleEndian.PutUint32(b[0x20:0x24], i.flags.toInt())
 	copy(b[0x24:0x28], version[0:4])
-	copy(b[0x28:0x64], i.extents.toBytes())
+	if i.flags != nil && i.flags.usesExtents {
+		copy(b[0x28:0x64], i.extents.toBytes())
+	} else {
+		for idx, ptr := range i.blockPointers {
+			base := 0x28 + idx*4
+			binary.LittleEndian.PutUint32(b[base:base+4], ptr)
+		}
+	}
 	binary.LittleEndian.PutUint32(b[0x64:0x68], i.nfsFileVersion)
 	copy(b[0x68:0x6c], extendedAttributeBlock[0:4])
 	copy(b[0x6c:0x70], fileSize[4:8])

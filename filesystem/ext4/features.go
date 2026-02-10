@@ -242,14 +242,16 @@ func (f *featureFlags) toInts() (compatFlags, incompatFlags, roCompatFlags uint3
 	features = has_journal,extent,huge_file,flex_bg,uninit_bg,64bit,dir_nlink,extra_isize
 */
 var defaultFeatureFlags = featureFlags{
-	largeFile:          true,
-	hugeFile:           true,
-	sparseSuperblock:   true,
-	flexBlockGroups:    true,
-	hasJournal:         true,
-	extents:            true,
-	fs64Bit:            true,
-	extendedAttributes: true,
+	largeFile:                      true,
+	hugeFile:                       true,
+	sparseSuperblock:               true,
+	flexBlockGroups:                true,
+	hasJournal:                     true,
+	extents:                        true,
+	fs64Bit:                        true,
+	extendedAttributes:             true,
+	directoryEntriesRecordFileType: true,
+	reservedGDTBlocksForExpansion:  true,
 }
 
 type FeatureOpt func(*featureFlags)

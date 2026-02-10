@@ -122,7 +122,7 @@ func (gds *groupDescriptors) toBytes(checksumType gdtChecksumType, hashSeed uint
 }
 
 // byFreeBlocks provides a sorted list of groupDescriptors by free blocks, descending.
-// If you want them ascending, sort if.
+// If you want them ascending, sort it.
 func (gds *groupDescriptors) byFreeBlocks() []groupDescriptor {
 	// make a copy of the slice
 	gdSlice := make([]groupDescriptor, len(gds.descriptors))

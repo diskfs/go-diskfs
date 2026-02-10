@@ -39,7 +39,9 @@ func (e *extent) equal(a *extent) bool {
 	return *e == *a
 }
 
-// blockCount how many blocks are covered in the extents
+// blockCount how many filesystem blocks are covered in the extents.
+// Remember that these are filesystem blocks, which can vary, not the fixed 512-byte sectors on disk,
+// often used in superblock or inode in various places.
 //
 //nolint:unused // useful function for future
 func (e extents) blockCount() uint64 {
@@ -669,12 +671,11 @@ func splitInternalNode(node *extentInternalNode, newChild *extentChildPtr, fs *F
 }
 
 func writeNodeToDisk(node extentBlockFinder, fs *FileSystem, parent *extentInternalNode) error {
-	var blockNumber uint64
-	if parent != nil {
-		blockNumber = getBlockNumberFromNode(node, parent)
-	} else {
-		blockNumber = getNewBlockNumber(fs)
+	// Root nodes live in the inode; only write when there's a parent block.
+	if parent == nil {
+		return nil
 	}
+	blockNumber := getBlockNumberFromNode(node, parent)
 
 	if blockNumber == 0 {
 		return fmt.Errorf("block number not found for node")
@@ -735,4 +736,16 @@ func loadChildNode(childPtr *extentChildPtr, fs *FileSystem) (extentBlockFinder,
 	var node extentBlockFinder
 	// Implement the logic to decode the node from the data
 	return node, nil
+}
+
+func extentsBlockFinderFromExtents(exts extents, blocksize uint32) extentBlockFinder {
+	return &extentLeafNode{
+		extentNodeHeader: extentNodeHeader{
+			depth:     0,
+			entries:   uint16(len(exts)),
+			max:       4, // assuming max 4 for leaf nodes in inode
+			blockSize: blocksize,
+		},
+		extents: exts,
+	}
 }
