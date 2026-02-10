@@ -7,17 +7,21 @@ import (
 	"io/fs"
 	"log"
 	"os"
+	"path"
 
 	"github.com/diskfs/go-diskfs/disk"
 	"github.com/diskfs/go-diskfs/filesystem"
 	"github.com/diskfs/go-diskfs/partition/part"
 )
 
+// excludedPaths these are excluded from any copy
 var excludedPaths = map[string]bool{
 	"lost+found":                true,
 	".DS_Store":                 true,
 	"System Volume Information": true,
 }
+
+const maxCopyAllSize = 64 * 1024 * 1024
 
 type copyData struct {
 	count int64
@@ -26,64 +30,117 @@ type copyData struct {
 
 // CopyFileSystem copies files from a source fs.FS to a destination filesystem.FileSystem, preserving structure and contents.
 func CopyFileSystem(src fs.FS, dst filesystem.FileSystem) error {
-	return fs.WalkDir(src, ".", func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
+	return copyDir(src, dst, ".")
+}
+
+func copyDir(src fs.FS, dst filesystem.FileSystem, dir string) error {
+	entries, err := fs.ReadDir(src, dir)
+	if err != nil {
+		return fmt.Errorf("read dir %s: %w", dir, err)
+	}
+
+	for _, entry := range entries {
+		name := entry.Name()
 		// filter out special directories/files
-		if excludedPaths[d.Name()] {
-			if d.IsDir() {
-				return fs.SkipDir
+		if excludedPaths[name] {
+			if entry.IsDir() {
+				continue
 			}
-			return nil
-		}
-		if path == "." || path == "/" || path == "\\" {
-			return nil
+			continue
 		}
 
-		info, err := d.Info()
+		p := name
+		if dir != "." {
+			p = path.Join(dir, name)
+		}
+
+		info, err := entry.Info()
 		if err != nil {
-			return err
+			return fmt.Errorf("stat %s: %w", p, err)
 		}
 
 		// symlinks, when they exist
 		if info.Mode()&os.ModeSymlink != 0 {
 			// Check if your destination interface supports symlinks
 			// Most custom 'filesystem.FileSystem' interfaces might not.
-			return handleSymlink(src, dst, path)
+			if err := handleSymlink(src, dst, p); err != nil {
+				return fmt.Errorf("copy symlink %s: %w", p, err)
+			}
+			continue
 		}
 
-		if d.IsDir() {
-			if path == "." {
-				return nil
+		if entry.IsDir() {
+			if err := dst.Mkdir(p); err != nil {
+				return fmt.Errorf("create dir %s: %w", p, err)
 			}
-			return dst.Mkdir(path)
+			if err := copyDir(src, dst, p); err != nil {
+				return fmt.Errorf("copy dir %s: %w", p, err)
+			}
+			continue
 		}
 
 		if !info.Mode().IsRegular() {
 			// FAT32 / ISO / SquashFS should not have others
-			return nil
+			continue
 		}
 
-		return copyOneFile(src, dst, path, info)
-	})
+		if err := copyOneFile(src, dst, p, info); err != nil {
+			return fmt.Errorf("copy file %s: %w", p, err)
+		}
+	}
+
+	return nil
 }
 
-func copyOneFile(src fs.FS, dst filesystem.FileSystem, path string, info fs.FileInfo) error {
-	in, err := src.Open(path)
+func copyOneFile(src fs.FS, dst filesystem.FileSystem, p string, info fs.FileInfo) error {
+	in, err := src.Open(p)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = in.Close() }()
 
-	out, err := dst.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_RDWR)
+	out, err := dst.OpenFile(p, os.O_CREATE|os.O_TRUNC|os.O_RDWR)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = out.Close() }()
 
-	if _, err := io.Copy(out, in); err != nil {
-		return err
+	if info.Size() <= maxCopyAllSize {
+		data, err := io.ReadAll(in)
+		if err != nil {
+			return err
+		}
+		n, err := out.Write(data)
+		if err != nil {
+			return err
+		}
+		if n != len(data) {
+			return io.ErrShortWrite
+		}
+	} else {
+		buf := make([]byte, 32*1024)
+		for {
+			n, rerr := in.Read(buf)
+			if n > 0 {
+				written := 0
+				for written < n {
+					w, werr := out.Write(buf[written:n])
+					if werr != nil {
+						return werr
+					}
+					if w == 0 {
+						return io.ErrShortWrite
+					}
+					written += w
+				}
+			}
+			if rerr == io.EOF {
+				break
+			}
+			if rerr != nil {
+				return rerr
+			}
+		}
 	}
 
 	// Restore timestamps *after* data is written (tar semantics)
@@ -91,27 +148,31 @@ func copyOneFile(src fs.FS, dst filesystem.FileSystem, path string, info fs.File
 	if atime.IsZero() {
 		atime = info.ModTime() // fallback
 	}
-	return dst.Chtimes(
-		path,
+	if err := dst.Chtimes(
+		p,
 		info.ModTime(), // creation time fallback if not available
 		atime,          // access time: optional / policy choice
 		info.ModTime(),
-	)
+	); err != nil {
+		// Best-effort: copying content should still succeed even if timestamps cannot be set.
+		return nil
+	}
+	return nil
 }
 
 // handleSymlink handles copying a symlink from src to dst. It reads the link target
-//
-//nolint:revive,unparam // keeping args for clarity of intent.
-func handleSymlink(src fs.FS, dst filesystem.FileSystem, path string) error {
-	// Note: src must support ReadLink. If src is an os.DirFS,
-	// you might need a type assertion or use os.Readlink directly.
-	linkTarget, err := os.Readlink(path)
-	if err != nil {
-		return nil // Or handle error
+func handleSymlink(src fs.FS, dst filesystem.FileSystem, p string) error {
+	type readlinker interface {
+		ReadLink(string) (string, error)
 	}
-
-	// This assumes your 'dst' interface has a Symlink method
-	return dst.Symlink(linkTarget, path)
+	if rl, ok := src.(readlinker); ok {
+		linkTarget, err := rl.ReadLink(p)
+		if err != nil {
+			return err
+		}
+		return dst.Symlink(linkTarget, p)
+	}
+	return fmt.Errorf("source filesystem does not support reading symlinks for %s", p)
 }
 
 // CopyPartitionRaw copies raw data from one partition to another and verifies the copy.

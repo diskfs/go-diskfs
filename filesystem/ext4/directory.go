@@ -19,7 +19,7 @@ type Directory struct {
 }
 
 // toBytes convert our entries to raw bytes. Provides checksum as well. Final returned byte slice will be a multiple of bytesPerBlock.
-func (d *Directory) toBytes(bytesPerBlock uint32, checksumFunc checksumAppender) []byte {
+func (d *Directory) toBytes(bytesPerBlock uint32, checksumFunc checksumAppender, withChecksums bool) []byte {
 	b := make([]byte, 0)
 	var (
 		previousLength int
@@ -30,26 +30,47 @@ func (d *Directory) toBytes(bytesPerBlock uint32, checksumFunc checksumAppender)
 	if len(d.entries) == 0 {
 		return b
 	}
+	checksumSize := 0
+	if withChecksums {
+		checksumSize = minDirEntryLength
+	}
+	blockLimit := int(bytesPerBlock) - checksumSize
 	lastEntryCount = len(d.entries) - 1
 	for i, de := range d.entries {
 		b2 := de.toBytes(0)
 		switch {
-		case len(block)+len(b2) > int(bytesPerBlock)-minDirEntryLength:
+		case len(block)+len(b2) > blockLimit:
 			// if adding this one will go past the end of the block, pad out the previous
 			block = block[:len(block)-previousLength]
-			previousB := previousEntry.toBytes(uint16(int(bytesPerBlock) - len(block) - minDirEntryLength))
+			previousB := previousEntry.toBytes(uint16(blockLimit - len(block)))
 			block = append(block, previousB...)
 			// add the checksum
-			block = checksumFunc(block)
+			if withChecksums {
+				block = checksumFunc(block)
+			}
 			b = append(b, block...)
 			// start a new block
 			block = make([]byte, 0)
+			// add current entry to the new block
+			if i == lastEntryCount {
+				b2 = de.toBytes(uint16(blockLimit - len(block)))
+				block = append(block, b2...)
+				if withChecksums {
+					block = checksumFunc(block)
+				}
+				b = append(b, block...)
+				block = make([]byte, 0)
+			} else {
+				block = append(block, b2...)
+			}
 		case i == lastEntryCount:
 			// if this is the last one, pad it out
-			b2 = de.toBytes(uint16(int(bytesPerBlock) - len(block) - minDirEntryLength))
+			b2 = de.toBytes(uint16(blockLimit - len(block)))
 			block = append(block, b2...)
 			// add the checksum
-			block = checksumFunc(block)
+			if withChecksums {
+				block = checksumFunc(block)
+			}
 			b = append(b, block...)
 			// start a new block
 			block = make([]byte, 0)

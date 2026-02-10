@@ -97,7 +97,6 @@ func (fl *File) Write(b []byte) (int, error) {
 	var (
 		fileSize           = int64(fl.size)
 		originalFileSize   = int64(fl.size)
-		blockCount         = fl.blocks
 		originalBlockCount = fl.blocks
 		blocksize          = uint64(fl.filesystem.superblock.blockSize)
 	)
@@ -125,14 +124,13 @@ func (fl *File) Write(b []byte) (int, error) {
 	if fl.size%blocksize > 0 {
 		newBlockCount++
 	}
-	if newBlockCount > blockCount {
-		blocksNeeded := newBlockCount - blockCount
-		bytesNeeded := blocksNeeded * blocksize
-		newExtents, err := fl.filesystem.allocateExtents(bytesNeeded, &fl.extents)
+	allocatedBlocks := fl.extents.blockCount()
+	if newBlockCount > allocatedBlocks {
+		newExtents, err := fl.filesystem.allocateExtents(fl.size, &fl.extents)
 		if err != nil {
 			return 0, fmt.Errorf("could not allocate disk space for file %w", err)
 		}
-		extentTreeParsed, err := extendExtentTree(fl.inode.extents, newExtents, fl.filesystem, nil)
+		extentTreeParsed, metaBlocks, err := extendExtentTree(fl.inode.extents, newExtents, fl.filesystem, nil)
 		if err != nil {
 			return 0, fmt.Errorf("could not convert extents into tree: %w", err)
 		}
@@ -142,7 +140,11 @@ func (fl *File) Write(b []byte) (int, error) {
 			return 0, fmt.Errorf("could not read updated extents: %w", err)
 		}
 		fl.extents = updatedExtents
-		fl.blocks = newBlockCount
+		if fl.filesystemBlocks {
+			fl.blocks = newBlockCount + metaBlocks
+		} else {
+			fl.blocks = (newBlockCount + metaBlocks) * blocksize / 512
+		}
 	}
 
 	if originalFileSize != int64(fl.size) || originalBlockCount != fl.blocks {
@@ -194,11 +196,7 @@ func (fl *File) Write(b []byte) (int, error) {
 		}
 	}
 
-	if fl.offset >= fileSize {
-		err = io.EOF
-	}
-
-	return int(writtenBytes), err
+	return int(writtenBytes), nil
 }
 
 // Seek set the offset to a particular point in the file

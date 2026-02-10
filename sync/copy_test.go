@@ -197,8 +197,9 @@ func TestCopyFileSystem_SkipNonRegular(t *testing.T) {
 		"sl": {Data: []byte(""), Mode: fs.ModeSymlink},
 	}
 	dst := &fakeFS{}
-	if err := CopyFileSystem(src, dst); err != nil {
-		t.Fatalf("CopyFileSystem failed: %v", err)
+	err := CopyFileSystem(src, dst)
+	if err != nil {
+		t.Fatalf("CopyFileSystem have unexpected error for a source filesystem without links: %v", err)
 	}
 	if _, ok := dst.files["sl"]; ok {
 		t.Errorf("expected non-regular file to be skipped, but copied")

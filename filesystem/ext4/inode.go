@@ -157,6 +157,8 @@ func inodeFromBytes(b []byte, sb *superblock, number uint32) (*inode, error) {
 	if len(b) < int(minInodeSize) {
 		return nil, fmt.Errorf("inode data too short: %d bytes, must be min %d bytes", len(b), minInodeSize)
 	}
+	// only work with the amount of data that is the size of the inode, even if more was passed in
+	b = b[:sb.inodeSize]
 
 	// checksum before using the data
 	checksumBytes := make([]byte, 4)
@@ -175,7 +177,6 @@ func inodeFromBytes(b []byte, sb *superblock, number uint32) (*inode, error) {
 	fileSize := make([]byte, 8)
 	group := make([]byte, 4)
 	version := make([]byte, 8)
-	extendedAttributeBlock := make([]byte, 8)
 
 	mode := binary.LittleEndian.Uint16(b[0x0:0x2])
 
@@ -187,8 +188,12 @@ func inodeFromBytes(b []byte, sb *superblock, number uint32) (*inode, error) {
 	copy(fileSize[4:8], b[0x6c:0x70])
 	copy(version[0:4], b[0x24:0x28])
 	copy(version[4:8], b[0x98:0x9c])
-	copy(extendedAttributeBlock[0:4], b[0x88:0x8c])
-	copy(extendedAttributeBlock[4:6], b[0x76:0x78])
+
+	// i_generation (nfs file version)
+	iGeneration := binary.LittleEndian.Uint32(b[0x64:0x68])
+	fileACLLo := binary.LittleEndian.Uint32(b[0x68:0x6c])
+	fileACLHi := uint32(binary.LittleEndian.Uint16(b[0x76:0x78]))
+	extendedAttributeBlock := (uint64(fileACLHi) << 32) | uint64(fileACLLo)
 
 	// get the times
 	// the structure normally is 0:4 (32 bits) is seconds since the epoch
@@ -295,7 +300,7 @@ func inodeFromBytes(b []byte, sb *superblock, number uint32) (*inode, error) {
 		blocks:                 blocks,
 		filesystemBlocks:       filesystemBlocks,
 		flags:                  &flags,
-		nfsFileVersion:         binary.LittleEndian.Uint32(b[0x64:0x68]),
+		nfsFileVersion:         iGeneration,
 		version:                binary.LittleEndian.Uint64(version),
 		inodeSize:              binary.LittleEndian.Uint16(b[0x80:0x82]) + minInodeSize,
 		deletionTime:           binary.LittleEndian.Uint32(b[0x14:0x18]),
@@ -303,7 +308,7 @@ func inodeFromBytes(b []byte, sb *superblock, number uint32) (*inode, error) {
 		changeTime:             time.Unix(ctimeSec, ctimeNano),
 		modifyTime:             time.Unix(mtimeSec, mtimeNano),
 		createTime:             time.Unix(crtimeSec, crtimeNano),
-		extendedAttributeBlock: binary.LittleEndian.Uint64(extendedAttributeBlock),
+		extendedAttributeBlock: extendedAttributeBlock,
 		project:                binary.LittleEndian.Uint32(b[0x9c:0x100]),
 		extents:                allExtents,
 		blockPointers:          blockPointers,
@@ -348,13 +353,21 @@ func (i *inode) toBytes(sb *superblock) []byte {
 	// ext4 timestamps are 32 bits of seconds, plus an extra 32-bit field
 	// containing 30 bits of nanoseconds and 2 bits of extended seconds.
 	// See https://ext4.wiki.kernel.org/index.php/Ext4_Disk_Layout#Inode_Timestamps
+	//
+	// The encoding formula from Linux kernel is:
+	//   extra_epoch = ((sec - (int32)sec) >> 32) & 0x3
+	// This correctly handles the signed 32-bit wraparound for dates outside 1970-2038.
 	encodeAndWriteTimestamp := func(t time.Time, target []byte) {
-		seconds := t.Unix()
-		nanos := uint32(t.Nanosecond())
-		high := uint32((seconds-int64(int32(seconds)))>>32) & 0x3
-		extra := (nanos << 2) | high
+		sec := t.Unix()
+		nsec := uint32(t.Nanosecond())
+		// Calculate epoch bits using the kernel's formula:
+		// The difference between the full timestamp and its signed 32-bit truncation
+		// gives us the correct epoch value.
+		low32 := int32(sec)                                 // signed truncation to 32 bits
+		epoch := uint32(((sec - int64(low32)) >> 32) & 0x3) // epoch bits
+		extra := (nsec << 2) | epoch
 
-		binary.LittleEndian.PutUint32(target[0:4], uint32(seconds))
+		binary.LittleEndian.PutUint32(target[0:4], uint32(low32))
 		binary.LittleEndian.PutUint32(target[4:8], extra)
 	}
 
@@ -379,19 +392,23 @@ func (i *inode) toBytes(sb *superblock) []byte {
 	copy(b[0x1c:0x20], blocks[0:4])
 	binary.LittleEndian.PutUint32(b[0x20:0x24], i.flags.toInt())
 	copy(b[0x24:0x28], version[0:4])
-	if i.flags != nil && i.flags.usesExtents {
+	switch {
+	case i.fileType == fileTypeSymbolicLink && i.size < 60:
+		copy(b[0x28:0x28+int(i.size)], i.linkTarget)
+	case i.flags != nil && i.flags.usesExtents:
 		copy(b[0x28:0x64], i.extents.toBytes())
-	} else {
+	default:
 		for idx, ptr := range i.blockPointers {
 			base := 0x28 + idx*4
 			binary.LittleEndian.PutUint32(b[base:base+4], ptr)
 		}
 	}
+
 	binary.LittleEndian.PutUint32(b[0x64:0x68], i.nfsFileVersion)
 	copy(b[0x68:0x6c], extendedAttributeBlock[0:4])
 	copy(b[0x6c:0x70], fileSize[4:8])
 	// b[0x70:0x74] is obsolete
-	copy(b[0x74:0x76], blocks[4:8])
+	copy(b[0x74:0x76], blocks[4:6])
 	copy(b[0x76:0x78], extendedAttributeBlock[4:6])
 	copy(b[0x78:0x7a], owner[2:4])
 	copy(b[0x7a:0x7c], group[2:4])
