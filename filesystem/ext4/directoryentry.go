@@ -184,19 +184,32 @@ type directoryEntryInfo struct {
 }
 
 func (de *directoryEntryInfo) Info() (iofs.FileInfo, error) {
+	mode := iofs.FileMode(0)
+	isDir := de.directoryEntry.fileType == dirFileTypeDirectory
+	if isDir {
+		mode |= iofs.ModeDir
+	}
+	if de.inode != nil && de.inode.fileType == fileTypeSymbolicLink {
+		mode |= iofs.ModeSymlink
+	}
 	return &FileInfo{
 		modTime: de.modifyTime,
 		name:    de.filename,
 		size:    int64(de.size),
-		isDir:   de.directoryEntry.fileType == dirFileTypeDirectory,
+		isDir:   isDir,
+		mode:    mode,
 	}, nil
 }
 
 func (de *directoryEntryInfo) Type() iofs.FileMode {
+	mode := iofs.FileMode(0)
 	if de.directoryEntry.fileType == dirFileTypeDirectory {
-		return iofs.ModeDir
+		mode |= iofs.ModeDir
 	}
-	return 0
+	if de.inode != nil && de.inode.fileType == fileTypeSymbolicLink {
+		mode |= iofs.ModeSymlink
+	}
+	return mode
 }
 
 func (de *directoryEntryInfo) IsDir() bool {

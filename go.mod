@@ -1,6 +1,6 @@
 module github.com/diskfs/go-diskfs
 
-go 1.24.0
+go 1.25.7
 
 require (
 	github.com/anchore/go-lzo v0.1.0

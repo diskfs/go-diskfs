@@ -16,7 +16,7 @@ func TestDirectoryToBytes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b := dir.toBytes(bytesPerBlock, directoryChecksumAppender(sb.checksumSeed, 2, 0))
+	b := dir.toBytes(bytesPerBlock, directoryChecksumAppender(sb.checksumSeed, 2, 0), true)
 
 	// read the bytes from the disk
 	diff, diffString := testhelper.DumpByteSlicesWithDiffs(b, expected, 32, false, true, true)
