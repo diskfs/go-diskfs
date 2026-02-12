@@ -29,6 +29,9 @@ type File struct {
 // reads from the last known offset in the file from last read or write
 // use Seek() to set at a particular point
 func (fl *File) Read(b []byte) (int, error) {
+	if fl.fileType == dirFileTypeDirectory {
+		return 0, fmt.Errorf("cannot read directory")
+	}
 	var (
 		fileSize  = int64(fl.size)
 		blocksize = uint64(fl.filesystem.superblock.blockSize)
@@ -126,6 +129,15 @@ func (fl *File) Write(b []byte) (int, error) {
 	}
 	allocatedBlocks := fl.extents.blockCount()
 	if newBlockCount > allocatedBlocks {
+		// Calculate the previously accumulated tree metadata blocks so we don't lose them.
+		// fl.blocks (in its current unit) = data blocks + meta blocks from prior writes.
+		var oldMetaBlocks uint64
+		if fl.filesystemBlocks {
+			oldMetaBlocks = fl.blocks - allocatedBlocks
+		} else {
+			oldMetaBlocks = fl.blocks*512/blocksize - allocatedBlocks
+		}
+
 		newExtents, err := fl.filesystem.allocateExtents(fl.size, &fl.extents)
 		if err != nil {
 			return 0, fmt.Errorf("could not allocate disk space for file %w", err)
@@ -140,10 +152,11 @@ func (fl *File) Write(b []byte) (int, error) {
 			return 0, fmt.Errorf("could not read updated extents: %w", err)
 		}
 		fl.extents = updatedExtents
+		totalMetaBlocks := oldMetaBlocks + metaBlocks
 		if fl.filesystemBlocks {
-			fl.blocks = newBlockCount + metaBlocks
+			fl.blocks = newBlockCount + totalMetaBlocks
 		} else {
-			fl.blocks = (newBlockCount + metaBlocks) * blocksize / 512
+			fl.blocks = (newBlockCount + totalMetaBlocks) * blocksize / 512
 		}
 	}
 

@@ -44,7 +44,7 @@ func blockGroupFromBytes(b []byte, blockSize, groupNumber int) (*blockGroup, err
 //
 //nolint:unused // will be used in the future, not yet
 func (bg *blockGroup) toBytes() ([]byte, error) {
-	b := make([]byte, 2*bg.blockSize)
+	b := make([]byte, 0, 2*bg.blockSize)
 	inodeBitmapBytes := bg.inodeBitmap.ToBytes()
 	blockBitmapBytes := bg.blockBitmap.ToBytes()
 

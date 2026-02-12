@@ -269,7 +269,7 @@ func superblockFromBytes(b []byte) (*superblock, error) {
 	sb.freeInodes = binary.LittleEndian.Uint32(b[0x10:0x14])
 	sb.firstDataBlock = binary.LittleEndian.Uint32(b[0x14:0x18])
 	sb.blockSize = uint32(math.Exp2(float64(10 + binary.LittleEndian.Uint32(b[0x18:0x1c]))))
-	sb.clusterSize = uint64(math.Exp2(float64(binary.LittleEndian.Uint32(b[0x1c:0x20]))))
+	sb.clusterSize = uint64(math.Exp2(float64(10 + binary.LittleEndian.Uint32(b[0x1c:0x20]))))
 	sb.blocksPerGroup = binary.LittleEndian.Uint32(b[0x20:0x24])
 	if sb.features.bigalloc {
 		sb.clustersPerGroup = binary.LittleEndian.Uint32(b[0x24:0x28])
@@ -501,7 +501,11 @@ func (sb *superblock) toBytes() ([]byte, error) {
 		return nil, fmt.Errorf("invalid clusterSize %d", sb.clusterSize)
 	}
 
-	// s_log_cluster_size = log2(clusterSize / blockSize) (or 0 if !bigalloc)
+	// s_log_cluster_size uses the same encoding as s_log_block_size:
+	// cluster_size_bytes = 2^(10 + s_log_cluster_size)
+	// For non-bigalloc, cluster == block, so s_log_cluster_size == s_log_block_size.
+	// e2fsck validates s_log_block_size <= s_log_cluster_size and rejects the superblock
+	// as corrupt if this check fails.
 	var logCluster uint32
 	blockSize := uint64(sb.blockSize)
 	if sb.features.bigalloc {
@@ -512,9 +516,9 @@ func (sb *superblock) toBytes() ([]byte, error) {
 		if ratio == 0 || ratio&(ratio-1) != 0 {
 			return nil, fmt.Errorf("clusterSize/blockSize ratio must be power of two, got %d", ratio)
 		}
-		logCluster = uint32(bits.TrailingZeros32(uint32(ratio)))
+		logCluster = uint32(bits.TrailingZeros32(uint32(ratio))) + logBlockSize
 	} else {
-		logCluster = 0
+		logCluster = logBlockSize
 	}
 	binary.LittleEndian.PutUint32(b[0x1c:0x20], logCluster)
 

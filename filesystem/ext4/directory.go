@@ -73,7 +73,7 @@ func (d *Directory) toBytes(bytesPerBlock uint32, checksumFunc checksumAppender,
 			}
 			b = append(b, block...)
 			// start a new block
-			block = make([]byte, 0)
+			block = make([]byte, 0, len(block))
 		default:
 			block = append(block, b2...)
 		}
