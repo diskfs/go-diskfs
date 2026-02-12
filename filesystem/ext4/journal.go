@@ -254,24 +254,24 @@ func (js *JournalSuperblock) ToBytes() ([]byte, error) {
 	binary.BigEndian.PutUint32(b[0x58:0x5c], js.head)
 	// 160 bytes padding at 0x5c:0xfc
 
-	// Calculate and write checksum
+	// Calculate and write checksum.
+	// Per the kernel/e2fsprogs implementation, the journal superblock
+	// checksum (s_checksum at offset 0xfc) is CRC32c(~0, jsb, sizeof(jsb))
+	// with the checksum field itself zeroed. This covers the entire 1024-byte
+	// journal superblock struct. The UUID is NOT used as a separate seed for
+	// the superblock checksum (it is used as a seed for other journal block
+	// checksums like descriptor/commit blocks, but not for the superblock).
 	switch {
 	case js.incompatFeatures&jbd2IncompatFeatureChecksumV3 != 0:
-		// V3 checksum: CRC32C of UUID + superblock up to checksum field
-		if js.uuid != nil {
-			binary.BigEndian.PutUint32(b[0xfc:0x100], 0)
-			checksum := crc.CRC32c(0xffffffff, js.uuid[:])
-			checksum = crc.CRC32c(checksum, b[:0xfc])
-			binary.BigEndian.PutUint32(b[0xfc:0x100], checksum)
-		}
+		// V3 checksum: CRC32C of entire superblock with checksum field zeroed
+		binary.BigEndian.PutUint32(b[0xfc:0x100], 0)
+		checksum := crc.CRC32c(0xffffffff, b[:JournalSuperblockSize])
+		binary.BigEndian.PutUint32(b[0xfc:0x100], checksum)
 	case js.compatFeatures&jbd2CompatFeatureChecksum != 0:
-		// V2 checksum: same calculation
-		if js.uuid != nil {
-			binary.BigEndian.PutUint32(b[0xfc:0x100], 0)
-			checksum := crc.CRC32c(0xffffffff, js.uuid[:])
-			checksum = crc.CRC32c(checksum, b[:0xfc])
-			binary.BigEndian.PutUint32(b[0xfc:0x100], checksum)
-		}
+		// V1 compat checksum: same calculation
+		binary.BigEndian.PutUint32(b[0xfc:0x100], 0)
+		checksum := crc.CRC32c(0xffffffff, b[:JournalSuperblockSize])
+		binary.BigEndian.PutUint32(b[0xfc:0x100], checksum)
 	default:
 		binary.BigEndian.PutUint32(b[0xfc:0x100], js.checksum)
 	}

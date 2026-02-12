@@ -247,18 +247,19 @@ func TestWriteFile(t *testing.T) {
 		expected    []byte
 		openFileErr error
 		writeErr    error
+		readErr     error
 	}{
-		{"create invalid path", "/do/not/exist/any/where", os.O_CREATE, 0, 0, false, nil, errors.New("could not read directory entries"), nil},
-		{"create in root", "/" + newFile, os.O_CREATE | os.O_RDWR, 0, 0, false, []byte("hello world"), nil, nil},
-		{"create in valid subdirectory", "/foo/" + newFile, os.O_CREATE | os.O_RDWR, 0, 0, false, []byte("hello world"), nil, nil},
-		{"create exists as directory", "/foo", os.O_CREATE, 0, 0, false, nil, nil, errors.New("cannot create file as existing directory")},
-		{"create exists as file", "/random.dat", os.O_CREATE | os.O_RDWR, 0, 0, false, nil, nil, nil},
-		{"append invalid path", "/do/not/exist/any/where", os.O_APPEND, 0, 0, false, nil, errors.New("could not read directory entries"), nil},
-		{"append exists as directory", "/foo", os.O_APPEND, 0, 0, false, nil, nil, errors.New("file is not open for writing")},
-		{"append exists as file", "/random.dat", os.O_APPEND | os.O_RDWR, 0, 0, false, nil, nil, nil},
-		{"overwrite invalid path", "/do/not/exist/any/where", os.O_RDWR, 0, 0, false, nil, errors.New("could not read directory entries"), nil},
-		{"overwrite exists as directory", "/foo", os.O_RDWR, 0, 0, false, nil, nil, nil},
-		{"overwrite exists as file", "/random.dat", os.O_RDWR, 0, 0, false, nil, nil, nil},
+		{"create invalid path", "/do/not/exist/any/where", os.O_CREATE, 0, 0, false, nil, errors.New("could not read directory entries"), nil, nil},
+		{"create in root", "/" + newFile, os.O_CREATE | os.O_RDWR, 0, 0, false, []byte("hello world"), nil, nil, nil},
+		{"create in valid subdirectory", "/foo/" + newFile, os.O_CREATE | os.O_RDWR, 0, 0, false, []byte("hello world"), nil, nil, nil},
+		{"create exists as directory", "/foo", os.O_CREATE, 0, 0, false, nil, nil, errors.New("cannot create file as existing directory"), errors.New("cannot read directory")},
+		{"create exists as file", "/random.dat", os.O_CREATE | os.O_RDWR, 0, 0, false, nil, nil, nil, nil},
+		{"append invalid path", "/do/not/exist/any/where", os.O_APPEND, 0, 0, false, nil, errors.New("could not read directory entries"), nil, nil},
+		{"append exists as directory", "/foo", os.O_APPEND, 0, 0, false, nil, nil, errors.New("file is not open for writing"), errors.New("cannot read directory")},
+		{"append exists as file", "/random.dat", os.O_APPEND | os.O_RDWR, 0, 0, false, nil, nil, nil, nil},
+		{"overwrite invalid path", "/do/not/exist/any/where", os.O_RDWR, 0, 0, false, nil, errors.New("could not read directory entries"), nil, nil},
+		{"overwrite exists as directory", "/foo", os.O_RDWR, 0, 0, false, nil, nil, nil, errors.New("cannot read directory")},
+		{"overwrite exists as file", "/random.dat", os.O_RDWR, 0, 0, false, nil, nil, nil, nil},
 	}
 	imageTests := []struct {
 		name      string
@@ -310,14 +311,22 @@ func TestWriteFile(t *testing.T) {
 						}
 						b := make([]byte, len(tt.expected))
 						n, err = ext4File.Read(b)
-						if err != nil && err != io.EOF {
+						switch {
+						case tt.readErr != nil && err == nil:
+							t.Fatalf("expected read error %v, got nil", tt.readErr)
+						case tt.readErr != nil && err != nil && !strings.HasPrefix(err.Error(), tt.readErr.Error()):
+							t.Fatalf("mismatched read error, expected '%v' got '%v'", tt.readErr, err)
+						case tt.readErr != nil && err != nil:
+							// expected read error received, skip data verification
+						case err != nil && err != io.EOF:
 							t.Fatalf("Error reading file: %v", err)
-						}
-						if n != len(tt.expected) {
-							t.Fatalf("short read, expected %d bytes got %d", len(tt.expected), n)
-						}
-						if !bytes.Equal(b, tt.expected) {
-							t.Errorf("file data mismatch")
+						default:
+							if n != len(tt.expected) {
+								t.Fatalf("short read, expected %d bytes got %d", len(tt.expected), n)
+							}
+							if !bytes.Equal(b, tt.expected) {
+								t.Errorf("file data mismatch")
+							}
 						}
 					}
 				})

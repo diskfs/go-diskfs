@@ -465,15 +465,47 @@ func extendLeafNode(node *extentLeafNode, added *extents, fs *FileSystem, parent
 		return nil, 0, err
 	}
 
-	// If the original node was not the root, handle the parent internal node
-	parentNode, err := getParentNode(node, fs)
-	if err != nil {
-		return nil, 0, err
+	// Replace the old child pointer in the parent with pointers to the new split nodes.
+	// Find the index of the old child in the parent.
+	oldIndex := -1
+	for i, child := range parent.children {
+		if child.diskBlock == node.diskBlock {
+			oldIndex = i
+			break
+		}
+	}
+	if oldIndex == -1 {
+		return nil, 0, fmt.Errorf("could not find old child in parent during leaf split")
 	}
 
-	_ = newNodes // nodes are already written to disk in splitLeafNode
-	result, parentMetaBlocks, err := extendInternalNode(parentNode, added, fs, parent)
-	return result, splitMetaBlocks + parentMetaBlocks, err
+	// Build new child pointers for the split nodes
+	newChildPtrs := make([]*extentChildPtr, 0, len(newNodes))
+	for _, n := range newNodes {
+		newChildPtrs = append(newChildPtrs, &extentChildPtr{
+			fileBlock: n.extents[0].fileBlock,
+			count:     uint32(len(n.extents)),
+			diskBlock: n.diskBlock,
+		})
+	}
+
+	// Replace the single child with the new children
+	newChildren := make([]*extentChildPtr, 0, len(parent.children)+len(newChildPtrs)-1)
+	newChildren = append(newChildren, parent.children[:oldIndex]...)
+	newChildren = append(newChildren, newChildPtrs...)
+	newChildren = append(newChildren, parent.children[oldIndex+1:]...)
+	parent.children = newChildren
+	parent.entries = uint16(len(parent.children))
+
+	// Write the updated parent back to disk
+	// If parent is the root (lives in inode), we just return it; the inode will be written by the caller.
+	// If parent is not the root, write it to its disk block.
+	if parent.diskBlock != 0 {
+		if err := writeNodeToBlock(parent, fs, parent.diskBlock); err != nil {
+			return nil, 0, fmt.Errorf("could not write updated parent: %w", err)
+		}
+	}
+
+	return parent, splitMetaBlocks, nil
 }
 
 func splitLeafNode(node *extentLeafNode, added *extents, fs *FileSystem, parent *extentInternalNode) ([]*extentLeafNode, uint64, error) {
@@ -682,11 +714,15 @@ func writeNodeToBlock(node extentBlockFinder, fs *FileSystem, blockNumber uint64
 func childPtrMatchesNode(childPtr *extentChildPtr, node extentBlockFinder) bool {
 	switch n := node.(type) {
 	case *extentLeafNode:
+		if len(n.extents) == 0 {
+			return false
+		}
 		return childPtr.fileBlock == n.extents[0].fileBlock
 	case *extentInternalNode:
-		// Logic to determine if the childPtr matches the internal node
-		// Placeholder: Implement based on your specific matching criteria
-		return true
+		if len(n.children) == 0 {
+			return false
+		}
+		return childPtr.fileBlock == n.children[0].fileBlock
 	default:
 		return false
 	}
@@ -715,13 +751,13 @@ func extendInternalNode(node *extentInternalNode, added *extents, fs *FileSystem
 		node.children[childIndex] = &extentChildPtr{
 			fileBlock: updatedChild.extents[0].fileBlock,
 			count:     uint32(len(updatedChild.extents)),
-			diskBlock: getBlockNumberFromNode(updatedChild, node),
+			diskBlock: getDiskBlockFromNode(updatedChild),
 		}
 	case *extentInternalNode:
 		node.children[childIndex] = &extentChildPtr{
 			fileBlock: updatedChild.children[0].fileBlock,
 			count:     uint32(len(updatedChild.children)),
-			diskBlock: getBlockNumberFromNode(updatedChild, node),
+			diskBlock: getDiskBlockFromNode(updatedChild),
 		}
 	default:
 		return nil, 0, fmt.Errorf("unsupported updatedChild type")
@@ -757,15 +793,6 @@ func extendInternalNode(node *extentInternalNode, added *extents, fs *FileSystem
 	}
 
 	return node, metaBlocks, nil
-}
-
-// Helper function to get the parent node of a given internal node
-//
-//nolint:revive // this parameter will be used eventually
-func getParentNode(node extentBlockFinder, fs *FileSystem) (*extentInternalNode, error) {
-	// Logic to find and return the parent node of the given node
-	// This is a placeholder and needs to be implemented based on your specific tree structure
-	return nil, fmt.Errorf("getParentNode not implemented")
 }
 
 func splitInternalNode(node *extentInternalNode, newChild *extentChildPtr, fs *FileSystem, parent *extentInternalNode) ([]*extentInternalNode, error) {
@@ -867,19 +894,26 @@ func findChildNode(node *extentInternalNode, added *extents) int {
 }
 
 // loadChildNode load up a child node from the disk
-//
-//nolint:unparam // this parameter will be used eventually
 func loadChildNode(childPtr *extentChildPtr, fs *FileSystem) (extentBlockFinder, error) {
 	data := make([]byte, fs.superblock.blockSize)
 	_, err := fs.backend.ReadAt(data, int64(childPtr.diskBlock)*int64(fs.superblock.blockSize))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not read extent tree block %d: %w", childPtr.diskBlock, err)
 	}
 
-	// Logic to decode data into an extentBlockFinder (extentLeafNode or extentInternalNode)
-	// This is a placeholder and needs to be implemented based on your specific encoding scheme
-	var node extentBlockFinder
-	// Implement the logic to decode the node from the data
+	node, err := parseExtents(data, fs.superblock.blockSize, childPtr.fileBlock, childPtr.count)
+	if err != nil {
+		return nil, fmt.Errorf("could not parse extent tree block %d: %w", childPtr.diskBlock, err)
+	}
+
+	// Set the diskBlock on the parsed node so it can be written back to the same location
+	switch n := node.(type) {
+	case *extentLeafNode:
+		n.diskBlock = childPtr.diskBlock
+	case *extentInternalNode:
+		n.diskBlock = childPtr.diskBlock
+	}
+
 	return node, nil
 }
 

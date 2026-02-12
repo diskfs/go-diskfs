@@ -272,6 +272,13 @@ func Create(b backend.Storage, size, start, sectorsize int64, p *Params) (*FileS
 		flagopt(&fflags)
 	}
 
+	// Enforce feature flag consistency.
+	// metadata_csum and gdt_csum are mutually exclusive; metadata_csum supersedes gdt_csum.
+	if fflags.metadataChecksums {
+		fflags.gdtChecksum = false
+		fflags.metadataChecksumSeedInSuperblock = true
+	}
+
 	mflags := defaultMiscFlags
 
 	// sectorsize must be <=0 or exactly SectorSize512 or error
@@ -524,6 +531,12 @@ func Create(b backend.Storage, size, start, sectorsize int64, p *Params) (*FileS
 		reservedGDTBlocks = min(maxGrowthFilesystemSizeBytes/uint64(blocksize), gdtMaxReservedBlocks)
 	}
 
+	// Only reference the journal inode if the journal feature is enabled
+	var journalInodeNum uint32
+	if fflags.hasJournal {
+		journalInodeNum = journalInode
+	}
+
 	var (
 		journalDeviceNumber uint32
 		err                 error
@@ -626,7 +639,7 @@ func Create(b backend.Storage, size, start, sectorsize int64, p *Params) (*FileS
 		preallocationDirectoryBlocks: 0, // not used in Linux e2fsprogs
 		reservedGDTBlocks:            uint16(reservedGDTBlocks),
 		journalSuperblockUUID:        journalSuperblockUUIDPtr,
-		journalInode:                 journalInode,
+		journalInode:                 journalInodeNum,
 		journalDeviceNumber:          journalDeviceNumber,
 		orphanedInodesStart:          0,
 		hashTreeSeed:                 htreeSeed,
@@ -661,7 +674,7 @@ func Create(b backend.Storage, size, start, sectorsize int64, p *Params) (*FileS
 		backupSuperblockBlockGroups:  backupSuperblockGroupsSparse,
 		lostFoundInode:               lostFoundInode,
 		overheadBlocks:               0,
-		checksumSeed:                 crc.CRC32c(0, fsuuid[:]), // according to docs, this should be crc32c(~0, $orig_fs_uuid)
+		checksumSeed:                 crc.CRC32c(0xffffffff, fsuuid[:]),
 		snapshotInodeNumber:          0,
 		snapshotID:                   0,
 		snapshotReservedBlocks:       0,
@@ -1346,10 +1359,6 @@ func (fs *FileSystem) Rm(p string) error {
 //
 //nolint:gocyclo // yes, this has high cyclomatic complexity, but we can accept it
 func (fs *FileSystem) Remove(p string) error {
-	gdtBlock := 1
-	if fs.superblock.blockSize == 1024 {
-		gdtBlock = 2
-	}
 	parentDir, entry, err := fs.getEntryAndParent(p)
 	if err != nil {
 		return err
@@ -1420,14 +1429,12 @@ func (fs *FileSystem) Remove(p string) error {
 		if err := fs.writeBlockBitmap(dataBlockBitmap, bg); err != nil {
 			return fmt.Errorf("could not write block bitmap back to disk: %v", err)
 		}
-		gd := fs.groupDescriptors.descriptors[bg]
+		gd := &fs.groupDescriptors.descriptors[bg]
 		// Increment free blocks by actual filesystem blocks we just cleared in THIS group
 		gd.freeBlocks += freedByBG[bg]
-		gd.blockBitmapChecksum = bitmapChecksum(dataBlockBitmap.ToBytes(), fs.superblock.checksumSeed)
-		gdBytes := gd.toBytes(fs.superblock.gdtChecksumType(), fs.superblock.checksumSeed)
-		if _, err := writableFile.WriteAt(gdBytes, int64(gdtBlock)*int64(fs.superblock.blockSize)+int64(gd.number)*int64(fs.superblock.groupDescriptorSize)); err != nil {
-			return fmt.Errorf("could not write Group Descriptor bytes to file: %v", err)
-		}
+	}
+	if err := fs.writeGDT(); err != nil {
+		return fmt.Errorf("could not write GDT after block deallocation: %v", err)
 	}
 
 	// remove the directory entry from the parent
@@ -1502,8 +1509,8 @@ func (fs *FileSystem) Remove(p string) error {
 		return fmt.Errorf("could not write inode bitmap back to disk: %v", err)
 	}
 
-	// Update the group descriptor: free inode count, free block count, used directory count; recompute checksums, and write GD
-	gd := fs.groupDescriptors.descriptors[inodeBG]
+	// Update the group descriptor: free inode count, free block count, used directory count; and write GD
+	gd := &fs.groupDescriptors.descriptors[inodeBG]
 
 	// update the group descriptor inodes and blocks
 	gd.freeInodes++
@@ -1511,12 +1518,10 @@ func (fs *FileSystem) Remove(p string) error {
 	if entry.fileType == dirFileTypeDirectory {
 		gd.usedDirectories--
 	}
-	gd.inodeBitmapChecksum = bitmapChecksum(inodeBitmap.ToBytes(), fs.superblock.checksumSeed)
 
-	// write the group descriptor back
-	gdBytes := gd.toBytes(fs.superblock.gdtChecksumType(), fs.superblock.checksumSeed)
-	if _, err := writableFile.WriteAt(gdBytes, int64(gdtBlock)*int64(fs.superblock.blockSize)+int64(gd.number)*int64(fs.superblock.groupDescriptorSize)); err != nil {
-		return fmt.Errorf("could not write Group Descriptor bytes to file: %v", err)
+	// write the group descriptor back (bitmap checksums already updated by writeInodeBitmap/writeBlockBitmap)
+	if err := fs.writeGDT(); err != nil {
+		return fmt.Errorf("could not write GDT after inode deallocation: %v", err)
 	}
 
 	// we could remove the inode from the inode table in the group descriptor,
@@ -2170,6 +2175,11 @@ func (fs *FileSystem) allocateInode(parent uint32, requested int) (uint32, error
 		return 0, fmt.Errorf("could not decrement free inodes for block group %d: %w", bg, err)
 	}
 
+	// decrement unused inodes count in the group descriptor
+	if err := fs.decrGDUnusedInodes(bg); err != nil {
+		return 0, fmt.Errorf("could not decrement unused inodes for block group %d: %w", bg, err)
+	}
+
 	// update inode count in superblock
 	fs.superblock.freeInodes--
 	if err := fs.writeSuperblock(); err != nil {
@@ -2447,7 +2457,7 @@ func (fs *FileSystem) writeInodeBitmap(bm *bitmap.Bitmap, group int) error {
 		return err
 	}
 	b := bm.ToBytes()
-	gd := fs.groupDescriptors.descriptors[group]
+	gd := &fs.groupDescriptors.descriptors[group]
 	bitmapByteCount := fs.superblock.inodesPerGroup / 8
 	bitmapLocation := gd.inodeBitmapLocation
 	offset := int64(bitmapLocation * uint64(fs.superblock.blockSize))
@@ -2458,6 +2468,10 @@ func (fs *FileSystem) writeInodeBitmap(bm *bitmap.Bitmap, group int) error {
 	if wrote != int(bitmapByteCount) {
 		return fmt.Errorf("wrote %d bytes instead of expected %d for inode bitmap of block group %d", wrote, bitmapByteCount, gd.number)
 	}
+
+	// recompute inode bitmap checksum in the group descriptor
+	// e2fsprogs checksums only inodesPerGroup/8 bytes, not the full block
+	gd.inodeBitmapChecksum = bitmapChecksum(b[:bitmapByteCount], fs.superblock.checksumSeed)
 
 	return nil
 }
@@ -2493,7 +2507,7 @@ func (fs *FileSystem) writeBlockBitmap(bm *bitmap.Bitmap, group int) error {
 		return err
 	}
 	b := bm.ToBytes()
-	gd := fs.groupDescriptors.descriptors[group]
+	gd := &fs.groupDescriptors.descriptors[group]
 	bitmapLocation := gd.blockBitmapLocation
 	offset := int64(bitmapLocation * uint64(fs.superblock.blockSize))
 	wrote, err := writableFile.WriteAt(b, offset)
@@ -2503,6 +2517,9 @@ func (fs *FileSystem) writeBlockBitmap(bm *bitmap.Bitmap, group int) error {
 	if wrote != int(fs.superblock.blockSize) {
 		return fmt.Errorf("wrote %d bytes instead of expected %d for block bitmap of block group %d", wrote, fs.superblock.blockSize, gd.number)
 	}
+
+	// recompute block bitmap checksum in the group descriptor
+	gd.blockBitmapChecksum = bitmapChecksum(b, fs.superblock.checksumSeed)
 
 	return nil
 }
@@ -2574,6 +2591,19 @@ func (fs *FileSystem) incrGDFreeInodes(group int, count int32) error {
 	default:
 		// no change
 		return nil
+	}
+
+	return fs.writeGDT()
+}
+
+// decrGDUnusedInodes decrement the unused inodes count in the group descriptor for a given block group.
+func (fs *FileSystem) decrGDUnusedInodes(group int) error {
+	if group >= len(fs.groupDescriptors.descriptors) {
+		return fmt.Errorf("block group %d does not exist", group)
+	}
+	gd := &fs.groupDescriptors.descriptors[group]
+	if gd.unusedInodes > 0 {
+		gd.unusedInodes--
 	}
 
 	return fs.writeGDT()
@@ -2724,6 +2754,10 @@ func (fs *FileSystem) initJournal() error {
 	// Set the UUID to match the filesystem UUID
 	if fs.superblock.uuid != nil {
 		journalSuperblock.uuid = fs.superblock.uuid
+	}
+	// If the filesystem has metadata checksums, the journal must use checksum v3
+	if fs.superblock.features.metadataChecksums {
+		journalSuperblock.incompatFeatures |= jbd2IncompatFeatureChecksumV3
 	}
 
 	// Serialize the journal superblock
@@ -3000,6 +3034,7 @@ func (fs *FileSystem) initGroupDescriptorTables() error {
 		if count != len(blockBitmapBytes) {
 			return fmt.Errorf("wrote %d bytes of block bitmap for group %d instead of expected %d", count, i, len(blockBitmapBytes))
 		}
+		gd.blockBitmapChecksum = bitmapChecksum(blockBitmapBytes, fs.superblock.checksumSeed)
 
 		// Write inode bitmap
 		inodeBitmapBytes := inodeBitmap.ToBytes()
@@ -3011,6 +3046,7 @@ func (fs *FileSystem) initGroupDescriptorTables() error {
 		if count != len(inodeBitmapBytes) {
 			return fmt.Errorf("wrote %d bytes of inode bitmap for group %d instead of expected %d", count, i, len(inodeBitmapBytes))
 		}
+		gd.inodeBitmapChecksum = bitmapChecksum(inodeBitmapBytes[:fs.superblock.inodesPerGroup/8], fs.superblock.checksumSeed)
 
 		// Initialize inode table - zero it out
 		inodeTableBlocks := groupDescriptorInodeTableBlocks(i, fs.superblock)
