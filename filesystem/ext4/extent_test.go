@@ -37,9 +37,9 @@ func TestExtentNodeHeaderToBytes(t *testing.T) {
 				t.Errorf("expected entries %d, got %d", tt.entries, entries)
 			}
 			// Check max
-			max := binary.LittleEndian.Uint16(b[4:6])
-			if max != tt.max {
-				t.Errorf("expected max %d, got %d", tt.max, max)
+			maxVal := binary.LittleEndian.Uint16(b[4:6])
+			if maxVal != tt.max {
+				t.Errorf("expected max %d, got %d", tt.max, maxVal)
 			}
 			// Check depth
 			depth := binary.LittleEndian.Uint16(b[6:8])
@@ -261,7 +261,7 @@ func TestParseExtentsLeafNode(t *testing.T) {
 	binary.LittleEndian.PutUint16(b[6:8], 0) // depth = 0 (leaf)
 
 	// First extent: fileBlock=0, count=5, startingBlock=100
-	binary.LittleEndian.PutUint32(b[12:16], 0)  // fileBlock
+	binary.LittleEndian.PutUint32(b[12:16], 0)   // fileBlock
 	binary.LittleEndian.PutUint16(b[16:18], 5)   // count
 	binary.LittleEndian.PutUint16(b[18:20], 0)   // startingBlock high 16
 	binary.LittleEndian.PutUint32(b[20:24], 100) // startingBlock low 32
@@ -350,9 +350,9 @@ func TestExtentLeafNodeFindBlocks(t *testing.T) {
 			blockSize: 4096,
 		},
 		extents: extents{
-			{fileBlock: 0, startingBlock: 100, count: 5},    // file blocks 0-4 -> disk 100-104
-			{fileBlock: 5, startingBlock: 200, count: 3},    // file blocks 5-7 -> disk 200-202
-			{fileBlock: 10, startingBlock: 500, count: 10},  // file blocks 10-19 -> disk 500-509
+			{fileBlock: 0, startingBlock: 100, count: 5},   // file blocks 0-4 -> disk 100-104
+			{fileBlock: 5, startingBlock: 200, count: 3},   // file blocks 5-7 -> disk 200-202
+			{fileBlock: 10, startingBlock: 500, count: 10}, // file blocks 10-19 -> disk 500-509
 		},
 	}
 
@@ -368,7 +368,7 @@ func TestExtentLeafNodeFindBlocks(t *testing.T) {
 		{"span first and second", 3, 5, []uint64{103, 104, 200, 201, 202}},
 		{"third extent partial", 12, 3, []uint64{502, 503, 504}},
 		{"single block", 0, 1, []uint64{100}},
-		{"gap region", 8, 1, nil}, // blocks 8-9 are not covered by any extent
+		{"gap region", 8, 1, nil},                             // blocks 8-9 are not covered by any extent
 		{"span gap and third", 8, 5, []uint64{500, 501, 502}}, // 8,9 are gap, 10-12 are in third extent
 	}
 
@@ -700,9 +700,9 @@ func TestParseExtentsHighDiskBlock(t *testing.T) {
 
 	// Extent: fileBlock=0, count=1, startingBlock=0x0001_0000_0064 (high bits = 1, low = 100)
 	binary.LittleEndian.PutUint32(b[12:16], 0)   // fileBlock
-	binary.LittleEndian.PutUint16(b[16:18], 1)    // count
-	binary.LittleEndian.PutUint16(b[18:20], 1)    // startingBlock high 16 bits
-	binary.LittleEndian.PutUint32(b[20:24], 100)  // startingBlock low 32 bits
+	binary.LittleEndian.PutUint16(b[16:18], 1)   // count
+	binary.LittleEndian.PutUint16(b[18:20], 1)   // startingBlock high 16 bits
+	binary.LittleEndian.PutUint32(b[20:24], 100) // startingBlock low 32 bits
 
 	result, err := parseExtents(b, 4096, 0, 1)
 	if err != nil {

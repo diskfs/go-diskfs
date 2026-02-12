@@ -138,7 +138,7 @@ func TestReadAllZeros(t *testing.T) {
 		t.Fatalf("Error creating file: %v", err)
 	}
 	// Create a 10MB zero-filled image
-	size := int64(10 * MB)
+	size := 10 * MB
 	if err := f.Truncate(size); err != nil {
 		t.Fatalf("Error truncating: %v", err)
 	}
@@ -166,7 +166,7 @@ func TestReadRandomGarbage(t *testing.T) {
 		t.Fatalf("Error creating file: %v", err)
 	}
 	// Write repeating non-zero garbage
-	size := int64(10 * MB)
+	size := 10 * MB
 	garbage := make([]byte, 4096)
 	for i := range garbage {
 		garbage[i] = byte(i % 251) // prime modulus avoids accidental ext4 magic

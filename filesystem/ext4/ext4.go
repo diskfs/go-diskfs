@@ -40,7 +40,7 @@ const (
 	DefaultReservedBlocksPercent uint8      = 5
 	DefaultVolumeName                       = "diskfs_ext4"
 	minClusterSize               int        = 128
-	maxClusterSize               int        = 65529
+	maxClustersPerGroup          int        = 65528 // EXT2_MAX_CLUSTERS_PER_GROUP = (1 << 16) - 8, limited by 16-bit gd_free_blocks_count
 	bytesPerSlot                 int        = 32
 	maxCharsLongFilename         int        = 13
 	maxBlocksPerExtent           uint16     = 32768
@@ -333,15 +333,20 @@ func Create(b backend.Storage, size, start, sectorsize int64, p *Params) (*FileS
 	}
 
 	// how many blocks in each block group (and therefore how many block groups)
-	// if not provided, by default it is 8*blocksize (in bytes)
+	// if not provided, by default it is 8*blocksize (in bytes), capped at maxClustersPerGroup
+	// per EXT2_MAX_CLUSTERS_PER_GROUP in e2fsprogs (limited by 16-bit gd_free_blocks_count)
+	maxBPG := blocksize * 8
+	if maxBPG > uint32(maxClustersPerGroup) {
+		maxBPG = uint32(maxClustersPerGroup)
+	}
 	blocksPerGroup := p.BlocksPerGroup
 	switch {
 	case blocksPerGroup <= 0:
-		blocksPerGroup = blocksize * 8
+		blocksPerGroup = maxBPG
 	case blocksPerGroup < minBlocksPerGroup:
 		return nil, fmt.Errorf("invalid number of blocks per group %d, must be at least %d", blocksPerGroup, minBlocksPerGroup)
-	case blocksPerGroup > 8*blocksize:
-		return nil, fmt.Errorf("invalid number of blocks per group %d, must be no larger than 8*blocksize of %d", blocksPerGroup, blocksize)
+	case blocksPerGroup > maxBPG:
+		return nil, fmt.Errorf("invalid number of blocks per group %d, must be no larger than %d", blocksPerGroup, maxBPG)
 	case blocksPerGroup%8 != 0:
 		return nil, fmt.Errorf("invalid number of blocks per group %d, must be divisible by 8", blocksPerGroup)
 	}
@@ -1732,7 +1737,8 @@ func (fs *FileSystem) readDirectory(inodeNumber uint32) ([]*directoryEntry, erro
 			return nil, fmt.Errorf("failed to parse hashed directory entries: %v", err)
 		}
 		// include the dot and dotdot entries from treeRoot; they do not show up in the hashed entries
-		dirEntries = []*directoryEntry{treeRoot.dotEntry, treeRoot.dotDotEntry}
+		dirEntries = make([]*directoryEntry, 0, 2+len(subDirEntries))
+		dirEntries = append(dirEntries, treeRoot.dotEntry, treeRoot.dotDotEntry)
 		dirEntries = append(dirEntries, subDirEntries...)
 	} else {
 		// convert into directory entries
@@ -2658,15 +2664,21 @@ func (fs *FileSystem) writeGDT() error {
 
 	for _, bg := range fs.backupSuperblocks {
 		block := bg // backupSuperblocks already contains block numbers, not block group numbers
-		blockStart := block * int64(fs.superblock.blockSize)
-		// allow that the first one requires an offset
-		incr := int64(0)
+
+		// The GDT starts at the block after the one containing the superblock.
+		// For primary (block 0): the superblock occupies block firstDataBlock
+		//   (block 1 for 1KB blocks, block 0 for larger), so GDT is at (firstDataBlock+1).
+		// For backups: the superblock occupies block 'block',
+		//   so GDT is at (block+1).
+		var gdtOffset int64
 		if block == 0 {
-			incr = int64(SectorSize512) * 2
+			gdtOffset = int64(fs.superblock.firstDataBlock+1) * int64(fs.superblock.blockSize)
+		} else {
+			gdtOffset = (block + 1) * int64(fs.superblock.blockSize)
 		}
 
 		// write the GDT
-		count, err := writableFile.WriteAt(g, incr+blockStart+int64(SuperblockSize))
+		count, err := writableFile.WriteAt(g, gdtOffset)
 		if err != nil {
 			return fmt.Errorf("error writing GDT for block %d to disk: %v", block, err)
 		}

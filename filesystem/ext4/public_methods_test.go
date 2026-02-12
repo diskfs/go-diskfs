@@ -63,6 +63,7 @@ func TestEqual(t *testing.T) {
 	}
 
 	t.Run("equal to self", func(t *testing.T) {
+		//nolint:gocritic // yes, this is a self-comparison test
 		if !fs1.Equal(fs1) {
 			t.Errorf("expected filesystem to be equal to itself")
 		}

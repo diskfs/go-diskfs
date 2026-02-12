@@ -235,6 +235,7 @@ func testCreateEmptyFile(t *testing.T, size int64) (outfile string, f *os.File) 
 	return outfile, f
 }
 
+//nolint:gocyclo // yes, long and complex, we can live with it
 func TestWriteFile(t *testing.T) {
 	var newFile = "newlygeneratedfile.dat"
 	tests := []struct {

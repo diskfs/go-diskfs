@@ -17,14 +17,13 @@ func TestCreateWithBlockSizes(t *testing.T) {
 		sectorsPerBlock uint8
 		size            int64
 		features        []FeatureOpt
-		skipE2fsck      bool // known limitation: some block sizes produce e2fsck-incompatible images
 	}{
-		{"1KB blocks (2 sectors)", 2, 100 * MB, nil, false},
-		// Larger block sizes need resize_inode disabled; e2fsck still reports them as corrupt
-		// due to known limitations in the Create implementation for non-1KB block sizes.
-		{"2KB blocks (4 sectors)", 4, 100 * MB, []FeatureOpt{WithFeatureReservedGDTBlocksForExpansion(false)}, true},
-		{"4KB blocks (8 sectors)", 8, 100 * MB, []FeatureOpt{WithFeatureReservedGDTBlocksForExpansion(false)}, true},
-		{"8KB blocks (16 sectors)", 16, 100 * MB, []FeatureOpt{WithFeatureReservedGDTBlocksForExpansion(false)}, true},
+		{"1KB blocks (2 sectors)", 2, 100 * MB, nil},
+		// Larger block sizes need resize_inode disabled since we don't yet
+		// support reserved GDT blocks for non-1KB block sizes.
+		{"2KB blocks (4 sectors)", 4, 100 * MB, []FeatureOpt{WithFeatureReservedGDTBlocksForExpansion(false)}},
+		{"4KB blocks (8 sectors)", 8, 100 * MB, []FeatureOpt{WithFeatureReservedGDTBlocksForExpansion(false)}},
+		{"8KB blocks (16 sectors)", 16, 100 * MB, []FeatureOpt{WithFeatureReservedGDTBlocksForExpansion(false)}},
 	}
 
 	for _, tt := range tests {
@@ -44,10 +43,6 @@ func TestCreateWithBlockSizes(t *testing.T) {
 			}
 			if err := f.Sync(); err != nil {
 				t.Fatalf("Error syncing: %v", err)
-			}
-			if tt.skipE2fsck {
-				t.Logf("Skipping e2fsck for %s (known limitation with non-1KB block sizes)", tt.name)
-				return
 			}
 			cmd := exec.Command("e2fsck", "-f", "-n", outfile)
 			var stdout, stderr bytes.Buffer
@@ -230,7 +225,7 @@ func TestCreateWithCustomBlocksPerGroup(t *testing.T) {
 // TestCreateWithOffset tests Create with a non-zero start offset.
 func TestCreateWithOffset(t *testing.T) {
 	offset := int64(1024)
-	size := int64(100 * MB)
+	size := 100 * MB
 	outfile, f := testCreateEmptyFile(t, size+offset)
 	defer f.Close()
 
@@ -382,7 +377,7 @@ func TestCreateWithMountOptions(t *testing.T) {
 // TestCreateSmallFilesystem tests Create with a small filesystem size.
 func TestCreateSmallFilesystem(t *testing.T) {
 	// 10MB is small but should still work
-	size := int64(10 * MB)
+	size := 10 * MB
 	outfile, f := testCreateEmptyFile(t, size)
 	defer f.Close()
 	fs, err := Create(file.New(f, false), size, 0, 512, &Params{})
@@ -410,7 +405,7 @@ func TestCreateLargeFilesystem(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping large filesystem test in short mode")
 	}
-	size := int64(500 * MB)
+	size := 500 * MB
 	outfile, f := testCreateEmptyFile(t, size)
 	defer f.Close()
 	fs, err := Create(file.New(f, false), size, 0, 512, &Params{})
@@ -451,7 +446,7 @@ func TestCreateWithCustomReservedBlocks(t *testing.T) {
 
 // TestCreateWriteReadRoundTrip creates a filesystem, writes files, re-reads, and verifies.
 func TestCreateWriteReadRoundTrip(t *testing.T) {
-	size := int64(100 * MB)
+	size := 100 * MB
 	outfile, f := testCreateEmptyFile(t, size)
 	defer f.Close()
 
@@ -497,7 +492,7 @@ func TestCreateWriteReadRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile failed: %v", err)
 	}
-	if string(readBack) != string(content) {
+	if !bytes.Equal(readBack, content) {
 		t.Errorf("round-trip mismatch: wrote %q, read %q", content, readBack)
 	}
 }

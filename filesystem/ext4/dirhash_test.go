@@ -164,7 +164,7 @@ func TestExt4fsDirhash(t *testing.T) {
 
 					// For non-legacy versions, different seeds should generally produce different hashes
 					// (Legacy ignores seed since it uses dxHackHash)
-					if hv.version != HashVersionLegacy && hv.version != HashVersionLegacyUnsigned && len(name) > 0 {
+					if hv.version != HashVersionLegacy && hv.version != HashVersionLegacyUnsigned && name != "" {
 						if hash == hashS && minor == minorS {
 							// Collisions are possible but unlikely for non-trivial inputs
 							t.Logf("WARNING: same hash with different seeds for %q: hash=0x%08x minor=0x%08x", displayName, hash, minor)

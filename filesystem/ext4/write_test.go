@@ -368,7 +368,8 @@ func TestWriteAppend(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenFile for read failed: %v", err)
 	}
-	expected := append(firstData, secondData...)
+	expected := firstData
+	expected = append(expected, secondData...)
 	readBuf := make([]byte, len(expected)+10)
 	n, err := readFile.Read(readBuf)
 	if err != nil && err != io.EOF {

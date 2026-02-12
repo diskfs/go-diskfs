@@ -194,7 +194,7 @@ func TestSymlinkCreation(t *testing.T) {
 // TestSymlinkInSubdirectory tests creating a symlink inside a subdirectory.
 func TestSymlinkInSubdirectory(t *testing.T) {
 	// Create a fresh filesystem so directory state is clean
-	size := int64(100 * MB)
+	size := 100 * MB
 	outfile, f := testCreateEmptyFile(t, size)
 	defer f.Close()
 
@@ -295,7 +295,7 @@ func TestReadLinkNonexistent(t *testing.T) {
 
 // TestSymlinkE2fsckValid verifies that a filesystem with created symlinks passes e2fsck.
 func TestSymlinkE2fsckValid(t *testing.T) {
-	size := int64(100 * MB)
+	size := 100 * MB
 	outfile, f := testCreateEmptyFile(t, size)
 	defer f.Close()
 
