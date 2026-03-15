@@ -445,6 +445,51 @@ func (fs *FileSystem) Chtimes(p string, ctime, atime, mtime time.Time) error {
 	return fs.writeDirectoryEntries(parentDir)
 }
 
+// GetArchiveBit returns the current state of the FAT archive attribute.
+func (fs *FileSystem) GetArchiveBit(p string) (bool, error) {
+	dir := path.Dir(p)
+	filename := path.Base(p)
+	if dir == filename {
+		return false, fmt.Errorf("cannot get archive bit on root directory %s", p)
+	}
+	_, entries, err := fs.readDirWithMkdir(dir, false)
+	if err != nil {
+		return false, fmt.Errorf("could not read directory entries for %s: %w", dir, err)
+	}
+	for _, e := range entries {
+		if !e.nameMatches(filename) {
+			continue
+		}
+		return e.isArchiveDirty, nil
+	}
+	return false, fmt.Errorf("path %s not found", p)
+}
+
+// SetArchiveBit sets or clears the FAT archive attribute on the named file or directory.
+func (fs *FileSystem) SetArchiveBit(p string, set bool) error {
+	dir := path.Dir(p)
+	filename := path.Base(p)
+	if dir == filename {
+		return fmt.Errorf("cannot set archive bit on root directory %s", p)
+	}
+	parentDir, entries, err := fs.readDirWithMkdir(dir, false)
+	if err != nil {
+		return fmt.Errorf("could not read directory entries for %s: %w", dir, err)
+	}
+	var entry *directoryEntry
+	for _, e := range entries {
+		if !e.nameMatches(filename) {
+			continue
+		}
+		entry = e
+	}
+	if entry == nil {
+		return fmt.Errorf("path %s not found", p)
+	}
+	entry.isArchiveDirty = set
+	return fs.writeDirectoryEntries(parentDir)
+}
+
 func (fs *FileSystem) ReadDir(p string) ([]iofs.DirEntry, error) {
 	if err := validatePath(p); err != nil {
 		return nil, err
