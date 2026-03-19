@@ -21,6 +21,12 @@ var (
 	intImage = os.Getenv("TEST_IMAGE")
 )
 
+const (
+	testISOBlockSize          = 2048
+	testPVDPublisherFieldFrom = 318
+	testPVDPublisherFieldTo   = 446
+)
+
 // test creating an iso with el torito boot
 func TestFinalizeElTorito(t *testing.T) {
 	finalizeElTorito(t, "")
@@ -29,6 +35,63 @@ func TestFinalizeElTorito(t *testing.T) {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
 	finalizeElTorito(t, dir)
+}
+
+func TestFinalizePublisherIdentifier(t *testing.T) {
+	t.Run("custom publisher identifier", func(t *testing.T) {
+		f, err := os.CreateTemp("", "iso_finalize_publisher_identifier")
+		if err != nil {
+			t.Fatalf("Failed to create tmpfile: %v", err)
+		}
+		defer os.Remove(f.Name())
+
+		b := file.New(f, false)
+		fs, err := iso9660.Create(b, 0, 0, testISOBlockSize, "")
+		if err != nil {
+			t.Fatalf("Failed to iso9660.Create: %v", err)
+		}
+
+		publisher := "go-diskfs"
+		err = fs.Finalize(iso9660.FinalizeOptions{PublisherIdentifier: publisher})
+		if err != nil {
+			t.Fatal("unexpected error fs.Finalize()", err)
+		}
+
+		publisherValue, err := readPublisherIdentifierFromPVD(f)
+		if err != nil {
+			t.Fatalf("unable to read publisher identifier: %v", err)
+		}
+		if publisherValue != publisher {
+			t.Fatalf("unexpected publisher identifier, got %q expected %q", publisherValue, publisher)
+		}
+	})
+
+	t.Run("default publisher identifier empty", func(t *testing.T) {
+		f, err := os.CreateTemp("", "iso_finalize_default_publisher_identifier")
+		if err != nil {
+			t.Fatalf("Failed to create tmpfile: %v", err)
+		}
+		defer os.Remove(f.Name())
+
+		b := file.New(f, false)
+		fs, err := iso9660.Create(b, 0, 0, testISOBlockSize, "")
+		if err != nil {
+			t.Fatalf("Failed to iso9660.Create: %v", err)
+		}
+
+		err = fs.Finalize(iso9660.FinalizeOptions{})
+		if err != nil {
+			t.Fatal("unexpected error fs.Finalize()", err)
+		}
+
+		publisherValue, err := readPublisherIdentifierFromPVD(f)
+		if err != nil {
+			t.Fatalf("unable to read publisher identifier: %v", err)
+		}
+		if publisherValue != "" {
+			t.Fatalf("unexpected default publisher identifier, got %q expected empty", publisherValue)
+		}
+	})
 }
 
 func TestFinalizeElToritoWithInaccurateTmpDir(t *testing.T) {
@@ -86,9 +149,6 @@ func finalizeElTorito(t *testing.T, workspace string) {
 	})
 	if err != nil {
 		t.Fatal("unexpected error fs.Finalize()", err)
-	}
-	if err != nil {
-		t.Fatalf("error trying to Stat() iso file: %v", err)
 	}
 
 	// now check the contents
@@ -538,6 +598,17 @@ func validateIso(t *testing.T, f *os.File) {
 		t.Errorf("unexpected err: %v", err)
 		t.Log(outString)
 	}
+}
+
+func readPublisherIdentifierFromPVD(f *os.File) (string, error) {
+	pvd := make([]byte, testISOBlockSize)
+	_, err := f.ReadAt(pvd, 16*testISOBlockSize)
+	if err != nil && err != io.EOF {
+		return "", err
+	}
+
+	field := pvd[testPVDPublisherFieldFrom:testPVDPublisherFieldTo]
+	return string(bytes.TrimRight(field, "\x00")), nil
 }
 
 //nolint:thelper // this is not a helper function

@@ -34,6 +34,8 @@ type FinalizeOptions struct {
 	ElTorito *ElTorito
 	// VolumeIdentifier custom volume name, defaults to "ISOIMAGE"
 	VolumeIdentifier string
+	// PublisherIdentifier custom publisher identifier written to the PVD
+	PublisherIdentifier string
 }
 
 // finalizeFileInfo is a file info useful for finalization
@@ -648,6 +650,7 @@ func (fsm *FileSystem) Finalize(options FinalizeOptions) error {
 	if options.VolumeIdentifier != "" {
 		volIdentifier = options.VolumeIdentifier
 	}
+	publisherIdentifier := options.PublisherIdentifier
 
 	for _, e := range files {
 		e.location = location
@@ -793,7 +796,7 @@ func (fsm *FileSystem) Finalize(options FinalizeOptions) error {
 		pathTableMLocation:         pathTableMLocation,
 		pathTableMOptionalLocation: 0,
 		volumeSetIdentifier:        "",
-		publisherIdentifier:        "",
+		publisherIdentifier:        publisherIdentifier,
 		preparerIdentifier:         version.AppName,
 		applicationIdentifier:      "",
 		copyrightFile:              "", // 37 bytes
