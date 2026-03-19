@@ -388,6 +388,7 @@ func copyFileData(from backend.File, to backend.WritableFile, fromOffset, toOffs
 			if len(out) < len(buf) {
 				isCompressed = true
 				buf = out
+				n = len(out)
 			}
 		}
 		blocks = append(blocks, &blockData{size: uint32(len(buf)), compressed: isCompressed})
