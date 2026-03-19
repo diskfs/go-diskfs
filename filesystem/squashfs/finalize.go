@@ -380,6 +380,7 @@ func copyFileData(from backend.File, to backend.WritableFile, fromOffset, toOffs
 
 		// compress the block if needed
 		isCompressed := false
+		outBuf := buf[:n]
 		if c != nil {
 			out, err := c.compress(buf)
 			if err != nil {
@@ -387,15 +388,14 @@ func copyFileData(from backend.File, to backend.WritableFile, fromOffset, toOffs
 			}
 			if len(out) < len(buf) {
 				isCompressed = true
-				buf = out
-				n = len(out)
+				outBuf = out
 			}
 		}
-		blocks = append(blocks, &blockData{size: uint32(len(buf)), compressed: isCompressed})
-		if _, err := to.WriteAt(buf[:n], toOffset+int64(compressed)); err != nil {
+		blocks = append(blocks, &blockData{size: uint32(len(outBuf)), compressed: isCompressed})
+		if _, err := to.WriteAt(outBuf, toOffset+int64(compressed)); err != nil {
 			return raw, compressed, blocks, err
 		}
-		compressed += len(buf)
+		compressed += len(outBuf)
 	}
 	return raw, compressed, blocks, nil
 }
