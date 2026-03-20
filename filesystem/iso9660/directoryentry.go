@@ -482,8 +482,17 @@ func (de *directoryEntry) Size() int64 {
 // Mode() FileMode     // file mode bits
 func (de *directoryEntry) Mode() os.FileMode {
 	for _, ext := range de.extensions {
-		if s, ok := ext.(rockRidgeSymlink); ok && !s.continued {
-			return 0o755 | os.ModeSymlink
+		if px, ok := ext.(rockRidgePosixAttributes); ok {
+			return px.mode
+		}
+	}
+	// Fallback for non-Rock Ridge
+	if de.isSubdirectory {
+		return os.ModeDir | 0o755
+	}
+	for _, ext := range de.extensions {
+		if _, ok := ext.(rockRidgeSymlink); ok {
+			return os.ModeSymlink | 0o777
 		}
 	}
 	return 0o755
@@ -509,8 +518,33 @@ func (de *directoryEntry) IsDir() bool {
 	return de.isSubdirectory
 }
 
+// RockRidgeInfo holds POSIX metadata from Rock Ridge extensions.
+type RockRidgeInfo struct {
+	UID     uint32
+	GID     uint32
+	Nlink   uint32
+	Mode    os.FileMode
+	Symlink string
+}
+
 // Sys() interface{}   // underlying data source (can return nil)
 func (de *directoryEntry) Sys() interface{} {
+	for _, ext := range de.extensions {
+		if px, ok := ext.(rockRidgePosixAttributes); ok {
+			rri := &RockRidgeInfo{
+				UID:   px.uid,
+				GID:   px.gid,
+				Nlink: px.linkCount,
+				Mode:  px.mode,
+			}
+			for _, ext2 := range de.extensions {
+				if sl, ok := ext2.(rockRidgeSymlink); ok {
+					rri.Symlink = sl.name
+				}
+			}
+			return rri
+		}
+	}
 	return nil
 }
 

@@ -197,7 +197,7 @@ func (r *rockRidgeExtension) Relocate(dirs map[string]*finalizeFileInfo) ([]*fin
 			children := make([]*finalizeFileInfo, 0)
 			for _, c := range e.trueParent.children {
 				if c != e {
-					children = append(children, e)
+					children = append(children, c)
 					continue
 				}
 				// copy over but replace a few key items
@@ -607,14 +607,17 @@ func (r *rockRidgeExtension) parseSymlink(b []byte) (directoryEntrySystemUseExte
 		flags := b2[0]
 		size := b2[1]
 		switch {
-		case flags&0x1 == 0x1:
-			name += "."
-		case flags&0x2 == 0x2:
-			name += ".."
-		case flags&0x3 == 0x3:
+		case flags&0x08 != 0:
 			name = "/"
+		case flags&0x04 != 0:
+			name += ".."
+		case flags&0x02 != 0:
+			name += "."
 		case size > 0:
-			name += "/" + string(b2[2:2+size])
+			if name != "" && name != "/" {
+				name += "/"
+			}
+			name += string(b2[2:2+size])
 		}
 
 		i += 2 + int(size)
@@ -1115,7 +1118,7 @@ func (d rockRidgeRelocatedDirectory) Signature() string {
 	return rockRidgeSignatureRelocatedDirectory
 }
 func (d rockRidgeRelocatedDirectory) Length() int {
-	return 8
+	return 4
 }
 func (d rockRidgeRelocatedDirectory) Version() uint8 {
 	return 1
@@ -1124,7 +1127,7 @@ func (d rockRidgeRelocatedDirectory) Data() []byte {
 	return []byte{}
 }
 func (d rockRidgeRelocatedDirectory) Bytes() []byte {
-	b := make([]byte, 8)
+	b := make([]byte, 4)
 	copy(b[0:2], rockRidgeSignatureRelocatedDirectory)
 	b[2] = uint8(d.Length())
 	b[3] = d.Version()

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"testing"
 
 	"github.com/diskfs/go-diskfs/backend/file"
@@ -576,6 +577,228 @@ func TestFinalizeRockRidge(t *testing.T) {
 			t.Fatalf("could not close iso file: %v", err)
 		}
 	})
+}
+
+func TestFinalizeRockRidgePermissionRoundTrip(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping permission test on Windows (no Unix permission support)")
+	}
+	blocksize := int64(2048)
+	// create workspace with files of specific permissions
+	dir, err := os.MkdirTemp("", "iso_rr_perm_test")
+	if err != nil {
+		t.Fatalf("Failed to create tmpdir: %v", err)
+	}
+	defer os.RemoveAll(dir)
+
+	permTests := []struct {
+		name string
+		mode os.FileMode
+	}{
+		{"file644", 0o644},
+		{"file755", 0o755},
+		{"file600", 0o600},
+	}
+	for _, pt := range permTests {
+		fp := filepath.Join(dir, pt.name)
+		if err := os.WriteFile(fp, []byte("data"), 0o600); err != nil {
+			t.Fatalf("Failed to write %s: %v", pt.name, err)
+		}
+		if err := os.Chmod(fp, pt.mode); err != nil {
+			t.Fatalf("Failed to chmod %s: %v", pt.name, err)
+		}
+	}
+
+	f, err := os.CreateTemp("", "iso_rr_perm_test")
+	if err != nil {
+		t.Fatalf("Failed to create tmpfile: %v", err)
+	}
+	defer os.Remove(f.Name())
+
+	b := file.New(f, false)
+	fs, err := iso9660.Create(b, 0, 0, blocksize, dir)
+	if err != nil {
+		t.Fatalf("Failed to iso9660.Create: %v", err)
+	}
+	err = fs.Finalize(iso9660.FinalizeOptions{RockRidge: true})
+	if err != nil {
+		t.Fatalf("unexpected error fs.Finalize: %v", err)
+	}
+
+	// read back
+	fs, err = iso9660.Read(b, 0, 0, blocksize)
+	if err != nil {
+		t.Fatalf("error reading iso: %v", err)
+	}
+	entries, err := fs.ReadDir(".")
+	if err != nil {
+		t.Fatalf("error reading root dir: %v", err)
+	}
+
+	found := map[string]os.FileMode{}
+	for _, e := range entries {
+		info, err := e.Info()
+		if err != nil {
+			t.Fatalf("error getting info for %s: %v", e.Name(), err)
+		}
+		found[e.Name()] = info.Mode()
+	}
+
+	for _, pt := range permTests {
+		mode, ok := found[pt.name]
+		if !ok {
+			t.Errorf("file %s not found in ISO", pt.name)
+			continue
+		}
+		// compare just the permission bits
+		if mode.Perm() != pt.mode.Perm() {
+			t.Errorf("file %s: got permissions %o, want %o", pt.name, mode.Perm(), pt.mode.Perm())
+		}
+	}
+
+	f.Close()
+}
+
+func TestFinalizeRockRidgeSymlinkRoundTrip(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping symlink test on Windows (requires elevated privileges)")
+	}
+	blocksize := int64(2048)
+	dir, err := os.MkdirTemp("", "iso_rr_symlink_test")
+	if err != nil {
+		t.Fatalf("Failed to create tmpdir: %v", err)
+	}
+	defer os.RemoveAll(dir)
+
+	// create a regular file so the workspace isn't empty
+	if err := os.WriteFile(filepath.Join(dir, "target"), []byte("hello"), 0o644); err != nil {
+		t.Fatalf("Failed to write target file: %v", err)
+	}
+
+	symlinkTests := []struct {
+		name   string
+		target string
+	}{
+		{"abslink", "/a/b/c"},
+		{"rellink", "../foo"},
+	}
+	for _, st := range symlinkTests {
+		if err := os.Symlink(st.target, filepath.Join(dir, st.name)); err != nil {
+			t.Fatalf("Failed to create symlink %s: %v", st.name, err)
+		}
+	}
+
+	f, err := os.CreateTemp("", "iso_rr_symlink_test")
+	if err != nil {
+		t.Fatalf("Failed to create tmpfile: %v", err)
+	}
+	defer os.Remove(f.Name())
+
+	b := file.New(f, false)
+	fs, err := iso9660.Create(b, 0, 0, blocksize, dir)
+	if err != nil {
+		t.Fatalf("Failed to iso9660.Create: %v", err)
+	}
+	err = fs.Finalize(iso9660.FinalizeOptions{RockRidge: true})
+	if err != nil {
+		t.Fatalf("unexpected error fs.Finalize: %v", err)
+	}
+
+	fs, err = iso9660.Read(b, 0, 0, blocksize)
+	if err != nil {
+		t.Fatalf("error reading iso: %v", err)
+	}
+	entries, err := fs.ReadDir(".")
+	if err != nil {
+		t.Fatalf("error reading root dir: %v", err)
+	}
+
+	found := map[string]os.FileInfo{}
+	for _, e := range entries {
+		info, err := e.Info()
+		if err != nil {
+			t.Fatalf("error getting info for %s: %v", e.Name(), err)
+		}
+		found[e.Name()] = info
+	}
+
+	for _, st := range symlinkTests {
+		info, ok := found[st.name]
+		if !ok {
+			t.Errorf("symlink %s not found in ISO", st.name)
+			continue
+		}
+		if info.Mode()&os.ModeSymlink == 0 {
+			t.Errorf("symlink %s: mode %v does not have ModeSymlink", st.name, info.Mode())
+		}
+		rri, ok := info.Sys().(*iso9660.RockRidgeInfo)
+		if !ok || rri == nil {
+			t.Errorf("symlink %s: Sys() did not return *RockRidgeInfo", st.name)
+			continue
+		}
+		if rri.Symlink != st.target {
+			t.Errorf("symlink %s: got target %q, want %q", st.name, rri.Symlink, st.target)
+		}
+	}
+
+	f.Close()
+}
+
+func TestFinalizeRockRidgeLongFilenameRoundTrip(t *testing.T) {
+	blocksize := int64(2048)
+	dir, err := os.MkdirTemp("", "iso_rr_longname_test")
+	if err != nil {
+		t.Fatalf("Failed to create tmpdir: %v", err)
+	}
+	defer os.RemoveAll(dir)
+
+	longNames := []string{
+		"this_is_a_very_long_filename_that_exceeds_31_chars.txt",
+		"another-really-long-name-for-testing-round-trip.dat",
+	}
+	for _, name := range longNames {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("content"), 0o644); err != nil {
+			t.Fatalf("Failed to write %s: %v", name, err)
+		}
+	}
+
+	f, err := os.CreateTemp("", "iso_rr_longname_test")
+	if err != nil {
+		t.Fatalf("Failed to create tmpfile: %v", err)
+	}
+	defer os.Remove(f.Name())
+
+	b := file.New(f, false)
+	fs, err := iso9660.Create(b, 0, 0, blocksize, dir)
+	if err != nil {
+		t.Fatalf("Failed to iso9660.Create: %v", err)
+	}
+	err = fs.Finalize(iso9660.FinalizeOptions{RockRidge: true})
+	if err != nil {
+		t.Fatalf("unexpected error fs.Finalize: %v", err)
+	}
+
+	fs, err = iso9660.Read(b, 0, 0, blocksize)
+	if err != nil {
+		t.Fatalf("error reading iso: %v", err)
+	}
+	entries, err := fs.ReadDir(".")
+	if err != nil {
+		t.Fatalf("error reading root dir: %v", err)
+	}
+
+	foundNames := map[string]bool{}
+	for _, e := range entries {
+		foundNames[e.Name()] = true
+	}
+
+	for _, name := range longNames {
+		if !foundNames[name] {
+			t.Errorf("long filename %q not found in ISO", name)
+		}
+	}
+
+	f.Close()
 }
 
 //nolint:thelper // this is not a helper function

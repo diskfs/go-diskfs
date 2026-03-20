@@ -66,6 +66,145 @@ func TestRockRidgeUsePathtable(t *testing.T) {
 	}
 }
 
+func TestRockRidgeRelocatedDirectoryRoundTrip(t *testing.T) {
+	rr := getRockRidgeExtension(rockRidge112)
+	re := rockRidgeRelocatedDirectory{}
+	b := re.Bytes()
+	if len(b) != 4 {
+		t.Fatalf("expected 4 bytes, got %d", len(b))
+	}
+	parsed, err := rr.parseRelocatedDirectory(b)
+	if err != nil {
+		t.Fatalf("unexpected error parsing RE: %v", err)
+	}
+	if _, ok := parsed.(rockRidgeRelocatedDirectory); !ok {
+		t.Fatalf("parsed entry is not rockRidgeRelocatedDirectory")
+	}
+}
+
+func TestRockRidgeSymlinkRoundTrip(t *testing.T) {
+	rr := getRockRidgeExtension(rockRidge112)
+	tests := []struct {
+		name   string
+		target string
+	}{
+		{"absolute path", "/a/b/c"},
+		{"relative dotdot", "../foo"},
+		{"relative dot", "./bar"},
+		{"root only", "/"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sl := rockRidgeSymlink{name: tt.target}
+			b := sl.Bytes()
+			// parse all SL records from the bytes
+			reconstructed := ""
+			for i := 0; i < len(b); {
+				recLen := int(b[i+2])
+				rec := b[i : i+recLen]
+				parsed, err := rr.parseSymlink(rec)
+				if err != nil {
+					t.Fatalf("unexpected error parsing SL record: %v", err)
+				}
+				psl := parsed.(rockRidgeSymlink)
+				reconstructed += psl.name
+				i += recLen
+			}
+			if reconstructed != tt.target {
+				t.Errorf("symlink round-trip failed: got %q, want %q", reconstructed, tt.target)
+			}
+		})
+	}
+}
+
+func TestRockRidgePosixAttributesRoundTrip(t *testing.T) {
+	rr := getRockRidgeExtension(rockRidge112)
+	original := rockRidgePosixAttributes{
+		mode:      os.ModeDir | 0o755,
+		linkCount: 3,
+		uid:       1000,
+		gid:       1000,
+		length:    rr.pxLength,
+		serial:    42,
+	}
+	b := original.Bytes()
+	parsed, err := rr.parsePosixAttributes(b)
+	if err != nil {
+		t.Fatalf("unexpected error parsing PX: %v", err)
+	}
+	px := parsed.(rockRidgePosixAttributes)
+	if px.mode != original.mode {
+		t.Errorf("mode mismatch: got %v, want %v", px.mode, original.mode)
+	}
+	if px.linkCount != original.linkCount {
+		t.Errorf("linkCount mismatch: got %d, want %d", px.linkCount, original.linkCount)
+	}
+	if px.uid != original.uid {
+		t.Errorf("uid mismatch: got %d, want %d", px.uid, original.uid)
+	}
+	if px.gid != original.gid {
+		t.Errorf("gid mismatch: got %d, want %d", px.gid, original.gid)
+	}
+}
+
+func TestRockRidgeRelocatePreserveSiblings(t *testing.T) {
+	// Build a tree with depth > 8 and multiple siblings at the level being relocated.
+	// Root (depth 1) -> d1 (2) -> d2 (3) -> d3 (4) -> d4 (5) -> d5 (6) -> d6 (7) -> d7 (8) -> [deep, sibling1, sibling2] (9)
+	root := &finalizeFileInfo{name: ".", isDir: true, depth: 1}
+
+	// Build the chain
+	parent := root
+	for i, name := range []string{"d1", "d2", "d3", "d4", "d5", "d6", "d7"} {
+		child := &finalizeFileInfo{name: name, isDir: true, depth: i + 2, parent: parent}
+		parent.children = append(parent.children, child)
+		parent = child
+	}
+
+	// At depth 9, add 3 siblings: "deep" (a dir that will be relocated) and two regular files
+	deep := &finalizeFileInfo{name: "deep", isDir: true, depth: 9, parent: parent}
+	sibling1 := &finalizeFileInfo{name: "sibling1", isDir: false, depth: 9, parent: parent, size: 10}
+	sibling2 := &finalizeFileInfo{name: "sibling2", isDir: false, depth: 9, parent: parent, size: 20}
+	parent.children = []*finalizeFileInfo{sibling1, deep, sibling2}
+
+	// Build dirs map
+	dirs := map[string]*finalizeFileInfo{".": root}
+	var walkDirs func(fi *finalizeFileInfo)
+	walkDirs = func(fi *finalizeFileInfo) {
+		if fi.isDir {
+			dirs[fi.name] = fi
+			for _, c := range fi.children {
+				walkDirs(c)
+			}
+		}
+	}
+	walkDirs(root)
+
+	rr := getRockRidgeExtension(rockRidge112)
+	_, _, err := rr.Relocate(dirs)
+	if err != nil {
+		t.Fatalf("unexpected error from Relocate: %v", err)
+	}
+
+	// After relocation, the original parent (d7) should still have sibling1 and sibling2.
+	// "deep" should have been replaced by a placeholder file.
+	foundSibling1 := false
+	foundSibling2 := false
+	for _, c := range parent.children {
+		if c.name == "sibling1" {
+			foundSibling1 = true
+		}
+		if c.name == "sibling2" {
+			foundSibling2 = true
+		}
+	}
+	if !foundSibling1 {
+		t.Error("sibling1 was lost during relocation")
+	}
+	if !foundSibling2 {
+		t.Error("sibling2 was lost during relocation")
+	}
+}
+
 func TestRockRidgeSymlinkMerge(t *testing.T) {
 	tests := []struct {
 		first        rockRidgeSymlink
