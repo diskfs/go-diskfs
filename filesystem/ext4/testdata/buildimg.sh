@@ -31,6 +31,8 @@ ln -s nonexistent deadlink
 ln -s /some/really/long/path/that/does/not/exist/and/does/not/fit/in/symlink deadlonglink # the target here is >60 chars and so will not fit within the inode
 # hardlink
 ln random.dat hardlink.dat
+# character device for special file tests
+mknod chardev c 1 3
 cd /data
 umount /mnt
 

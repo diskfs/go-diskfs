@@ -122,6 +122,8 @@ func compareFileSystems(src, dst fs.FS) error {
 	return compareDir(src, dst, ".")
 }
 
+// compareDir compares two directories in src and dst filesystems.
+// Special files (devices, fifos, sockets) are skipped since CopyFileSystem does not copy them.
 func compareDir(src, dst fs.FS, dir string) error {
 	srcEntries, err := fs.ReadDir(src, dir)
 	if err != nil {
@@ -132,16 +134,21 @@ func compareDir(src, dst fs.FS, dir string) error {
 		return fmt.Errorf("read dir %s (dst): %w", dir, err)
 	}
 
+	isSpecialFile := func(e fs.DirEntry) bool {
+		t := e.Type()
+		return t&(fs.ModeDevice|fs.ModeNamedPipe|fs.ModeSocket) != 0
+	}
+
 	srcMap := make(map[string]fs.DirEntry, len(srcEntries))
 	for _, entry := range srcEntries {
-		if excludedPaths[entry.Name()] {
+		if excludedPaths[entry.Name()] || isSpecialFile(entry) {
 			continue
 		}
 		srcMap[entry.Name()] = entry
 	}
 	dstMap := make(map[string]fs.DirEntry, len(dstEntries))
 	for _, entry := range dstEntries {
-		if excludedPaths[entry.Name()] {
+		if excludedPaths[entry.Name()] || isSpecialFile(entry) {
 			continue
 		}
 		dstMap[entry.Name()] = entry

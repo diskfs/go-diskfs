@@ -1272,6 +1272,9 @@ func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 		}
 		return fs.OpenFile(linkTarget, flag)
 	}
+	if inode.extents == nil {
+		return nil, fmt.Errorf("cannot open special file %s (inode %d): no extent tree", p, inodeNumber)
+	}
 	offset := int64(0)
 	if flag&os.O_APPEND == os.O_APPEND {
 		offset = int64(inode.size)
@@ -1305,6 +1308,9 @@ func (fs *FileSystem) openFileViaInode(inodeNumber uint32, flag int) (filesystem
 	// if a symlink, read the target, rather than the inode itself, which does not point to anything
 	if inode.fileType == fileTypeSymbolicLink {
 		return nil, fmt.Errorf("cannot open file via inode: inode %d is a symbolic link", inodeNumber)
+	}
+	if inode.extents == nil {
+		return nil, fmt.Errorf("cannot open special file (inode %d): no extent tree", inodeNumber)
 	}
 	offset := int64(0)
 	if flag&os.O_APPEND == os.O_APPEND {
