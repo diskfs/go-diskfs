@@ -801,6 +801,166 @@ func TestFinalizeRockRidgeLongFilenameRoundTrip(t *testing.T) {
 	f.Close()
 }
 
+func TestFinalizeRockRidgeDeepDirectoryRoundTrip(t *testing.T) {
+	blocksize := int64(2048)
+
+	// Create workspace with deep directory structure (depth > 8 triggers CL/PL/RE)
+	dir, err := os.MkdirTemp("", "iso_rr_deep_test")
+	if err != nil {
+		t.Fatalf("Failed to create tmpdir: %v", err)
+	}
+	defer os.RemoveAll(dir)
+
+	// depth 9 = one level past ISO 9660 max of 8, triggers CL/PL/RE relocation
+	deepDir := filepath.Join(dir, "a", "b", "c", "d", "e", "f", "g", "h")
+	if err := os.MkdirAll(deepDir, 0o755); err != nil {
+		t.Fatalf("Failed to create deep dir: %v", err)
+	}
+
+	deepContent := []byte("deep file content")
+	if err := os.WriteFile(filepath.Join(deepDir, "deep.txt"), deepContent, 0o644); err != nil {
+		t.Fatalf("Failed to write deep file: %v", err)
+	}
+
+	normalContent := []byte("normal file content")
+	if err := os.WriteFile(filepath.Join(dir, "a", "normal.txt"), normalContent, 0o644); err != nil {
+		t.Fatalf("Failed to write normal file: %v", err)
+	}
+
+	f, err := os.CreateTemp("", "iso_rr_deep_test")
+	if err != nil {
+		t.Fatalf("Failed to create tmpfile: %v", err)
+	}
+	defer os.Remove(f.Name())
+
+	b := file.New(f, false)
+	fs, err := iso9660.Create(b, 0, 0, blocksize, dir)
+	if err != nil {
+		t.Fatalf("Failed to iso9660.Create: %v", err)
+	}
+
+	err = fs.Finalize(iso9660.FinalizeOptions{RockRidge: true})
+	if err != nil {
+		t.Fatalf("unexpected error fs.Finalize: %v", err)
+	}
+
+	// Read back
+	fs, err = iso9660.Read(b, 0, 0, blocksize)
+	if err != nil {
+		t.Fatalf("error reading iso: %v", err)
+	}
+
+	// Verify the normal file is accessible
+	normalRead, err := fs.OpenFile("/a/normal.txt", os.O_RDONLY)
+	if err != nil {
+		t.Fatalf("error opening normal file: %v", err)
+	}
+	buf := make([]byte, 100)
+	n, _ := normalRead.Read(buf)
+	if string(buf[:n]) != string(normalContent) {
+		t.Errorf("normal file content mismatch: got %q, want %q", string(buf[:n]), string(normalContent))
+	}
+
+	// Verify the deep file is accessible through the relocated path
+	deepRead, err := fs.OpenFile("/a/b/c/d/e/f/g/h/deep.txt", os.O_RDONLY)
+	if err != nil {
+		t.Fatalf("error opening deep file: %v", err)
+	}
+	buf = make([]byte, 100)
+	n, _ = deepRead.Read(buf)
+	if string(buf[:n]) != string(deepContent) {
+		t.Errorf("deep file content mismatch: got %q, want %q", string(buf[:n]), string(deepContent))
+	}
+
+	// Verify root directory doesn't expose RR_MOVED or relocated entries as visible files
+	entries, err := fs.ReadDir(".")
+	if err != nil {
+		t.Fatalf("error reading root dir: %v", err)
+	}
+	for _, e := range entries {
+		if e.Name() == "RR_MOVED" {
+			t.Error("RR_MOVED directory should not be visible in root listing")
+		}
+	}
+
+	f.Close()
+}
+
+func TestFinalizeRockRidgeWithElTorito(t *testing.T) {
+	blocksize := int64(2048)
+
+	// Create workspace with boot image and regular file
+	dir, err := os.MkdirTemp("", "iso_rr_eltorito_test")
+	if err != nil {
+		t.Fatalf("Failed to create tmpdir: %v", err)
+	}
+	defer os.RemoveAll(dir)
+
+	// Create a boot image
+	bootData := make([]byte, 2048)
+	for i := range bootData {
+		bootData[i] = 0xEB // fake boot code
+	}
+	if err := os.WriteFile(filepath.Join(dir, "BOOT.IMG"), bootData, 0o644); err != nil {
+		t.Fatalf("Failed to write boot image: %v", err)
+	}
+
+	// Create a regular file
+	regContent := []byte("hello world")
+	if err := os.WriteFile(filepath.Join(dir, "readme.txt"), regContent, 0o644); err != nil {
+		t.Fatalf("Failed to write regular file: %v", err)
+	}
+
+	f, err := os.CreateTemp("", "iso_rr_eltorito_test")
+	if err != nil {
+		t.Fatalf("Failed to create tmpfile: %v", err)
+	}
+	defer os.Remove(f.Name())
+
+	b := file.New(f, false)
+	fs, err := iso9660.Create(b, 0, 0, blocksize, dir)
+	if err != nil {
+		t.Fatalf("Failed to iso9660.Create: %v", err)
+	}
+
+	err = fs.Finalize(iso9660.FinalizeOptions{
+		RockRidge: true,
+		ElTorito: &iso9660.ElTorito{
+			BootCatalog: "/BOOT.CAT",
+			Platform:    iso9660.BIOS,
+			Entries: []*iso9660.ElToritoEntry{
+				{
+					Platform:  iso9660.BIOS,
+					Emulation: iso9660.NoEmulation,
+					BootFile:  "/BOOT.IMG",
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error fs.Finalize: %v", err)
+	}
+
+	// Read back and verify both extensions work
+	fs, err = iso9660.Read(b, 0, 0, blocksize)
+	if err != nil {
+		t.Fatalf("error reading iso: %v", err)
+	}
+
+	// Verify regular file is accessible with Rock Ridge name
+	readFile, err := fs.OpenFile("/readme.txt", os.O_RDONLY)
+	if err != nil {
+		t.Fatalf("error opening regular file: %v", err)
+	}
+	buf := make([]byte, 100)
+	n, _ := readFile.Read(buf)
+	if string(buf[:n]) != string(regContent) {
+		t.Errorf("regular file content mismatch: got %q, want %q", string(buf[:n]), string(regContent))
+	}
+
+	f.Close()
+}
+
 //nolint:thelper // this is not a helper function
 func validateIso(t *testing.T, f *os.File) {
 	// only do this test if os.Getenv("TEST_IMAGE") contains a real image for integration testing

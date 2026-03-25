@@ -205,6 +205,284 @@ func TestRockRidgeRelocatePreserveSiblings(t *testing.T) {
 	}
 }
 
+func TestRockRidgeSymlinkConsecutiveDotDot(t *testing.T) {
+	rr := getRockRidgeExtension(rockRidge112)
+	tests := []struct {
+		name   string
+		target string
+	}{
+		{"double dotdot", "../../foo"},
+		{"triple dotdot", "../../../bar"},
+		{"dotdot only", "../.."},
+		{"dot then dotdot", "./../foo"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sl := rockRidgeSymlink{name: tt.target}
+			b := sl.Bytes()
+			reconstructed := ""
+			for i := 0; i < len(b); {
+				recLen := int(b[i+2])
+				rec := b[i : i+recLen]
+				parsed, err := rr.parseSymlink(rec)
+				if err != nil {
+					t.Fatalf("unexpected error parsing SL record: %v", err)
+				}
+				psl := parsed.(rockRidgeSymlink)
+				reconstructed += psl.name
+				i += recLen
+			}
+			if reconstructed != tt.target {
+				t.Errorf("symlink round-trip failed: got %q, want %q", reconstructed, tt.target)
+			}
+		})
+	}
+}
+
+func TestRockRidgePosixAttributesSerial(t *testing.T) {
+	rr := getRockRidgeExtension(rockRidge112)
+	original := rockRidgePosixAttributes{
+		mode:      0o644,
+		linkCount: 1,
+		uid:       1000,
+		gid:       1000,
+		length:    rr.pxLength,
+		serial:    42,
+	}
+	b := original.Bytes()
+	parsed, err := rr.parsePosixAttributes(b)
+	if err != nil {
+		t.Fatalf("unexpected error parsing PX: %v", err)
+	}
+	px := parsed.(rockRidgePosixAttributes)
+	if px.serial != original.serial {
+		t.Errorf("serial mismatch: got %d, want %d", px.serial, original.serial)
+	}
+}
+
+func TestRockRidgePosixAttributesFileTypes(t *testing.T) {
+	rr := getRockRidgeExtension(rockRidge112)
+	tests := []struct {
+		name string
+		mode os.FileMode
+	}{
+		{"regular file", 0o644},
+		{"directory", os.ModeDir | 0o755},
+		{"symlink", os.ModeSymlink | 0o777},
+		{"named pipe", os.ModeNamedPipe | 0o644},
+		{"socket", os.ModeSocket | 0o755},
+		{"char device", os.ModeCharDevice | os.ModeDevice | 0o660},
+		{"block device", os.ModeDevice | 0o660},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			original := rockRidgePosixAttributes{
+				mode:      tt.mode,
+				linkCount: 1,
+				uid:       0,
+				gid:       0,
+				length:    rr.pxLength,
+			}
+			b := original.Bytes()
+			parsed, err := rr.parsePosixAttributes(b)
+			if err != nil {
+				t.Fatalf("unexpected error parsing PX: %v", err)
+			}
+			px := parsed.(rockRidgePosixAttributes)
+			if px.mode != original.mode {
+				t.Errorf("mode mismatch: got %v (%o), want %v (%o)", px.mode, px.mode, original.mode, original.mode)
+			}
+		})
+	}
+}
+
+func TestRockRidgePosixAttributesSpecialBits(t *testing.T) {
+	rr := getRockRidgeExtension(rockRidge112)
+	tests := []struct {
+		name string
+		mode os.FileMode
+	}{
+		{"setuid", os.ModeSetuid | 0o755},
+		{"setgid", os.ModeSetgid | 0o755},
+		{"sticky", os.ModeSticky | 0o755},
+		{"setuid+setgid", os.ModeSetuid | os.ModeSetgid | 0o755},
+		{"all special", os.ModeSetuid | os.ModeSetgid | os.ModeSticky | 0o755},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			original := rockRidgePosixAttributes{
+				mode:      tt.mode,
+				linkCount: 1,
+				uid:       0,
+				gid:       0,
+				length:    rr.pxLength,
+			}
+			b := original.Bytes()
+			parsed, err := rr.parsePosixAttributes(b)
+			if err != nil {
+				t.Fatalf("unexpected error parsing PX: %v", err)
+			}
+			px := parsed.(rockRidgePosixAttributes)
+			if px.mode != original.mode {
+				t.Errorf("mode mismatch: got %v (%o), want %v (%o)", px.mode, px.mode, original.mode, original.mode)
+			}
+		})
+	}
+}
+
+func TestRockRidgePosixAttributesRRIP110(t *testing.T) {
+	rr := getRockRidgeExtension(rockRidge110)
+	original := rockRidgePosixAttributes{
+		mode:      os.ModeDir | 0o755,
+		linkCount: 3,
+		uid:       500,
+		gid:       500,
+		length:    rr.pxLength, // 36 bytes
+	}
+	b := original.Bytes()
+	if len(b) != 36 {
+		t.Fatalf("expected 36 bytes for RRIP 1.10 PX, got %d", len(b))
+	}
+	parsed, err := rr.parsePosixAttributes(b)
+	if err != nil {
+		t.Fatalf("unexpected error parsing PX: %v", err)
+	}
+	px := parsed.(rockRidgePosixAttributes)
+	if px.mode != original.mode {
+		t.Errorf("mode mismatch: got %v, want %v", px.mode, original.mode)
+	}
+	if px.linkCount != original.linkCount {
+		t.Errorf("linkCount mismatch: got %d, want %d", px.linkCount, original.linkCount)
+	}
+	if px.uid != original.uid {
+		t.Errorf("uid mismatch: got %d, want %d", px.uid, original.uid)
+	}
+	if px.gid != original.gid {
+		t.Errorf("gid mismatch: got %d, want %d", px.gid, original.gid)
+	}
+	// serial should be zero for 1.10 (no serial field)
+	if px.serial != 0 {
+		t.Errorf("serial should be 0 for RRIP 1.10, got %d", px.serial)
+	}
+}
+
+func TestRockRidgeNameRoundTrip(t *testing.T) {
+	rr := getRockRidgeExtension(rockRidge112)
+	tests := []struct {
+		name     string
+		filename string
+	}{
+		{"short name", "hello.txt"},
+		{"exactly 249 bytes", string(make([]byte, 249))},
+		{"over 249 bytes needs continuation", ""},
+	}
+	// fill the 249-byte name with valid chars
+	name249 := make([]byte, 249)
+	for i := range name249 {
+		name249[i] = byte('a' + (i % 26))
+	}
+	tests[1].filename = string(name249)
+
+	// fill a 500-byte name
+	name500 := make([]byte, 500)
+	for i := range name500 {
+		name500[i] = byte('A' + (i % 26))
+	}
+	tests[2].filename = string(name500[:500])
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			nm := rockRidgeName{name: tt.filename}
+			b := nm.Bytes()
+			// parse all NM records and merge
+			reconstructed := ""
+			for i := 0; i < len(b); {
+				recLen := int(b[i+2])
+				rec := b[i : i+recLen]
+				parsed, err := rr.parseName(rec)
+				if err != nil {
+					t.Fatalf("unexpected error parsing NM record: %v", err)
+				}
+				pnm := parsed.(rockRidgeName)
+				reconstructed += pnm.name
+				i += recLen
+			}
+			if reconstructed != tt.filename {
+				t.Errorf("name round-trip failed: got len %d, want len %d", len(reconstructed), len(tt.filename))
+			}
+		})
+	}
+}
+
+func TestRockRidgeTimestampsRoundTrip(t *testing.T) {
+	rr := getRockRidgeExtension(rockRidge112)
+	now := time.Now()
+
+	tests := []struct {
+		name     string
+		longForm bool
+		stamps   []rockRidgeTimestamp
+	}{
+		{
+			"short form modify+access+attribute",
+			false,
+			[]rockRidgeTimestamp{
+				{timestampType: rockRidgeTimestampModify, time: now},
+				{timestampType: rockRidgeTimestampAccess, time: now},
+				{timestampType: rockRidgeTimestampAttribute, time: now},
+			},
+		},
+		{
+			"short form with creation",
+			false,
+			[]rockRidgeTimestamp{
+				{timestampType: rockRidgeTimestampCreation, time: now},
+				{timestampType: rockRidgeTimestampModify, time: now},
+			},
+		},
+		{
+			"long form modify+access",
+			true,
+			[]rockRidgeTimestamp{
+				{timestampType: rockRidgeTimestampModify, time: now},
+				{timestampType: rockRidgeTimestampAccess, time: now},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			original := rockRidgeTimestamps{
+				longForm: tt.longForm,
+				stamps:   tt.stamps,
+			}
+			b := original.Bytes()
+			parsed, err := rr.parseTimestamps(b)
+			if err != nil {
+				t.Fatalf("unexpected error parsing TF: %v", err)
+			}
+			tf := parsed.(rockRidgeTimestamps)
+			if tf.longForm != tt.longForm {
+				t.Errorf("longForm mismatch: got %v, want %v", tf.longForm, tt.longForm)
+			}
+			if len(tf.stamps) != len(tt.stamps) {
+				t.Fatalf("stamps count mismatch: got %d, want %d", len(tf.stamps), len(tt.stamps))
+			}
+			for i, s := range tf.stamps {
+				if s.timestampType != tt.stamps[i].timestampType {
+					t.Errorf("stamp %d type mismatch: got %d, want %d", i, s.timestampType, tt.stamps[i].timestampType)
+				}
+				// short form only has second precision
+				if !tt.longForm {
+					if s.time.Unix() != tt.stamps[i].time.Unix() {
+						t.Errorf("stamp %d time mismatch: got %v, want %v", i, s.time, tt.stamps[i].time)
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestRockRidgeSymlinkMerge(t *testing.T) {
 	tests := []struct {
 		first        rockRidgeSymlink
