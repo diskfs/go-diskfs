@@ -316,5 +316,16 @@ func TestStat(t *testing.T) {
 		// uid and gid should be non-negative (they are uint32)
 		_ = stat.UID
 		_ = stat.GID
+
+		if stat.Ino == 0 {
+			t.Error("expected non-zero inode number")
+		}
+		if stat.Nlink == 0 {
+			t.Error("expected non-zero hard link count")
+		}
+		// regular file should have zero device numbers
+		if stat.Major != 0 || stat.Minor != 0 {
+			t.Errorf("expected zero device numbers for regular file, got major=%d minor=%d", stat.Major, stat.Minor)
+		}
 	})
 }

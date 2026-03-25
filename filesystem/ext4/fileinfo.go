@@ -17,8 +17,12 @@ type FileInfo struct {
 }
 
 type StatT struct {
-	UID uint32
-	GID uint32
+	UID   uint32
+	GID   uint32
+	Major uint32
+	Minor uint32
+	Ino   uint32
+	Nlink uint16
 }
 
 // IsDir abbreviation for Mode().IsDir()

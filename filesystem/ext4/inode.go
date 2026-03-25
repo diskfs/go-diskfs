@@ -140,6 +140,50 @@ type inode struct {
 	linkTarget             string
 }
 
+// deviceNumber extracts the device major/minor from blockPointers using the
+// Linux kernel encoding from include/linux/kdev_t.h:
+//
+// Old encoding (blockPointers[0] != 0):
+//
+//	dev_t old_decode_dev(u16 val) {
+//	    return MKDEV((val >> 8) & 255, val & 255);
+//	}
+//
+// New encoding (blockPointers[1]):
+//
+//	dev_t new_decode_dev(u32 dev) {
+//	    unsigned major = (dev & 0xfff00) >> 8;
+//	    unsigned minor = (dev & 0xff) | ((dev >> 12) & 0xfff00);
+//	    return MKDEV(major, minor);
+//	}
+func (i *inode) deviceNumber() (major, minor uint32) {
+	if i.fileType != fileTypeCharacterDevice && i.fileType != fileTypeBlockDevice {
+		return 0, 0
+	}
+	old := i.blockPointers[0]
+	if old != 0 {
+		major = (old >> 8) & 0xff
+		minor = old & 0xff
+		return
+	}
+	raw := i.blockPointers[1]
+	major = (raw >> 8) & 0xfff
+	minor = (raw & 0xff) | ((raw >> 12) & 0xfff00)
+	return
+}
+
+func (i *inode) stat() *StatT {
+	major, minor := i.deviceNumber()
+	return &StatT{
+		UID:   i.owner,
+		GID:   i.group,
+		Major: major,
+		Minor: minor,
+		Ino:   i.number,
+		Nlink: i.hardLinks,
+	}
+}
+
 //nolint:unused // will be used in the future, not yet
 func (i *inode) equal(a *inode) bool {
 	if (i == nil && a != nil) || (a == nil && i != nil) {

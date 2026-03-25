@@ -191,6 +191,7 @@ func (de *directoryEntryInfo) Info() (iofs.FileInfo, error) {
 		size:    int64(de.size),
 		isDir:   de.directoryEntry.fileType == dirFileTypeDirectory,
 		mode:    mode,
+		sys:     de.stat(),
 	}, nil
 }
 
