@@ -1633,29 +1633,11 @@ func (fs *FileSystem) readInode(inodeNumber uint32) (*inode, error) {
 	if inodeNumber == 0 {
 		return nil, fmt.Errorf("cannot read inode 0")
 	}
-	sb := fs.superblock
-	inodeSize := sb.inodeSize
-	inodesPerGroup := sb.inodesPerGroup
-	// figure out which block group the inode is on
-	bg := (inodeNumber - 1) / inodesPerGroup
-	// read the group descriptor to find out the location of the inode table
-	gd := fs.groupDescriptors.descriptors[bg]
-	inodeTableBlock := gd.inodeTableLocation
-	inodeBytes := make([]byte, inodeSize)
-	// bytesStart is beginning byte for the inodeTableBlock
-	byteStart := inodeTableBlock * uint64(sb.blockSize)
-	// offsetInode is how many inodes in our inode is
-	offsetInode := (inodeNumber - 1) % inodesPerGroup
-	// offset is how many bytes in our inode is
-	offset := offsetInode * uint32(inodeSize)
-	read, err := fs.backend.ReadAt(inodeBytes, int64(byteStart)+int64(offset))
+	inodeBytes, err := fs.readInodeRaw(inodeNumber)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read inode %d from offset %d of block %d from block group %d: %v", inodeNumber, offset, inodeTableBlock, bg, err)
+		return nil, fmt.Errorf("could not read inode %d: %w", inodeNumber, err)
 	}
-	if read != int(inodeSize) {
-		return nil, fmt.Errorf("read %d bytes for inode %d instead of inode size of %d", read, inodeNumber, inodeSize)
-	}
-	inode, err := inodeFromBytes(inodeBytes, sb, inodeNumber)
+	inode, err := inodeFromBytes(inodeBytes, fs.superblock, inodeNumber)
 	if err != nil {
 		return nil, fmt.Errorf("could not interpret inode data: %v", err)
 	}
@@ -3395,4 +3377,158 @@ func validatePath(name string) error {
 		return iofs.ErrInvalid
 	}
 	return nil
+}
+
+// GetXattr reads extended attributes for the file at path p.
+//
+// Extended attributes are stored either inline in the inode (ibody) or in a
+// separate block referenced by inode.i_file_acl. This method reads both locations
+// and merges the results, with ibody xattrs taking precedence.
+//
+// References:
+//   - Kernel source: https://github.com/torvalds/linux/blob/master/fs/ext4/xattr.c (ext4_xattr_get)
+//   - Disk layout: https://www.kernel.org/doc/html/latest/filesystems/ext4/dynamic.html#extended-attributes
+func (fs *FileSystem) GetXattr(p string) (map[string][]byte, error) {
+	_, entry, err := fs.getEntryAndParent(p)
+	if err != nil {
+		return nil, err
+	}
+	if entry == nil {
+		return nil, fmt.Errorf("file does not exist: %s", p)
+	}
+	inodeBytes, err := fs.readInodeRaw(entry.inode)
+	if err != nil {
+		return nil, fmt.Errorf("could not read inode %d: %w", entry.inode, err)
+	}
+	in, err := inodeFromBytes(inodeBytes, fs.superblock, entry.inode)
+	if err != nil {
+		return nil, fmt.Errorf("could not interpret inode data: %w", err)
+	}
+	return fs.readXattrs(in, inodeBytes)
+}
+
+// readXattrs reads all extended attributes from an inode.
+//
+// Extended attributes can be stored in two locations:
+// 1. Inline in the inode body (ibody) - stored after i_extra_isize
+// 2. In a dedicated block referenced by inode.i_file_acl
+//
+// Both locations are read and merged. The same key should not exist in both
+// locations, but if it does, the ibody value is kept.
+func (fs *FileSystem) readXattrs(in *inode, inodeBytes []byte) (map[string][]byte, error) {
+	result := make(map[string][]byte)
+
+	ibodyXattrs, err := fs.readIbodyXattrs(inodeBytes)
+	if err != nil {
+		return nil, fmt.Errorf("error reading ibody xattrs: %w", err)
+	}
+	for k, v := range ibodyXattrs {
+		result[k] = v
+	}
+
+	if in.extendedAttributeBlock != 0 {
+		blockXattrs, err := fs.readBlockXattrs(in.extendedAttributeBlock)
+		if err != nil {
+			return nil, fmt.Errorf("error reading xattr block: %w", err)
+		}
+		for k, v := range blockXattrs {
+			if _, exists := result[k]; !exists {
+				result[k] = v
+			}
+		}
+	}
+
+	return result, nil
+}
+
+// readIbodyXattrs reads extended attributes stored inline in the inode.
+//
+// For inodes larger than 128 bytes, the extra space after i_extra_isize can be
+// used to store extended attributes. The layout is:
+//
+//	[128-byte base inode][i_extra_isize bytes][xattr magic][xattr entries]
+//
+// The inline storage is indicated by the ext4_xattr_ibody_header magic number
+// (0xEA020000). If not present, the inode has no inline xattrs.
+//
+// Reference: ext4_xattr_ibody_find in fs/ext4/xattr.c
+func (fs *FileSystem) readIbodyXattrs(inodeBytes []byte) (map[string][]byte, error) {
+	sb := fs.superblock
+	if sb.inodeSize <= ext2InodeSize {
+		return nil, nil
+	}
+
+	if len(inodeBytes) < int(ext2InodeSize)+4 {
+		return nil, nil
+	}
+	extraIsize := binary.LittleEndian.Uint16(inodeBytes[ext2InodeSize : ext2InodeSize+2])
+
+	xattrStart := int(ext2InodeSize) + int(extraIsize)
+	xattrEnd := int(sb.inodeSize)
+	if xattrStart >= xattrEnd || xattrEnd-xattrStart < 4 {
+		return nil, nil
+	}
+
+	magic := binary.LittleEndian.Uint32(inodeBytes[xattrStart : xattrStart+4])
+	if magic != xattrMagic {
+		return nil, nil
+	}
+
+	data := inodeBytes[xattrStart+4 : xattrEnd]
+	return parseXattrEntries(data, data)
+}
+
+// readBlockXattrs reads extended attributes from a dedicated block.
+//
+// The block format is:
+//
+//	[ext4_xattr_header (32 bytes)][xattr entries][xattr values]
+//
+// The ext4_xattr_header contains a magic number (0xEA020000), reference count,
+// and checksums. Entries are stored in sorted order (by name_index, then name).
+//
+// Reference: ext4_xattr_block_find in fs/ext4/xattr.c
+func (fs *FileSystem) readBlockXattrs(block uint64) (map[string][]byte, error) {
+	blockSize := int(fs.superblock.blockSize)
+	data := make([]byte, blockSize)
+	offset := int64(block) * int64(blockSize)
+	_, err := fs.backend.ReadAt(data, offset)
+	if err != nil {
+		return nil, fmt.Errorf("could not read xattr block at %d: %w", block, err)
+	}
+
+	magic := binary.LittleEndian.Uint32(data[0:4])
+	if magic != xattrMagic {
+		return nil, fmt.Errorf("invalid xattr block magic: %x", magic)
+	}
+
+	entryData := data[xattrHeaderSize:]
+	return parseXattrEntries(entryData, data)
+}
+
+// readInodeRaw reads the raw bytes of an inode from disk.
+//
+// This is a helper function extracted from readInode to allow reading the full
+// inode structure including the extended area (i_extra_isize) which may contain
+// inline extended attributes.
+func (fs *FileSystem) readInodeRaw(inodeNumber uint32) ([]byte, error) {
+	sb := fs.superblock
+	inodeSize := sb.inodeSize
+	inodesPerGroup := sb.inodesPerGroup
+	bg := (inodeNumber - 1) / inodesPerGroup
+	gd := fs.groupDescriptors.descriptors[bg]
+	inodeTableBlock := gd.inodeTableLocation
+	byteStart := inodeTableBlock * uint64(sb.blockSize)
+	offsetInode := (inodeNumber - 1) % inodesPerGroup
+	offset := offsetInode * uint32(inodeSize)
+
+	inodeBytes := make([]byte, inodeSize)
+	read, err := fs.backend.ReadAt(inodeBytes, int64(byteStart)+int64(offset))
+	if err != nil {
+		return nil, fmt.Errorf("failed to read inode %d from offset %d of block %d from block group %d: %w", inodeNumber, offset, inodeTableBlock, bg, err)
+	}
+	if read != int(inodeSize) {
+		return nil, fmt.Errorf("read %d bytes for inode %d instead of inode size of %d", read, inodeNumber, inodeSize)
+	}
+	return inodeBytes, nil
 }
