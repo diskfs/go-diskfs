@@ -52,10 +52,29 @@ func (de *directoryEntry) Info() (iofs.FileInfo, error) {
 	return FileInfo{
 		modTime:   de.modifyTime,
 		name:      de.filenameLong,
-		shortName: shortNameFromDirEntry(de),
+		shortName: de.fullShortName(),
 		size:      int64(de.fileSize),
 		isDir:     de.isSubdirectory,
 	}, nil
+}
+
+func (de *directoryEntry) nameMatches(name string) bool {
+	return strings.EqualFold(de.filenameLong, name) || strings.EqualFold(de.fullShortName(), name)
+}
+
+func (de *directoryEntry) fullShortName() string {
+	name := de.filenameShort
+	if de.lowercaseShortname {
+		name = strings.ToLower(name)
+	}
+	ext := de.fileExtension
+	if de.lowercaseExtension {
+		ext = strings.ToLower(ext)
+	}
+	if ext != "" {
+		return name + "." + ext
+	}
+	return name
 }
 
 func (de *directoryEntry) IsDir() bool {
@@ -73,7 +92,7 @@ func (de *directoryEntry) Name() string {
 	if de.filenameLong != "" {
 		return de.filenameLong
 	}
-	return shortNameFromDirEntry(de)
+	return de.fullShortName()
 }
 
 func (de *directoryEntry) toBytes() ([]byte, error) {

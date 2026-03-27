@@ -564,11 +564,7 @@ func (fs *FileSystem) Chtimes(p string, ctime, atime, mtime time.Time) error {
 	// find the specific entry we need
 	var entry *directoryEntry
 	for _, e := range entries {
-		shortName := e.filenameShort
-		if e.fileExtension != "" {
-			shortName += "." + e.fileExtension
-		}
-		if !strings.EqualFold(e.filenameLong, filename) && !strings.EqualFold(shortName, filename) {
+		if !e.nameMatches(filename) {
 			continue
 		}
 		entry = e
@@ -655,11 +651,7 @@ func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 		targetEntry = &parentDir.directoryEntry
 	} else {
 		for _, e := range entries {
-			shortName := e.filenameShort
-			if e.fileExtension != "" {
-				shortName += "." + e.fileExtension
-			}
-			if !strings.EqualFold(e.filenameLong, filename) && !strings.EqualFold(shortName, filename) {
+			if !e.nameMatches(filename) {
 				continue
 			}
 			// if we got this far, we have found the file
@@ -738,11 +730,7 @@ func (fs *FileSystem) Remove(pathname string) error {
 	// we now know that the directory exists, see if the file exists
 	var targetEntry *directoryEntry
 	for _, e := range entries {
-		shortName := e.filenameShort
-		if e.fileExtension != "" {
-			shortName += "." + e.fileExtension
-		}
-		if e.filenameLong != filename && shortName != filename {
+		if !e.nameMatches(filename) {
 			continue
 		}
 		// cannot do anything with directories
@@ -809,11 +797,7 @@ func (fs *FileSystem) Rename(oldpath, newpath string) error {
 	// we now know that the directory exists, see if the file exists
 	var targetEntry *directoryEntry
 	for _, e := range entries {
-		shortName := e.filenameShort
-		if e.fileExtension != "" {
-			shortName += "." + e.fileExtension
-		}
-		if e.filenameLong != filename && shortName != filename {
+		if !e.nameMatches(filename) {
 			continue
 		}
 		// if we got this far, we have found the file
@@ -1110,7 +1094,7 @@ func (fs *FileSystem) readDirWithMkdir(p string, doMake bool) (*Directory, []*di
 			// match is determined by any one of:
 			// - long filename == provided name
 			// - uppercase(short filename) == uppercase(provided name)
-			if !strings.EqualFold(e.filenameLong, subp) && !strings.EqualFold(e.filenameShort, subp) {
+			if !e.nameMatches(subp) {
 				continue
 			}
 			if !e.isSubdirectory {

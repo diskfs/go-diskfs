@@ -27,7 +27,7 @@ func (fl *File) Stat() (iofs.FileInfo, error) {
 	return FileInfo{
 		modTime:   fl.modifyTime,
 		name:      fl.filenameLong,
-		shortName: shortNameFromDirEntry(fl.directoryEntry),
+		shortName: fl.fullShortName(),
 		size:      int64(fl.fileSize),
 		isDir:     fl.isSubdirectory,
 	}, nil
