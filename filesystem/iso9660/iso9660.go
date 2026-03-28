@@ -411,18 +411,53 @@ func (fsm *FileSystem) ReadDir(p string) ([]iofs.DirEntry, error) {
 	return de, nil
 }
 
-// Open returns an fs.File from which you can read the contents of a file
-// Especially useful for doing fs.FS operations
+// Open returns an fs.File for the named file or directory.
+// If the path refers to a directory, the returned file also implements
+// fs.ReadDirFile, allowing callers such as http.FileServer(http.FS(fs))
+// to list directory contents.
 func (fsm *FileSystem) Open(p string) (iofs.File, error) {
 	// should not accept anything that starts with /
 	if err := validatePath(p); err != nil {
 		return nil, err
 	}
-	file, err := fsm.OpenFile(p, os.O_RDONLY)
-	if err != nil {
-		return nil, err
+
+	// workspace mode: os.Open handles both files and directories
+	if fsm.workspace != "" {
+		return os.Open(path.Join(fsm.workspace, p))
 	}
-	return file, nil
+
+	// root directory
+	if p == "." {
+		return &dirFile{entry: fsm.rootDir, fs: fsm, path: "."}, nil
+	}
+
+	// look up the entry in its parent directory
+	dir := path.Dir(p)
+	filename := path.Base(p)
+	entries, err := fsm.readDirectory(dir)
+	if err != nil {
+		return nil, &iofs.PathError{Op: "open", Path: p, Err: err}
+	}
+
+	for _, e := range entries {
+		if e.isSelf || e.isParent {
+			continue
+		}
+		if e.Name() == filename {
+			if e.IsDir() {
+				return &dirFile{entry: e, fs: fsm, path: p}, nil
+			}
+			// regular file
+			return &File{
+				directoryEntry: e,
+				isReadWrite:    false,
+				isAppend:       false,
+				offset:         0,
+			}, nil
+		}
+	}
+
+	return nil, &iofs.PathError{Op: "open", Path: p, Err: iofs.ErrNotExist}
 }
 
 // OpenFile returns an io.ReadWriter from which you can read the contents of a file
@@ -521,6 +556,10 @@ func (fsm *FileSystem) Remove(p string) error {
 
 // Stat returns a FileInfo describing the file.
 func (fsm *FileSystem) Stat(name string) (iofs.FileInfo, error) {
+	// root directory
+	if name == "." {
+		return rootDirInfo{fsm.rootDir}, nil
+	}
 	dir := path.Dir(name)
 	basename := path.Base(name)
 	des, err := fsm.ReadDir(dir)
