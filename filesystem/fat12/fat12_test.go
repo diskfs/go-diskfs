@@ -546,6 +546,69 @@ func TestFat12FSFS(t *testing.T) {
 	}
 }
 
+// ── Name matching regression tests ────────────────────────────────────────────
+
+func TestReadDirWithMkdirShortNameExtension(t *testing.T) {
+	_, fs := createFAT12(t, "SNDIREX")
+
+	// "A.B" is valid 8.3 — stored as filenameShort="A", fileExtension="B", no LFN.
+	if err := fs.Mkdir("/A.B"); err != nil {
+		t.Fatalf("Mkdir: %v", err)
+	}
+	content := []byte("inside short dir with ext")
+	writeFile(t, fs, "/A.B/file.txt", content)
+
+	f, err := fs.OpenFile("/A.B/file.txt", os.O_RDONLY)
+	if err != nil {
+		t.Fatalf("OpenFile through short-name dir with extension: %v", err)
+	}
+	got, _ := io.ReadAll(f)
+	f.Close()
+	if !bytes.Equal(got, content) {
+		t.Errorf("content = %q, want %q", got, content)
+	}
+}
+
+func TestRemoveMixedCase(t *testing.T) {
+	imgPath, fs := createFAT12(t, "RMCASE")
+
+	writeFile(t, fs, "/TestFile.txt", []byte("data"))
+
+	if err := fs.Remove("/testfile.txt"); err != nil {
+		t.Fatalf("Remove with lowercase: %v", err)
+	}
+
+	fs2 := reopenFAT12(t, imgPath)
+	entries, _ := fs2.ReadDir(".")
+	for _, e := range entries {
+		if strings.EqualFold(e.Name(), "testfile.txt") {
+			t.Error("file still present after case-insensitive Remove")
+		}
+	}
+}
+
+func TestRenameMixedCase(t *testing.T) {
+	imgPath, fs := createFAT12(t, "RNCASE")
+	content := []byte("rename me")
+
+	writeFile(t, fs, "/Original.txt", content)
+
+	if err := fs.Rename("/original.txt", "/moved.txt"); err != nil {
+		t.Fatalf("Rename with lowercase: %v", err)
+	}
+
+	fs2 := reopenFAT12(t, imgPath)
+	f, err := fs2.OpenFile("/moved.txt", os.O_RDONLY)
+	if err != nil {
+		t.Fatalf("OpenFile after case-insensitive Rename: %v", err)
+	}
+	got, _ := io.ReadAll(f)
+	f.Close()
+	if !bytes.Equal(got, content) {
+		t.Errorf("content = %q, want %q", got, content)
+	}
+}
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 func dirEntryNames(entries []iofs.DirEntry) []string {
