@@ -68,6 +68,18 @@ func reopenFAT12(t *testing.T, imgPath string) filesystem.FileSystem {
 	return fs
 }
 
+func writeFile(t *testing.T, fs filesystem.FileSystem, name string, content []byte) {
+	t.Helper()
+	f, err := fs.OpenFile(name, os.O_CREATE|os.O_RDWR)
+	if err != nil {
+		t.Fatalf("OpenFile(%q): %v", name, err)
+	}
+	if _, err := f.Write(content); err != nil {
+		t.Fatalf("Write(%q): %v", name, err)
+	}
+	f.Close()
+}
+
 // ── Create ────────────────────────────────────────────────────────────────────
 
 func TestFat12Create(t *testing.T) {
@@ -256,14 +268,7 @@ func TestFat12WriteReadLargeFile(t *testing.T) {
 	content := bytes.Repeat([]byte("ABCDEFGH"), 256) // 2 KB
 	_, fs := createFAT12(t, "LARGE")
 
-	f, err := fs.OpenFile("/big.bin", os.O_CREATE|os.O_RDWR)
-	if err != nil {
-		t.Fatalf("OpenFile: %v", err)
-	}
-	if _, err := f.Write(content); err != nil {
-		t.Fatalf("Write: %v", err)
-	}
-	f.Close()
+	writeFile(t, fs, "/big.bin", content)
 
 	f2, err := fs.OpenFile("/big.bin", os.O_RDONLY)
 	if err != nil {
@@ -283,14 +288,7 @@ func TestFat12WriteReadSubdirFile(t *testing.T) {
 	if err := fs.Mkdir("/sub"); err != nil {
 		t.Fatalf("Mkdir: %v", err)
 	}
-	f, err := fs.OpenFile("/sub/file.txt", os.O_CREATE|os.O_RDWR)
-	if err != nil {
-		t.Fatalf("OpenFile in subdir: %v", err)
-	}
-	if _, err := f.Write(content); err != nil {
-		t.Fatalf("Write: %v", err)
-	}
-	f.Close()
+	writeFile(t, fs, "/sub/file.txt", content)
 
 	// Verify after reopen.
 	fs2 := reopenFAT12(t, imgPath)
@@ -316,11 +314,7 @@ func TestFat12ReadDir(t *testing.T) {
 		t.Fatalf("Mkdir: %v", err)
 	}
 
-	f, _ := fs.OpenFile("/root.txt", os.O_CREATE|os.O_RDWR)
-	if _, err := f.Write([]byte("x")); err != nil {
-		t.Fatalf("Write: %v", err)
-	}
-	f.Close()
+	writeFile(t, fs, "/root.txt", []byte("x"))
 
 	entries, err := fs.ReadDir(".")
 	if err != nil {
@@ -339,12 +333,7 @@ func TestFat12ReadDir(t *testing.T) {
 func TestFat12Remove(t *testing.T) {
 	imgPath, fs := createFAT12(t, "RMTEST")
 
-	// Create and remove a file.
-	f, _ := fs.OpenFile("/del.txt", os.O_CREATE|os.O_RDWR)
-	if _, err := f.Write([]byte("bye")); err != nil {
-		t.Fatalf("Write: %v", err)
-	}
-	f.Close()
+	writeFile(t, fs, "/del.txt", []byte("bye"))
 
 	if err := fs.Remove("/del.txt"); err != nil {
 		t.Fatalf("Remove: %v", err)
@@ -373,11 +362,7 @@ func TestFat12Rename(t *testing.T) {
 	imgPath, fs := createFAT12(t, "RNTEST")
 	content := []byte("rename me")
 
-	f, _ := fs.OpenFile("/old.txt", os.O_CREATE|os.O_RDWR)
-	if _, err := f.Write(content); err != nil {
-		t.Fatalf("Write: %v", err)
-	}
-	f.Close()
+	writeFile(t, fs, "/old.txt", content)
 
 	if err := fs.Rename("/old.txt", "/new.txt"); err != nil {
 		t.Fatalf("Rename: %v", err)
@@ -406,11 +391,7 @@ func TestFat12Stat(t *testing.T) {
 	_, fs := createFAT12(t, "STATTEST")
 	content := []byte("stat me")
 
-	f, _ := fs.OpenFile("/stat.txt", os.O_CREATE|os.O_RDWR)
-	if _, err := f.Write(content); err != nil {
-		t.Fatalf("Write: %v", err)
-	}
-	f.Close()
+	writeFile(t, fs, "/stat.txt", content)
 
 	info, err := fs.Stat("stat.txt")
 	if err != nil {
@@ -433,11 +414,7 @@ func TestFat12ReadFile(t *testing.T) {
 	content := []byte("readfile test")
 	_, fs := createFAT12(t, "RFTEST")
 
-	f, _ := fs.OpenFile("/rf.txt", os.O_CREATE|os.O_RDWR)
-	if _, err := f.Write(content); err != nil {
-		t.Fatalf("Write: %v", err)
-	}
-	f.Close()
+	writeFile(t, fs, "/rf.txt", content)
 
 	got, err := fs.ReadFile("rf.txt")
 	if err != nil {
@@ -455,11 +432,7 @@ func TestFat12Truncate(t *testing.T) {
 	original := []byte("original content here")
 	shorter := []byte("new")
 
-	f, _ := fs.OpenFile("/trunc.txt", os.O_CREATE|os.O_RDWR)
-	if _, err := f.Write(original); err != nil {
-		t.Fatalf("Write: %v", err)
-	}
-	f.Close()
+	writeFile(t, fs, "/trunc.txt", original)
 
 	f2, _ := fs.OpenFile("/trunc.txt", os.O_RDWR|os.O_TRUNC|os.O_CREATE)
 	if _, err := f2.Write(shorter); err != nil {
@@ -535,11 +508,7 @@ func TestFat12FSFS(t *testing.T) {
 	_, fs := createFAT12(t, "FSFS")
 	content := []byte("fs.FS content")
 
-	wf, _ := fs.OpenFile("/fsfile.txt", os.O_CREATE|os.O_RDWR)
-	if _, err := wf.Write(content); err != nil {
-		t.Fatalf("Write: %v", err)
-	}
-	wf.Close()
+	writeFile(t, fs, "/fsfile.txt", content)
 
 	// fs.FS Open
 	rf, err := fs.Open("fsfile.txt")
@@ -557,11 +526,7 @@ func TestFat12FSFS(t *testing.T) {
 	if err := fs.Mkdir("/subwalk"); err != nil {
 		t.Fatalf("Mkdir: %v", err)
 	}
-	wf2, _ := fs.OpenFile("/subwalk/w.txt", os.O_CREATE|os.O_RDWR)
-	if _, err := wf2.Write([]byte("w")); err != nil {
-		t.Fatalf("Write: %v", err)
-	}
-	wf2.Close()
+	writeFile(t, fs, "/subwalk/w.txt", []byte("w"))
 
 	err = iofs.WalkDir(fs, ".", func(p string, _ iofs.DirEntry, err error) error {
 		if err != nil {
