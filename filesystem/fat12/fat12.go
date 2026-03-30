@@ -431,11 +431,7 @@ func (fs *FileSystem) Chtimes(p string, ctime, atime, mtime time.Time) error {
 	}
 	var entry *directoryEntry
 	for _, e := range entries {
-		shortName := e.filenameShort
-		if e.fileExtension != "" {
-			shortName += "." + e.fileExtension
-		}
-		if !strings.EqualFold(e.filenameLong, filename) && !strings.EqualFold(shortName, filename) {
+		if !e.nameMatches(filename) {
 			continue
 		}
 		entry = e
@@ -483,11 +479,7 @@ func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 		targetEntry = &parentDir.directoryEntry
 	} else {
 		for _, e := range entries {
-			shortName := e.filenameShort
-			if e.fileExtension != "" {
-				shortName += "." + e.fileExtension
-			}
-			if !strings.EqualFold(e.filenameLong, filename) && !strings.EqualFold(shortName, filename) {
+			if !e.nameMatches(filename) {
 				continue
 			}
 			targetEntry = e
@@ -549,11 +541,7 @@ func (fs *FileSystem) Remove(pathname string) error {
 	}
 	var targetEntry *directoryEntry
 	for _, e := range entries {
-		shortName := e.filenameShort
-		if e.fileExtension != "" {
-			shortName += "." + e.fileExtension
-		}
-		if e.filenameLong != filename && shortName != filename {
+		if !e.nameMatches(filename) {
 			continue
 		}
 		if e.isSubdirectory {
@@ -596,11 +584,7 @@ func (fs *FileSystem) Rename(oldpath, newpath string) error {
 	}
 	var targetEntry *directoryEntry
 	for _, e := range entries {
-		shortName := e.filenameShort
-		if e.fileExtension != "" {
-			shortName += "." + e.fileExtension
-		}
-		if e.filenameLong != filename && shortName != filename {
+		if !e.nameMatches(filename) {
 			continue
 		}
 		targetEntry = e
@@ -862,7 +846,7 @@ func (fs *FileSystem) readDirWithMkdir(p string, doMake bool) (*Directory, []*di
 			if e.isVolumeLabel {
 				continue
 			}
-			if !strings.EqualFold(e.filenameLong, subp) && !strings.EqualFold(e.filenameShort, subp) {
+			if !e.nameMatches(subp) {
 				continue
 			}
 			if !e.isSubdirectory {

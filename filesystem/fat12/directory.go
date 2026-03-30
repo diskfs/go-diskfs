@@ -2,7 +2,6 @@ package fat12
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/diskfs/go-diskfs/util/timestamp"
 )
@@ -58,20 +57,6 @@ func (d *Directory) entriesToBytesFixed(fixedSize int) ([]byte, error) {
 		offset += len(b2)
 	}
 	return b, nil
-}
-
-// matchesFilename reports whether an entry matches the given name.
-// It checks both the long filename (case-insensitive) and the 8.3 short name
-// (case-insensitive), so callers can use either form interchangeably.
-func matchesFilename(e *directoryEntry, name string) bool {
-	if e.filenameLong != "" && strings.EqualFold(e.filenameLong, name) {
-		return true
-	}
-	shortName := e.filenameShort
-	if e.fileExtension != "" {
-		shortName += "." + e.fileExtension
-	}
-	return strings.EqualFold(shortName, name)
 }
 
 // uniqueShortName finds the lowest available numeric-tail short name for the
@@ -159,7 +144,7 @@ func (d *Directory) createEntry(name string, cluster uint32, dir bool) (*directo
 func (d *Directory) removeEntry(name string) error {
 	removeEntryIndex := -1
 	for i, entry := range d.entries {
-		if matchesFilename(entry, name) {
+		if entry.nameMatches(name) {
 			removeEntryIndex = i
 			break
 		}
@@ -186,7 +171,7 @@ func (d *Directory) renameEntry(oldFileName, newFileName string) error {
 		// rename completes its current short name slot will be vacated.
 		var filtered []*directoryEntry
 		for _, e := range d.entries {
-			if !matchesFilename(e, oldFileName) {
+			if !e.nameMatches(oldFileName) {
 				filtered = append(filtered, e)
 			}
 		}
@@ -202,10 +187,10 @@ func (d *Directory) renameEntry(oldFileName, newFileName string) error {
 	isReplaced := false
 	for _, entry := range d.entries {
 		// Drop any existing entry that has the new name (it is overwritten).
-		if matchesFilename(entry, newFileName) {
+		if entry.nameMatches(newFileName) {
 			continue
 		}
-		if matchesFilename(entry, oldFileName) {
+		if entry.nameMatches(oldFileName) {
 			entry.filenameLong = newLFN
 			entry.filenameShort = newShort
 			entry.fileExtension = newExt

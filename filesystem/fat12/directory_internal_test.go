@@ -1,6 +1,6 @@
 package fat12
 
-// directory_internal_test.go exercises uniqueShortName, matchesFilename,
+// directory_internal_test.go exercises uniqueShortName, nameMatches,
 // createEntry (collision avoidance), removeEntry, and renameEntry.
 
 import (
@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// ── matchesFilename ───────────────────────────────────────────────────────────
+// ── nameMatches ──────────────────────────────────────────────────────────────
 
 func TestMatchesFilename(t *testing.T) {
 	e := &directoryEntry{
@@ -31,8 +31,8 @@ func TestMatchesFilename(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		if got := matchesFilename(e, tt.name); got != tt.want {
-			t.Errorf("matchesFilename(e, %q) = %v, want %v", tt.name, got, tt.want)
+		if got := e.nameMatches(tt.name); got != tt.want {
+			t.Errorf("e.nameMatches(%q) = %v, want %v", tt.name, got, tt.want)
 		}
 	}
 }
@@ -55,7 +55,7 @@ func TestMatchesFilenameNoLFN(t *testing.T) {
 		{"OTHER.TXT", false},
 	}
 	for _, tt := range tests {
-		if got := matchesFilename(e, tt.name); got != tt.want {
+		if got := e.nameMatches(tt.name); got != tt.want {
 			t.Errorf("matchesFilename(noLFN, %q) = %v, want %v", tt.name, got, tt.want)
 		}
 	}
@@ -211,7 +211,7 @@ func TestRemoveEntryByLongName(t *testing.T) {
 	if len(d.entries) != 1 {
 		t.Errorf("expected 1 entry after remove, got %d", len(d.entries))
 	}
-	if !matchesFilename(d.entries[0], "LongFileNameB.txt") {
+	if !d.entries[0].nameMatches("LongFileNameB.txt") {
 		t.Errorf("wrong entry remains: %q", d.entries[0].filenameLong)
 	}
 }
@@ -259,7 +259,7 @@ func TestRenameEntryByLongName(t *testing.T) {
 	if len(d.entries) != 1 {
 		t.Fatalf("expected 1 entry, got %d", len(d.entries))
 	}
-	if !matchesFilename(d.entries[0], "newname.txt") {
+	if !d.entries[0].nameMatches("newname.txt") {
 		t.Errorf("entry not renamed: %+v", d.entries[0])
 	}
 }
@@ -277,7 +277,7 @@ func TestRenameEntryByShortName(t *testing.T) {
 	if len(d.entries) != 1 {
 		t.Fatalf("expected 1 entry, got %d", len(d.entries))
 	}
-	if !matchesFilename(d.entries[0], "renamed.txt") {
+	if !d.entries[0].nameMatches("renamed.txt") {
 		t.Errorf("entry not renamed by short name: %+v", d.entries[0])
 	}
 }
@@ -300,7 +300,7 @@ func TestRenameEntryNewNameCollision(t *testing.T) {
 
 	var renamedEntry *directoryEntry
 	for _, e := range d.entries {
-		if matchesFilename(e, "LongFileNameX.txt") {
+		if e.nameMatches("LongFileNameX.txt") {
 			renamedEntry = e
 		}
 	}
@@ -355,7 +355,7 @@ func TestRenameEntryOverwritesExistingDestination(t *testing.T) {
 	if len(d.entries) != 1 {
 		t.Errorf("expected 1 entry after overwrite rename, got %d", len(d.entries))
 	}
-	if !matchesFilename(d.entries[0], "fileB.txt") {
+	if !d.entries[0].nameMatches("fileB.txt") {
 		t.Errorf("wrong entry after overwrite: %q", d.entries[0].filenameLong)
 	}
 	// The surviving entry should point to cluster 2 (fileA's cluster),
