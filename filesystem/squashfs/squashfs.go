@@ -320,11 +320,16 @@ func (fs *FileSystem) Symlink(oldpath, newpath string) error {
 
 // Chmod changes the mode of the named file to mode. If the file is a symbolic link,
 // it changes the mode of the link's target.
-//
-//nolint:revive // parameters will be used eventually
 func (fs *FileSystem) Chmod(name string, mode os.FileMode) error {
-	// https://dr-emann.github.io/squashfs/squashfs.html#_common_inode_header
-	return filesystem.ErrNotImplemented
+	if err := validatePath(name); err != nil {
+		return err
+	}
+
+	if fs.workspace == "" {
+		return filesystem.ErrReadonlyFilesystem
+	}
+
+	return os.Chmod(path.Join(fs.workspace, name), mode)
 }
 
 // Chown changes the numeric uid and gid of the named file. If the file is a symbolic link,
