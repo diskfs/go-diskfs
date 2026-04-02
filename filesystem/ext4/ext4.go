@@ -726,13 +726,6 @@ func Create(b backend.Storage, size, start, sectorsize int64, p *Params) (*FileS
 		return nil, fmt.Errorf("unable to initialize group descriptor tables: %w", err)
 	}
 
-	// Sync the underlying file to ensure all writes are persisted
-	if osFile, err := fsBackend.Sys(); err == nil && osFile != nil {
-		if err := osFile.Sync(); err != nil {
-			return nil, fmt.Errorf("error syncing file: %v", err)
-		}
-	}
-
 	// write the superblock and GDT to the various locations on disk
 	if err := fs.writeSuperblock(); err != nil {
 		return nil, fmt.Errorf("error writing Superblock: %v", err)
