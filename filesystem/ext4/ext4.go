@@ -690,7 +690,13 @@ func Create(b backend.Storage, size, start, sectorsize int64, p *Params) (*FileS
 		logGroupsPerFlex:             uint64(1 << logGroupsPerFlex),
 	}
 
-	gdt := buildGroupDescriptorsFromSuperblock(&sb)
+	// When checksums are enabled (metadata_csum or gdt_csum), non-zero
+	// block groups can be marked uninitialised. The kernel lazily
+	// initialises inode tables and bitmaps on first use, verified by the
+	// group descriptor checksums. This avoids writing hundreds of MB of
+	// zeros for inode tables during Create.
+	lazyInit := sb.gdtChecksumType() != gdtChecksumNone
+	gdt := buildGroupDescriptorsFromSuperblock(&sb, lazyInit)
 	// Make SubStorage Backend
 	fsBackend := backend.Sub(b, start, size)
 	fs := &FileSystem{
@@ -768,7 +774,12 @@ func Create(b backend.Storage, size, start, sectorsize int64, p *Params) (*FileS
 	if err := fs.writeSuperblock(); err != nil {
 		return nil, fmt.Errorf("error writing Superblock: %v", err)
 	}
-	// there is nothing in there
+	// Re-write GDT so that any group descriptor flags changed during
+	// journal/inode allocation (e.g. lazy bitmap initialisation) are
+	// persisted to disk.
+	if err := fs.writeGDT(); err != nil {
+		return nil, fmt.Errorf("error writing final GDT: %v", err)
+	}
 	return fs, nil
 }
 
@@ -2482,7 +2493,24 @@ func (fs *FileSystem) readBlockBitmap(group int) (*bitmap.Bitmap, error) {
 	if group >= len(fs.groupDescriptors.descriptors) {
 		return nil, fmt.Errorf("block group %d does not exist", group)
 	}
-	gd := fs.groupDescriptors.descriptors[group]
+	gd := &fs.groupDescriptors.descriptors[group]
+
+	// Lazily initialise uninitialised block bitmaps on first read.
+	// Build the correct bitmap (with metadata blocks marked used),
+	// write it to disk, and clear the uninit flag.
+	if gd.flags.blockBitmapUninitialized {
+		groupCount := fs.superblock.blockGroupCount()
+		bm, err := fs.buildBlockBitmapForGroup(group, gd, groupCount)
+		if err != nil {
+			return nil, fmt.Errorf("could not build block bitmap for uninit group %d: %w", group, err)
+		}
+		if err := fs.writeBlockBitmap(bm, group); err != nil {
+			return nil, fmt.Errorf("could not write block bitmap for uninit group %d: %w", group, err)
+		}
+		gd.flags.blockBitmapUninitialized = false
+		return bm, nil
+	}
+
 	bitmapLocation := gd.blockBitmapLocation
 	b := make([]byte, fs.superblock.blockSize)
 	offset := int64(bitmapLocation * uint64(fs.superblock.blockSize))
@@ -3008,54 +3036,67 @@ func (fs *FileSystem) initGroupDescriptorTables() error {
 	if err != nil {
 		return err
 	}
-	// Initialize and write bitmaps and inode tables for each block group
+	// Initialize and write bitmaps and inode tables for each block group.
+	// Groups marked as fully uninitialised are skipped — the kernel
+	// initialises them lazily on first use.
 	groupCount := fs.superblock.blockGroupCount()
 	for i := range fs.groupDescriptors.descriptors {
 		gd := &fs.groupDescriptors.descriptors[i]
-		blockBitmap, err := fs.buildBlockBitmapForGroup(i, gd, groupCount)
-		if err != nil {
-			return err
-		}
-		inodeBitmap, err := fs.buildInodeBitmapForGroup(i)
-		if err != nil {
-			return err
+
+		if gd.flags.blockBitmapUninitialized && gd.flags.inodesUninitialized {
+			continue
 		}
 
 		// Write block bitmap
-		blockBitmapBytes := blockBitmap.ToBytes()
-		blockBitmapOffset := int64(gd.blockBitmapLocation * uint64(fs.superblock.blockSize))
-		count, err := writable.WriteAt(blockBitmapBytes, blockBitmapOffset)
-		if err != nil {
-			return fmt.Errorf("error writing block bitmap for group %d: %v", i, err)
+		if !gd.flags.blockBitmapUninitialized {
+			blockBitmap, err := fs.buildBlockBitmapForGroup(i, gd, groupCount)
+			if err != nil {
+				return err
+			}
+			blockBitmapBytes := blockBitmap.ToBytes()
+			blockBitmapOffset := int64(gd.blockBitmapLocation * uint64(fs.superblock.blockSize))
+			count, err := writable.WriteAt(blockBitmapBytes, blockBitmapOffset)
+			if err != nil {
+				return fmt.Errorf("error writing block bitmap for group %d: %v", i, err)
+			}
+			if count != len(blockBitmapBytes) {
+				return fmt.Errorf("wrote %d bytes of block bitmap for group %d instead of expected %d", count, i, len(blockBitmapBytes))
+			}
+			gd.blockBitmapChecksum = bitmapChecksum(blockBitmapBytes, fs.superblock.checksumSeed)
 		}
-		if count != len(blockBitmapBytes) {
-			return fmt.Errorf("wrote %d bytes of block bitmap for group %d instead of expected %d", count, i, len(blockBitmapBytes))
-		}
-		gd.blockBitmapChecksum = bitmapChecksum(blockBitmapBytes, fs.superblock.checksumSeed)
 
 		// Write inode bitmap
-		inodeBitmapBytes := inodeBitmap.ToBytes()
-		inodeBitmapOffset := int64(gd.inodeBitmapLocation * uint64(fs.superblock.blockSize))
-		count, err = writable.WriteAt(inodeBitmapBytes, inodeBitmapOffset)
-		if err != nil {
-			return fmt.Errorf("error writing inode bitmap for group %d: %v", i, err)
+		if !gd.flags.inodesUninitialized {
+			inodeBitmap, err := fs.buildInodeBitmapForGroup(i)
+			if err != nil {
+				return err
+			}
+			inodeBitmapBytes := inodeBitmap.ToBytes()
+			inodeBitmapOffset := int64(gd.inodeBitmapLocation * uint64(fs.superblock.blockSize))
+			count, err := writable.WriteAt(inodeBitmapBytes, inodeBitmapOffset)
+			if err != nil {
+				return fmt.Errorf("error writing inode bitmap for group %d: %v", i, err)
+			}
+			if count != len(inodeBitmapBytes) {
+				return fmt.Errorf("wrote %d bytes of inode bitmap for group %d instead of expected %d", count, i, len(inodeBitmapBytes))
+			}
+			gd.inodeBitmapChecksum = bitmapChecksum(inodeBitmapBytes[:fs.superblock.inodesPerGroup/8], fs.superblock.checksumSeed)
 		}
-		if count != len(inodeBitmapBytes) {
-			return fmt.Errorf("wrote %d bytes of inode bitmap for group %d instead of expected %d", count, i, len(inodeBitmapBytes))
-		}
-		gd.inodeBitmapChecksum = bitmapChecksum(inodeBitmapBytes[:fs.superblock.inodesPerGroup/8], fs.superblock.checksumSeed)
 
-		// Initialize inode table - zero it out
-		inodeTableBlocks := groupDescriptorInodeTableBlocks(i, fs.superblock)
-		inodeTableSize := int(inodeTableBlocks * uint64(fs.superblock.blockSize))
-		inodeTableBytes := make([]byte, inodeTableSize)
-		inodeTableOffset := int64(gd.inodeTableLocation * uint64(fs.superblock.blockSize))
-		count, err = writable.WriteAt(inodeTableBytes, inodeTableOffset)
-		if err != nil {
-			return fmt.Errorf("error writing inode table for group %d: %v", i, err)
-		}
-		if count != inodeTableSize {
-			return fmt.Errorf("wrote %d bytes of inode table for group %d instead of expected %d", count, i, inodeTableSize)
+		// Write inode table — skip when the group has uninitialised
+		// inodes; the kernel zeroes the table on first use.
+		if !gd.flags.inodesUninitialized {
+			inodeTableBlocks := groupDescriptorInodeTableBlocks(i, fs.superblock)
+			inodeTableSize := int(inodeTableBlocks * uint64(fs.superblock.blockSize))
+			inodeTableBytes := make([]byte, inodeTableSize)
+			inodeTableOffset := int64(gd.inodeTableLocation * uint64(fs.superblock.blockSize))
+			count, err := writable.WriteAt(inodeTableBytes, inodeTableOffset)
+			if err != nil {
+				return fmt.Errorf("error writing inode table for group %d: %v", i, err)
+			}
+			if count != inodeTableSize {
+				return fmt.Errorf("wrote %d bytes of inode table for group %d instead of expected %d", count, i, inodeTableSize)
+			}
 		}
 	}
 	return nil
@@ -3232,7 +3273,7 @@ func blockGroupForBlock(blockNumber int, blocksPerGroup uint32) int {
 }
 
 // given the superblock, build the group descriptors
-func buildGroupDescriptorsFromSuperblock(sb *superblock) groupDescriptors {
+func buildGroupDescriptorsFromSuperblock(sb *superblock, lazyInit bool) groupDescriptors {
 	blocksPerGroup := uint64(sb.blocksPerGroup)
 	inodesPerGroup := sb.inodesPerGroup
 	inodeTableBlocks := (uint64(inodesPerGroup)*uint64(sb.inodeSize) + uint64(sb.blockSize) - 1) / uint64(sb.blockSize)
@@ -3346,8 +3387,26 @@ func buildGroupDescriptorsFromSuperblock(sb *superblock) groupDescriptors {
 		d.freeBlocks = uint32(blocksInGroup - overhead)
 		d.freeInodes = inodesPerGroup
 		d.usedDirectories = 0
-		d.flags = blockGroupFlags{}
-		d.unusedInodes = 0
+		// With lazy init (requires checksums), skip writing inode tables
+		// and bitmaps that the kernel will initialise on demand.
+		//
+		// INODE_UNINIT: safe for all groups except group 0 (which holds
+		// the root directory and reserved inodes).
+		//
+		// BLOCK_BITMAP_UNINIT: safe only when the group has no metadata
+		// overhead and is not the last (possibly partial) group.
+		if lazyInit && g > 0 {
+			d.flags.inodesUninitialized = true
+			d.unusedInodes = inodesPerGroup
+			if g < groups-1 && overhead == 0 {
+				d.flags.blockBitmapUninitialized = true
+			} else {
+				d.flags.inodeTableZeroed = true
+			}
+		} else {
+			d.flags = blockGroupFlags{inodeTableZeroed: true}
+			d.unusedInodes = 0
+		}
 		d.blockBitmapChecksum = 0
 		d.inodeBitmapChecksum = 0
 		d.snapshotExclusionBitmapLocation = 0
