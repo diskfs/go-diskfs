@@ -428,6 +428,43 @@ func TestCreateLargeFilesystem(t *testing.T) {
 	}
 }
 
+// TestCreateLargeFilesystemJournal verifies that creating a filesystem larger
+// than 4 GB produces a valid journal. This is a regression test: the journal
+// superblock maxLen was not recomputed after capping journalSize to 128 MB,
+// causing e2fsck to report "journal too short" on large filesystems.
+func TestCreateLargeFilesystemJournal(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping large filesystem test in short mode")
+	}
+	if _, err := exec.LookPath("e2fsck"); err != nil {
+		t.Skip("e2fsck not available")
+	}
+
+	// 5 GB is the smallest size that triggers the bug: blockCount/32
+	// exceeds journalMaxSize (128 MB) worth of blocks.
+	size := int64(5) * 1024 * MB
+	outfile, f := testCreateEmptyFile(t, size)
+	defer f.Close()
+	fs, err := Create(file.New(f, false), size, 0, 512, &Params{
+		SectorsPerBlock: 8, // 4096-byte blocks
+	})
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+	fs.Close()
+	if err := f.Sync(); err != nil {
+		t.Fatalf("Error syncing: %v", err)
+	}
+	cmd := exec.Command("e2fsck", "-f", "-n", outfile)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("e2fsck failed: %v\nstdout:\n%s\nstderr:\n%s",
+			err, stdout.String(), stderr.String())
+	}
+}
+
 // TestCreateWithCustomReservedBlocks tests Create with a custom reserved blocks percent.
 func TestCreateWithCustomReservedBlocks(t *testing.T) {
 	_, f := testCreateEmptyFile(t, 100*MB)
