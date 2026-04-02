@@ -2710,6 +2710,9 @@ func (fs *FileSystem) initJournal() error {
 	if journalSize < uint64(journalMinSize) {
 		journalSize = uint64(journalMinSize)
 	}
+	// Recompute journalBlocks after capping the size, so the journal
+	// superblock maxLen matches the number of blocks actually allocated.
+	journalBlocks = journalSize / uint64(fs.superblock.blockSize)
 
 	// Allocate the blocks for the journal
 	journalExtents, err := fs.allocateExtents(journalSize, nil)
