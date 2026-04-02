@@ -2842,9 +2842,9 @@ func (fs *FileSystem) initJournal() error {
 	return nil
 }
 
-func setBitmapOrErr(bm *bitmap.Bitmap, location int, context string) error {
+func setBitmapOrErr(bm *bitmap.Bitmap, location int, format string, args ...any) error {
 	if err := bm.Set(location); err != nil {
-		return fmt.Errorf("%s: %w", context, err)
+		return fmt.Errorf(format+": %w", append(args, err)...)
 	}
 	return nil
 }
@@ -2884,7 +2884,7 @@ func (fs *FileSystem) buildBlockBitmapForGroup(i int, gd *groupDescriptor, group
 
 func (fs *FileSystem) markBlockBitmapPadding(blockBitmap *bitmap.Bitmap, groupIndex int, blocksInGroup uint64, blockBitmapSize int) error {
 	for j := int(blocksInGroup); j < blockBitmapSize; j++ {
-		if err := setBitmapOrErr(blockBitmap, j, fmt.Sprintf("group %d block bitmap padding", groupIndex)); err != nil {
+		if err := setBitmapOrErr(blockBitmap, j, "group %d block bitmap padding", groupIndex); err != nil {
 			return err
 		}
 	}
@@ -2911,7 +2911,7 @@ func (fs *FileSystem) markSuperBackupMetadata(blockBitmap *bitmap.Bitmap, groupI
 	}
 	// Mark superblock and GDT blocks as used
 	for j := uint64(0); j < metaBlocks; j++ {
-		if err := setBitmapOrErr(blockBitmap, int(j), fmt.Sprintf("group %d metadata", groupIndex)); err != nil {
+		if err := setBitmapOrErr(blockBitmap, int(j), "group %d metadata", groupIndex); err != nil {
 			return err
 		}
 	}
@@ -2933,7 +2933,7 @@ func (fs *FileSystem) markFlexMetadataBlocks(blockBitmap *bitmap.Bitmap, groupIn
 		if otherGd.blockBitmapLocation >= firstBlockOfGroup &&
 			otherGd.blockBitmapLocation < firstBlockOfGroup+uint64(fs.superblock.blocksPerGroup) {
 			blockOffset := otherGd.blockBitmapLocation - firstBlockOfGroup
-			if err := setBitmapOrErr(blockBitmap, int(blockOffset), fmt.Sprintf("group %d block bitmap", groupIndex)); err != nil {
+			if err := setBitmapOrErr(blockBitmap, int(blockOffset), "group %d block bitmap", groupIndex); err != nil {
 				return err
 			}
 		}
@@ -2942,7 +2942,7 @@ func (fs *FileSystem) markFlexMetadataBlocks(blockBitmap *bitmap.Bitmap, groupIn
 		if otherGd.inodeBitmapLocation >= firstBlockOfGroup &&
 			otherGd.inodeBitmapLocation < firstBlockOfGroup+uint64(fs.superblock.blocksPerGroup) {
 			blockOffset := otherGd.inodeBitmapLocation - firstBlockOfGroup
-			if err := setBitmapOrErr(blockBitmap, int(blockOffset), fmt.Sprintf("group %d inode bitmap", groupIndex)); err != nil {
+			if err := setBitmapOrErr(blockBitmap, int(blockOffset), "group %d inode bitmap", groupIndex); err != nil {
 				return err
 			}
 		}
@@ -2956,7 +2956,7 @@ func (fs *FileSystem) markFlexMetadataBlocks(blockBitmap *bitmap.Bitmap, groupIn
 		for block := inodeTableStart; block < inodeTableEnd; block++ {
 			if block >= firstBlockOfGroup && block < firstBlockOfGroup+uint64(fs.superblock.blocksPerGroup) {
 				blockOffset := block - firstBlockOfGroup
-				if err := setBitmapOrErr(blockBitmap, int(blockOffset), fmt.Sprintf("group %d inode table", groupIndex)); err != nil {
+				if err := setBitmapOrErr(blockBitmap, int(blockOffset), "group %d inode table", groupIndex); err != nil {
 					return err
 				}
 			}
@@ -2975,14 +2975,14 @@ func (fs *FileSystem) markNonFlexMetadataBlocks(blockBitmap *bitmap.Bitmap, grou
 
 	// Mark block bitmap block
 	if blockBitmapBlock < uint64(fs.superblock.blocksPerGroup) {
-		if err := setBitmapOrErr(blockBitmap, int(blockBitmapBlock), fmt.Sprintf("group %d block bitmap", groupIndex)); err != nil {
+		if err := setBitmapOrErr(blockBitmap, int(blockBitmapBlock), "group %d block bitmap", groupIndex); err != nil {
 			return err
 		}
 	}
 
 	// Mark inode bitmap block
 	if inodeBitmapBlock < uint64(fs.superblock.blocksPerGroup) {
-		if err := setBitmapOrErr(blockBitmap, int(inodeBitmapBlock), fmt.Sprintf("group %d inode bitmap", groupIndex)); err != nil {
+		if err := setBitmapOrErr(blockBitmap, int(inodeBitmapBlock), "group %d inode bitmap", groupIndex); err != nil {
 			return err
 		}
 	}
@@ -2991,7 +2991,7 @@ func (fs *FileSystem) markNonFlexMetadataBlocks(blockBitmap *bitmap.Bitmap, grou
 	inodeTableBlocks := groupDescriptorInodeTableBlocks(groupIndex, fs.superblock)
 	for j := uint64(0); j < inodeTableBlocks; j++ {
 		if inodeTableBlock+j < uint64(fs.superblock.blocksPerGroup) {
-			if err := setBitmapOrErr(blockBitmap, int(inodeTableBlock+j), fmt.Sprintf("group %d inode table", groupIndex)); err != nil {
+			if err := setBitmapOrErr(blockBitmap, int(inodeTableBlock+j), "group %d inode table", groupIndex); err != nil {
 				return err
 			}
 		}
@@ -3010,7 +3010,7 @@ func (fs *FileSystem) buildInodeBitmapForGroup(i int) (*bitmap.Bitmap, error) {
 	inodeBitmap := bitmap.NewBits(inodeBitmapSize)
 	// set 1 padding on anything past inodesPerGroup
 	for j := int(fs.superblock.inodesPerGroup); j < inodeBitmapSize; j++ {
-		if err := setBitmapOrErr(inodeBitmap, j, fmt.Sprintf("group %d inode bitmap padding", i)); err != nil {
+		if err := setBitmapOrErr(inodeBitmap, j, "group %d inode bitmap padding", i); err != nil {
 			return nil, err
 		}
 	}
@@ -3021,7 +3021,7 @@ func (fs *FileSystem) buildInodeBitmapForGroup(i int) (*bitmap.Bitmap, error) {
 		// Note: lostFoundInode (11) is NOT reserved, it's created as a directory
 		for j := 1; j < int(firstNonReservedInode); j++ {
 			if j < int(fs.superblock.inodesPerGroup) {
-				if err := setBitmapOrErr(inodeBitmap, j-1, fmt.Sprintf("group %d reserved inode %d", i, j)); err != nil {
+				if err := setBitmapOrErr(inodeBitmap, j-1, "group %d reserved inode %d", i, j); err != nil {
 					return nil, err
 				}
 			}
