@@ -2792,24 +2792,10 @@ func (fs *FileSystem) initJournal() error {
 			return fmt.Errorf("wrote %d bytes of journal superblock instead of expected %d", n, len(journalSuperblockBytes))
 		}
 
-		// Zero out the rest of the journal blocks to ensure they're empty
-		// Start from the block after the superblock
-		remainingOffset := journalOffset + int64(JournalSuperblockSize)
-		remainingSize := int64(journalSize) - int64(JournalSuperblockSize)
-
-		if remainingSize > 0 {
-			// Write in chunks to avoid allocating too much memory at once
-			chunkSize := 1024 * 1024 // 1MB chunks
-			zeros := make([]byte, min(chunkSize, int(remainingSize)))
-			for written := int64(0); written < remainingSize; {
-				toWrite := min(len(zeros), int(remainingSize-written))
-				n, err := writable.WriteAt(zeros[:toWrite], remainingOffset+written)
-				if err != nil {
-					return fmt.Errorf("could not zero journal blocks: %w", err)
-				}
-				written += int64(n)
-			}
-		}
+		// The remaining journal blocks must be zero. For freshly-created
+		// or truncated files (the common case for Create), the backing
+		// storage is already zero, so we skip the explicit zero-fill.
+		// This avoids writing up to 128 MB of zeros via pwrite.
 	}
 
 	// Store journal backup in superblock
