@@ -127,10 +127,7 @@ func (e *ElToritoEntry) headerBytes(last bool, entries uint16) []byte {
 func (e *ElToritoEntry) entryBytes() []byte {
 	blocks := e.LoadSize
 	if blocks == 0 {
-		blocks = uint16(e.size / 512)
-		if e.size%512 > 1 {
-			blocks++
-		}
+		blocks = uint16((e.size + 511) / 512)
 	}
 	b := make([]byte, 0x20)
 	b[0] = 0x88
