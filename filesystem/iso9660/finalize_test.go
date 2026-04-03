@@ -581,9 +581,7 @@ func TestFinalizeRockRidge(t *testing.T) {
 
 // createRockRidgeISO is a helper that creates a workspace, populates it via setupFn,
 // finalizes with Rock Ridge, reads it back, and returns the entries from ReadDir(".").
-//
-//nolint:gocritic // named results not needed here; the function is clear from context
-func createRockRidgeISO(t *testing.T, setupFn func(t *testing.T, dir string), opts iso9660.FinalizeOptions) (*iso9660.FileSystem, []os.DirEntry) {
+func createRockRidgeISO(t *testing.T, setupFn func(t *testing.T, dir string), opts iso9660.FinalizeOptions) (retFS *iso9660.FileSystem, retEntries []os.DirEntry) {
 	t.Helper()
 	blocksize := int64(2048)
 
@@ -603,238 +601,240 @@ func createRockRidgeISO(t *testing.T, setupFn func(t *testing.T, dir string), op
 
 	opts.RockRidge = true
 	bk := file.New(f, false)
-	fs, err := iso9660.Create(bk, 0, 0, blocksize, dir)
+	retFS, err = iso9660.Create(bk, 0, 0, blocksize, dir)
 	if err != nil {
 		t.Fatalf("Failed to iso9660.Create: %v", err)
 	}
-	if err := fs.Finalize(opts); err != nil {
+	if err = retFS.Finalize(opts); err != nil {
 		t.Fatalf("unexpected error fs.Finalize: %v", err)
 	}
 
-	fs, err = iso9660.Read(bk, 0, 0, blocksize)
+	retFS, err = iso9660.Read(bk, 0, 0, blocksize)
 	if err != nil {
 		t.Fatalf("error reading iso: %v", err)
 	}
-	entries, err := fs.ReadDir(".")
+	retEntries, err = retFS.ReadDir(".")
 	if err != nil {
 		t.Fatalf("error reading root dir: %v", err)
 	}
-	return fs, entries
+	return retFS, retEntries
 }
 
-//nolint:gocyclo // we really do not care about the cyclomatic complexity of a test function. Maybe someday we will improve it.
 func TestFinalizeRockRidgeRoundTrips(t *testing.T) {
-	t.Run("permissions", func(t *testing.T) {
-		if runtime.GOOS == "windows" {
-			t.Skip("skipping permission test on Windows")
-		}
-		permTests := []struct {
-			name string
-			mode os.FileMode
-		}{
-			{"file644", 0o644},
-			{"file755", 0o755},
-			{"file600", 0o600},
-		}
+	t.Run("permissions", testRockRidgePermissions)
+	t.Run("symlinks", testRockRidgeSymlinks)
+	t.Run("long filenames", testRockRidgeLongFilenames)
+	t.Run("deep directories", testRockRidgeDeepDirectories)
+	t.Run("with El Torito", testRockRidgeWithElTorito)
+}
 
-		_, entries := createRockRidgeISO(t, func(t *testing.T, dir string) {
-			t.Helper()
-			for _, pt := range permTests {
-				fp := filepath.Join(dir, pt.name)
-				if err := os.WriteFile(fp, []byte("data"), 0o600); err != nil {
-					t.Fatalf("Failed to write %s: %v", pt.name, err)
-				}
-				if err := os.Chmod(fp, pt.mode); err != nil {
-					t.Fatalf("Failed to chmod %s: %v", pt.name, err)
-				}
-			}
-		}, iso9660.FinalizeOptions{})
+func testRockRidgePermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping permission test on Windows")
+	}
+	permTests := []struct {
+		name string
+		mode os.FileMode
+	}{
+		{"file644", 0o644},
+		{"file755", 0o755},
+		{"file600", 0o600},
+	}
 
-		found := map[string]os.FileMode{}
-		for _, e := range entries {
-			info, err := e.Info()
-			if err != nil {
-				t.Fatalf("error getting info for %s: %v", e.Name(), err)
-			}
-			found[e.Name()] = info.Mode()
-		}
+	_, entries := createRockRidgeISO(t, func(t *testing.T, dir string) {
+		t.Helper()
 		for _, pt := range permTests {
-			mode, ok := found[pt.name]
-			if !ok {
-				t.Errorf("file %s not found in ISO", pt.name)
-				continue
+			fp := filepath.Join(dir, pt.name)
+			if err := os.WriteFile(fp, []byte("data"), 0o600); err != nil {
+				t.Fatalf("Failed to write %s: %v", pt.name, err)
 			}
-			if mode.Perm() != pt.mode.Perm() {
-				t.Errorf("file %s: got permissions %o, want %o", pt.name, mode.Perm(), pt.mode.Perm())
+			if err := os.Chmod(fp, pt.mode); err != nil {
+				t.Fatalf("Failed to chmod %s: %v", pt.name, err)
 			}
 		}
-	})
+	}, iso9660.FinalizeOptions{})
 
-	t.Run("symlinks", func(t *testing.T) {
-		if runtime.GOOS == "windows" {
-			t.Skip("skipping symlink test on Windows")
+	found := map[string]os.FileMode{}
+	for _, e := range entries {
+		info, err := e.Info()
+		if err != nil {
+			t.Fatalf("error getting info for %s: %v", e.Name(), err)
 		}
-		symlinkTests := []struct {
-			name   string
-			target string
-		}{
-			{"abslink", "/a/b/c"},
-			{"rellink", "../foo"},
+		found[e.Name()] = info.Mode()
+	}
+	for _, pt := range permTests {
+		mode, ok := found[pt.name]
+		if !ok {
+			t.Errorf("file %s not found in ISO", pt.name)
+			continue
 		}
+		if mode.Perm() != pt.mode.Perm() {
+			t.Errorf("file %s: got permissions %o, want %o", pt.name, mode.Perm(), pt.mode.Perm())
+		}
+	}
+}
 
-		_, entries := createRockRidgeISO(t, func(t *testing.T, dir string) {
-			t.Helper()
-			if err := os.WriteFile(filepath.Join(dir, "target"), []byte("hello"), 0o600); err != nil {
-				t.Fatalf("Failed to write target file: %v", err)
-			}
-			for _, st := range symlinkTests {
-				if err := os.Symlink(st.target, filepath.Join(dir, st.name)); err != nil {
-					t.Fatalf("Failed to create symlink %s: %v", st.name, err)
-				}
-			}
-		}, iso9660.FinalizeOptions{})
+func testRockRidgeSymlinks(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping symlink test on Windows")
+	}
+	symlinkTests := []struct {
+		name   string
+		target string
+	}{
+		{"abslink", "/a/b/c"},
+		{"rellink", "../foo"},
+	}
 
-		found := map[string]os.FileInfo{}
-		for _, e := range entries {
-			info, err := e.Info()
-			if err != nil {
-				t.Fatalf("error getting info for %s: %v", e.Name(), err)
-			}
-			found[e.Name()] = info
+	_, entries := createRockRidgeISO(t, func(t *testing.T, dir string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, "target"), []byte("hello"), 0o600); err != nil {
+			t.Fatalf("Failed to write target file: %v", err)
 		}
 		for _, st := range symlinkTests {
-			info, ok := found[st.name]
-			if !ok {
-				t.Errorf("symlink %s not found in ISO", st.name)
-				continue
-			}
-			if info.Mode()&os.ModeSymlink == 0 {
-				t.Errorf("symlink %s: mode %v does not have ModeSymlink", st.name, info.Mode())
-			}
-			rri, ok := info.Sys().(*iso9660.RockRidgeInfo)
-			if !ok || rri == nil {
-				t.Errorf("symlink %s: Sys() did not return *RockRidgeInfo", st.name)
-				continue
-			}
-			if rri.Symlink != st.target {
-				t.Errorf("symlink %s: got target %q, want %q", st.name, rri.Symlink, st.target)
+			if err := os.Symlink(st.target, filepath.Join(dir, st.name)); err != nil {
+				t.Fatalf("Failed to create symlink %s: %v", st.name, err)
 			}
 		}
-	})
+	}, iso9660.FinalizeOptions{})
 
-	t.Run("long filenames", func(t *testing.T) {
-		longNames := []string{
-			"this_is_a_very_long_filename_that_exceeds_31_chars.txt",
-			"another-really-long-name-for-testing-round-trip.dat",
+	found := map[string]os.FileInfo{}
+	for _, e := range entries {
+		info, err := e.Info()
+		if err != nil {
+			t.Fatalf("error getting info for %s: %v", e.Name(), err)
 		}
-
-		_, entries := createRockRidgeISO(t, func(t *testing.T, dir string) {
-			t.Helper()
-			for _, name := range longNames {
-				if err := os.WriteFile(filepath.Join(dir, name), []byte("content"), 0o600); err != nil {
-					t.Fatalf("Failed to write %s: %v", name, err)
-				}
-			}
-		}, iso9660.FinalizeOptions{})
-
-		foundNames := map[string]bool{}
-		for _, e := range entries {
-			foundNames[e.Name()] = true
+		found[e.Name()] = info
+	}
+	for _, st := range symlinkTests {
+		info, ok := found[st.name]
+		if !ok {
+			t.Errorf("symlink %s not found in ISO", st.name)
+			continue
 		}
+		if info.Mode()&os.ModeSymlink == 0 {
+			t.Errorf("symlink %s: mode %v does not have ModeSymlink", st.name, info.Mode())
+		}
+		rri, ok := info.Sys().(*iso9660.RockRidgeInfo)
+		if !ok || rri == nil {
+			t.Errorf("symlink %s: Sys() did not return *RockRidgeInfo", st.name)
+			continue
+		}
+		if rri.Symlink != st.target {
+			t.Errorf("symlink %s: got target %q, want %q", st.name, rri.Symlink, st.target)
+		}
+	}
+}
+
+func testRockRidgeLongFilenames(t *testing.T) {
+	longNames := []string{
+		"this_is_a_very_long_filename_that_exceeds_31_chars.txt",
+		"another-really-long-name-for-testing-round-trip.dat",
+	}
+
+	_, entries := createRockRidgeISO(t, func(t *testing.T, dir string) {
+		t.Helper()
 		for _, name := range longNames {
-			if !foundNames[name] {
-				t.Errorf("long filename %q not found in ISO", name)
+			if err := os.WriteFile(filepath.Join(dir, name), []byte("content"), 0o600); err != nil {
+				t.Fatalf("Failed to write %s: %v", name, err)
 			}
 		}
-	})
+	}, iso9660.FinalizeOptions{})
 
-	t.Run("deep directories", func(t *testing.T) {
-		deepContent := []byte("deep file content")
-		normalContent := []byte("normal file content")
-
-		fs, entries := createRockRidgeISO(t, func(t *testing.T, dir string) {
-			t.Helper()
-			deepDir := filepath.Join(dir, "a", "b", "c", "d", "e", "f", "g", "h")
-			if err := os.MkdirAll(deepDir, 0o755); err != nil {
-				t.Fatalf("Failed to create deep dir: %v", err)
-			}
-			if err := os.WriteFile(filepath.Join(deepDir, "deep.txt"), deepContent, 0o600); err != nil {
-				t.Fatalf("Failed to write deep file: %v", err)
-			}
-			if err := os.WriteFile(filepath.Join(dir, "a", "normal.txt"), normalContent, 0o600); err != nil {
-				t.Fatalf("Failed to write normal file: %v", err)
-			}
-		}, iso9660.FinalizeOptions{})
-
-		// normal file accessible
-		normalRead, err := fs.OpenFile("/a/normal.txt", os.O_RDONLY)
-		if err != nil {
-			t.Fatalf("error opening normal file: %v", err)
+	foundNames := map[string]bool{}
+	for _, e := range entries {
+		foundNames[e.Name()] = true
+	}
+	for _, name := range longNames {
+		if !foundNames[name] {
+			t.Errorf("long filename %q not found in ISO", name)
 		}
-		buf := make([]byte, 100)
-		n, _ := normalRead.Read(buf)
-		if !bytes.Equal(buf[:n], normalContent) {
-			t.Errorf("normal file content mismatch: got %q, want %q", string(buf[:n]), string(normalContent))
-		}
+	}
+}
 
-		// deep file accessible through relocated path
-		deepRead, err := fs.OpenFile("/a/b/c/d/e/f/g/h/deep.txt", os.O_RDONLY)
-		if err != nil {
-			t.Fatalf("error opening deep file: %v", err)
-		}
-		buf = make([]byte, 100)
-		n, _ = deepRead.Read(buf)
-		if !bytes.Equal(buf[:n], deepContent) {
-			t.Errorf("deep file content mismatch: got %q, want %q", string(buf[:n]), string(deepContent))
-		}
+func testRockRidgeDeepDirectories(t *testing.T) {
+	deepContent := []byte("deep file content")
+	normalContent := []byte("normal file content")
 
-		// RR_MOVED not visible
-		for _, e := range entries {
-			if e.Name() == "RR_MOVED" {
-				t.Error("RR_MOVED directory should not be visible in root listing")
-			}
+	fs, entries := createRockRidgeISO(t, func(t *testing.T, dir string) {
+		t.Helper()
+		deepDir := filepath.Join(dir, "a", "b", "c", "d", "e", "f", "g", "h")
+		if err := os.MkdirAll(deepDir, 0o755); err != nil {
+			t.Fatalf("Failed to create deep dir: %v", err)
 		}
-	})
+		if err := os.WriteFile(filepath.Join(deepDir, "deep.txt"), deepContent, 0o600); err != nil {
+			t.Fatalf("Failed to write deep file: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "a", "normal.txt"), normalContent, 0o600); err != nil {
+			t.Fatalf("Failed to write normal file: %v", err)
+		}
+	}, iso9660.FinalizeOptions{})
 
-	t.Run("with El Torito", func(t *testing.T) {
-		regContent := []byte("hello world")
+	normalRead, err := fs.OpenFile("/a/normal.txt", os.O_RDONLY)
+	if err != nil {
+		t.Fatalf("error opening normal file: %v", err)
+	}
+	buf := make([]byte, 100)
+	n, _ := normalRead.Read(buf)
+	if !bytes.Equal(buf[:n], normalContent) {
+		t.Errorf("normal file content mismatch: got %q, want %q", string(buf[:n]), string(normalContent))
+	}
 
-		fs, _ := createRockRidgeISO(t, func(t *testing.T, dir string) {
-			t.Helper()
-			bootData := make([]byte, 2048)
-			for i := range bootData {
-				bootData[i] = 0xEB
-			}
-			if err := os.WriteFile(filepath.Join(dir, "BOOT.IMG"), bootData, 0o600); err != nil {
-				t.Fatalf("Failed to write boot image: %v", err)
-			}
-			if err := os.WriteFile(filepath.Join(dir, "readme.txt"), regContent, 0o600); err != nil {
-				t.Fatalf("Failed to write regular file: %v", err)
-			}
-		}, iso9660.FinalizeOptions{
-			ElTorito: &iso9660.ElTorito{
-				BootCatalog: "/BOOT.CAT",
-				Platform:    iso9660.BIOS,
-				Entries: []*iso9660.ElToritoEntry{
-					{
-						Platform:  iso9660.BIOS,
-						Emulation: iso9660.NoEmulation,
-						BootFile:  "/BOOT.IMG",
-					},
+	deepRead, err := fs.OpenFile("/a/b/c/d/e/f/g/h/deep.txt", os.O_RDONLY)
+	if err != nil {
+		t.Fatalf("error opening deep file: %v", err)
+	}
+	buf = make([]byte, 100)
+	n, _ = deepRead.Read(buf)
+	if !bytes.Equal(buf[:n], deepContent) {
+		t.Errorf("deep file content mismatch: got %q, want %q", string(buf[:n]), string(deepContent))
+	}
+
+	for _, e := range entries {
+		if e.Name() == "RR_MOVED" {
+			t.Error("RR_MOVED directory should not be visible in root listing")
+		}
+	}
+}
+
+func testRockRidgeWithElTorito(t *testing.T) {
+	regContent := []byte("hello world")
+
+	fs, _ := createRockRidgeISO(t, func(t *testing.T, dir string) {
+		t.Helper()
+		bootData := make([]byte, 2048)
+		for i := range bootData {
+			bootData[i] = 0xEB
+		}
+		if err := os.WriteFile(filepath.Join(dir, "BOOT.IMG"), bootData, 0o600); err != nil {
+			t.Fatalf("Failed to write boot image: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "readme.txt"), regContent, 0o600); err != nil {
+			t.Fatalf("Failed to write regular file: %v", err)
+		}
+	}, iso9660.FinalizeOptions{
+		ElTorito: &iso9660.ElTorito{
+			BootCatalog: "/BOOT.CAT",
+			Platform:    iso9660.BIOS,
+			Entries: []*iso9660.ElToritoEntry{
+				{
+					Platform:  iso9660.BIOS,
+					Emulation: iso9660.NoEmulation,
+					BootFile:  "/BOOT.IMG",
 				},
 			},
-		})
-
-		readFile, err := fs.OpenFile("/readme.txt", os.O_RDONLY)
-		if err != nil {
-			t.Fatalf("error opening regular file: %v", err)
-		}
-		buf := make([]byte, 100)
-		n, _ := readFile.Read(buf)
-		if !bytes.Equal(buf[:n], regContent) {
-			t.Errorf("regular file content mismatch: got %q, want %q", string(buf[:n]), string(regContent))
-		}
+		},
 	})
+
+	readFile, err := fs.OpenFile("/readme.txt", os.O_RDONLY)
+	if err != nil {
+		t.Fatalf("error opening regular file: %v", err)
+	}
+	buf := make([]byte, 100)
+	n, _ := readFile.Read(buf)
+	if !bytes.Equal(buf[:n], regContent) {
+		t.Errorf("regular file content mismatch: got %q, want %q", string(buf[:n]), string(regContent))
+	}
 }
 
 //nolint:thelper // this is not a helper function
