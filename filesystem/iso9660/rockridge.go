@@ -421,10 +421,10 @@ func (r *rockRidgeExtension) parsePosixAttributes(b []byte) (directoryEntrySyste
 	return rockRidgePosixAttributes{
 		mode:      os.FileMode(m),
 		linkCount: binary.LittleEndian.Uint32(b[12:16]),
-		uid:          binary.LittleEndian.Uint32(b[20:24]),
-		gid:          binary.LittleEndian.Uint32(b[28:32]),
-		serial:       serial,
-		length:       targetSize,
+		uid:       binary.LittleEndian.Uint32(b[20:24]),
+		gid:       binary.LittleEndian.Uint32(b[28:32]),
+		serial:    serial,
+		length:    targetSize,
 	}, nil
 }
 
@@ -631,7 +631,7 @@ func (r *rockRidgeExtension) parseSymlink(b []byte) (directoryEntrySystemUseExte
 			if name != "" && name != "/" {
 				name += "/"
 			}
-			name += string(b2[2:2+size])
+			name += string(b2[2 : 2+size])
 		}
 
 		i += 2 + int(size)

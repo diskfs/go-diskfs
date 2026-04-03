@@ -354,7 +354,8 @@ func (fi *finalizeFileInfo) collapseAndSortChildren() (dirs, files []*finalizeFi
 	for _, e := range fi.children {
 		if e.IsDir() {
 			tmpDirs = append(tmpDirs, e)
-		} else {
+		} else if e.mode&os.ModeSymlink == 0 {
+			// symlinks have no data extent — skip them
 			tmpFiles = append(tmpFiles, e)
 		}
 	}
@@ -966,12 +967,14 @@ func walkTree(workspace string) ([]*finalizeFileInfo, map[string]*finalizeFileIn
 				dirList[parentDir] = parentDirInfo
 			}
 		} else {
-			// calculate blocks
-			entry.size = fi.Size()
 			entry.extension = extension
 			parentDirInfo.children = append(parentDirInfo.children, entry)
 			dirList[parentDir] = parentDirInfo
-			fileList = append(fileList, entry)
+			// symlinks have no data extent — target is in Rock Ridge SL entries
+			if fi.Mode()&os.ModeSymlink == 0 {
+				entry.size = fi.Size()
+				fileList = append(fileList, entry)
+			}
 		}
 
 		// Add to collision groups (for both files and directories)

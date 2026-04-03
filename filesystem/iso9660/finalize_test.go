@@ -671,7 +671,7 @@ func TestFinalizeRockRidgeSymlinkRoundTrip(t *testing.T) {
 	defer os.RemoveAll(dir)
 
 	// create a regular file so the workspace isn't empty
-	if err := os.WriteFile(filepath.Join(dir, "target"), []byte("hello"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "target"), []byte("hello"), 0o600); err != nil {
 		t.Fatalf("Failed to write target file: %v", err)
 	}
 
@@ -757,7 +757,7 @@ func TestFinalizeRockRidgeLongFilenameRoundTrip(t *testing.T) {
 		"another-really-long-name-for-testing-round-trip.dat",
 	}
 	for _, name := range longNames {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte("content"), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("content"), 0o600); err != nil {
 			t.Fatalf("Failed to write %s: %v", name, err)
 		}
 	}
@@ -818,12 +818,12 @@ func TestFinalizeRockRidgeDeepDirectoryRoundTrip(t *testing.T) {
 	}
 
 	deepContent := []byte("deep file content")
-	if err := os.WriteFile(filepath.Join(deepDir, "deep.txt"), deepContent, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(deepDir, "deep.txt"), deepContent, 0o600); err != nil {
 		t.Fatalf("Failed to write deep file: %v", err)
 	}
 
 	normalContent := []byte("normal file content")
-	if err := os.WriteFile(filepath.Join(dir, "a", "normal.txt"), normalContent, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "a", "normal.txt"), normalContent, 0o600); err != nil {
 		t.Fatalf("Failed to write normal file: %v", err)
 	}
 
@@ -857,7 +857,7 @@ func TestFinalizeRockRidgeDeepDirectoryRoundTrip(t *testing.T) {
 	}
 	buf := make([]byte, 100)
 	n, _ := normalRead.Read(buf)
-	if string(buf[:n]) != string(normalContent) {
+	if !bytes.Equal(buf[:n], normalContent) {
 		t.Errorf("normal file content mismatch: got %q, want %q", string(buf[:n]), string(normalContent))
 	}
 
@@ -868,7 +868,7 @@ func TestFinalizeRockRidgeDeepDirectoryRoundTrip(t *testing.T) {
 	}
 	buf = make([]byte, 100)
 	n, _ = deepRead.Read(buf)
-	if string(buf[:n]) != string(deepContent) {
+	if !bytes.Equal(buf[:n], deepContent) {
 		t.Errorf("deep file content mismatch: got %q, want %q", string(buf[:n]), string(deepContent))
 	}
 
@@ -901,13 +901,13 @@ func TestFinalizeRockRidgeWithElTorito(t *testing.T) {
 	for i := range bootData {
 		bootData[i] = 0xEB // fake boot code
 	}
-	if err := os.WriteFile(filepath.Join(dir, "BOOT.IMG"), bootData, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "BOOT.IMG"), bootData, 0o600); err != nil {
 		t.Fatalf("Failed to write boot image: %v", err)
 	}
 
 	// Create a regular file
 	regContent := []byte("hello world")
-	if err := os.WriteFile(filepath.Join(dir, "readme.txt"), regContent, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "readme.txt"), regContent, 0o600); err != nil {
 		t.Fatalf("Failed to write regular file: %v", err)
 	}
 
@@ -954,7 +954,7 @@ func TestFinalizeRockRidgeWithElTorito(t *testing.T) {
 	}
 	buf := make([]byte, 100)
 	n, _ := readFile.Read(buf)
-	if string(buf[:n]) != string(regContent) {
+	if !bytes.Equal(buf[:n], regContent) {
 		t.Errorf("regular file content mismatch: got %q, want %q", string(buf[:n]), string(regContent))
 	}
 
