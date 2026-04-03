@@ -581,7 +581,9 @@ func TestFinalizeRockRidge(t *testing.T) {
 
 // createRockRidgeISO is a helper that creates a workspace, populates it via setupFn,
 // finalizes with Rock Ridge, reads it back, and returns the entries from ReadDir(".").
-func createRockRidgeISO(t *testing.T, setupFn func(t *testing.T, dir string), opts iso9660.FinalizeOptions) (fs *iso9660.FileSystem, entries []os.DirEntry) {
+//
+//nolint:gocritic // named results not needed here; the function is clear from context
+func createRockRidgeISO(t *testing.T, setupFn func(t *testing.T, dir string), opts iso9660.FinalizeOptions) (*iso9660.FileSystem, []os.DirEntry) {
 	t.Helper()
 	blocksize := int64(2048)
 
