@@ -905,3 +905,167 @@ func validateElTorito(t *testing.T, f *os.File) {
 	}
 	// what sector should it be in?
 }
+
+func TestFinalizeJolietRoundTrip(t *testing.T) {
+	blocksize := int64(2048)
+	dir, err := os.MkdirTemp("", "iso_joliet_test")
+	if err != nil {
+		t.Fatalf("Failed to create tmpdir: %v", err)
+	}
+	defer os.RemoveAll(dir)
+
+	// Create files with names that exercise Joliet (long names, mixed case)
+	testFiles := []struct {
+		name    string
+		content string
+	}{
+		{"short.txt", "short content"},
+		{"A Long Filename With Spaces.txt", "long name content"},
+		{"MixedCase.Data", "mixed case"},
+		{"deeply_nested_file_name_exceeding_8dot3_limits.txt", "deep content"},
+	}
+	for _, tf := range testFiles {
+		if err := os.WriteFile(filepath.Join(dir, tf.name), []byte(tf.content), 0o644); err != nil {
+			t.Fatalf("Failed to write %s: %v", tf.name, err)
+		}
+	}
+
+	// Create a subdirectory
+	sub := filepath.Join(dir, "SubDirectory")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatalf("Failed to create subdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(sub, "nested.txt"), []byte("nested"), 0o644); err != nil {
+		t.Fatalf("Failed to write nested file: %v", err)
+	}
+
+	f, err := os.CreateTemp("", "iso_joliet_test")
+	if err != nil {
+		t.Fatalf("Failed to create tmpfile: %v", err)
+	}
+	defer os.Remove(f.Name())
+
+	b := file.New(f, false)
+	fs, err := iso9660.Create(b, 0, 0, blocksize, dir)
+	if err != nil {
+		t.Fatalf("Failed to iso9660.Create: %v", err)
+	}
+	err = fs.Finalize(iso9660.FinalizeOptions{Joliet: true})
+	if err != nil {
+		t.Fatalf("unexpected error fs.Finalize: %v", err)
+	}
+
+	// Read it back — without Rock Ridge, Joliet names should be used
+	fs, err = iso9660.Read(b, 0, 0, blocksize)
+	if err != nil {
+		t.Fatalf("error reading iso: %v", err)
+	}
+	entries, err := fs.ReadDir(".")
+	if err != nil {
+		t.Fatalf("error reading root dir: %v", err)
+	}
+
+	found := map[string]os.FileInfo{}
+	for _, e := range entries {
+		info, err := e.Info()
+		if err != nil {
+			t.Fatalf("error getting info for %s: %v", e.Name(), err)
+		}
+		found[e.Name()] = info
+	}
+
+	for _, tf := range testFiles {
+		if _, ok := found[tf.name]; !ok {
+			t.Errorf("file %q not found in Joliet ISO readback (found: %v)", tf.name, mapKeys(found))
+		}
+	}
+	if _, ok := found["SubDirectory"]; !ok {
+		t.Errorf("SubDirectory not found in Joliet ISO readback")
+	}
+
+	// Verify subdirectory contents
+	subEntries, err := fs.ReadDir("SubDirectory")
+	if err != nil {
+		t.Fatalf("error reading SubDirectory: %v", err)
+	}
+	foundNested := false
+	for _, e := range subEntries {
+		if e.Name() == "nested.txt" {
+			foundNested = true
+		}
+	}
+	if !foundNested {
+		t.Error("nested.txt not found in SubDirectory")
+	}
+
+	// Verify file content
+	fh, err := fs.OpenFile("short.txt", os.O_RDONLY)
+	if err != nil {
+		t.Fatalf("error opening short.txt: %v", err)
+	}
+	buf := make([]byte, 100)
+	n, _ := fh.Read(buf)
+	if string(buf[:n]) != "short content" {
+		t.Errorf("short.txt content mismatch: got %q", string(buf[:n]))
+	}
+	f.Close()
+}
+
+func TestFinalizeJolietWithRockRidge(t *testing.T) {
+	blocksize := int64(2048)
+	dir, err := os.MkdirTemp("", "iso_joliet_rr_test")
+	if err != nil {
+		t.Fatalf("Failed to create tmpdir: %v", err)
+	}
+	defer os.RemoveAll(dir)
+
+	if err := os.WriteFile(filepath.Join(dir, "hello.txt"), []byte("hello"), 0o644); err != nil {
+		t.Fatalf("Failed to write file: %v", err)
+	}
+
+	f, err := os.CreateTemp("", "iso_joliet_rr_test")
+	if err != nil {
+		t.Fatalf("Failed to create tmpfile: %v", err)
+	}
+	defer os.Remove(f.Name())
+
+	b := file.New(f, false)
+	fs, err := iso9660.Create(b, 0, 0, blocksize, dir)
+	if err != nil {
+		t.Fatalf("Failed to iso9660.Create: %v", err)
+	}
+	// Enable both Joliet and Rock Ridge
+	err = fs.Finalize(iso9660.FinalizeOptions{Joliet: true, RockRidge: true})
+	if err != nil {
+		t.Fatalf("unexpected error fs.Finalize: %v", err)
+	}
+
+	// Read back — Rock Ridge should take precedence
+	fs, err = iso9660.Read(b, 0, 0, blocksize)
+	if err != nil {
+		t.Fatalf("error reading iso: %v", err)
+	}
+	entries, err := fs.ReadDir(".")
+	if err != nil {
+		t.Fatalf("error reading root dir: %v", err)
+	}
+
+	foundHello := false
+	for _, e := range entries {
+		if e.Name() == "hello.txt" {
+			foundHello = true
+		}
+	}
+	if !foundHello {
+		t.Error("hello.txt not found in Joliet+RR ISO readback")
+	}
+	f.Close()
+}
+
+func mapKeys(m map[string]os.FileInfo) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
+}

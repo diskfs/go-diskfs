@@ -89,6 +89,63 @@ func (pt *pathTable) toMBytes() []byte {
 	return b
 }
 
+func (pt *pathTable) toJolietLBytes() []byte {
+	b := make([]byte, 0)
+	for _, e := range pt.records {
+		name := jolietPathTableName(e.dirname)
+		nameSize := len(name)
+		size := 8 + uint16(nameSize)
+		if nameSize%2 != 0 {
+			size++
+		}
+
+		b2 := make([]byte, size)
+		b2[0] = uint8(nameSize)
+		b2[1] = e.extAttrLength
+		binary.LittleEndian.PutUint32(b2[2:6], e.location)
+		binary.LittleEndian.PutUint16(b2[6:8], e.parentIndex)
+		copy(b2[8:8+nameSize], name)
+		if nameSize%2 != 0 {
+			b2[8+nameSize] = 0
+		}
+		b = append(b, b2...)
+	}
+	return b
+}
+
+func (pt *pathTable) toJolietMBytes() []byte {
+	b := make([]byte, 0)
+	for _, e := range pt.records {
+		name := jolietPathTableName(e.dirname)
+		nameSize := len(name)
+		size := 8 + uint16(nameSize)
+		if nameSize%2 != 0 {
+			size++
+		}
+
+		b2 := make([]byte, size)
+		b2[0] = uint8(nameSize)
+		b2[1] = e.extAttrLength
+		binary.BigEndian.PutUint32(b2[2:6], e.location)
+		binary.BigEndian.PutUint16(b2[6:8], e.parentIndex)
+		copy(b2[8:8+nameSize], name)
+		if nameSize%2 != 0 {
+			b2[8+nameSize] = 0
+		}
+		b = append(b, b2...)
+	}
+	return b
+}
+
+// jolietPathTableName returns the UCS-2 encoded name for a path table entry.
+// The root entry (single byte 0x01) stays as-is; all others are UCS-2 encoded.
+func jolietPathTableName(dirname string) []byte {
+	if len(dirname) == 1 && dirname[0] == 0x01 {
+		return []byte{0x01}
+	}
+	return ucs2StringToBytes(dirname)
+}
+
 // getLocation gets the location of the extent that contains this path
 // we can get the size because the first record always points to the current directory
 func (pt *pathTable) getLocation(p string) uint32 {
@@ -138,6 +195,45 @@ func parsePathTable(b []byte) *pathTable {
 		location := binary.LittleEndian.Uint32(b[i+2 : i+6])
 		parent := binary.LittleEndian.Uint16(b[i+6 : i+8])
 		name := string(b[i+8 : i+8+int(nameSize)])
+		entry := &pathTableEntry{
+			nameSize:      nameSize,
+			size:          size,
+			extAttrLength: extAttrSize,
+			location:      location,
+			parentIndex:   parent,
+			dirname:       name,
+		}
+		entries = append(entries, entry)
+		i += int(size)
+	}
+	return &pathTable{
+		records: entries,
+	}
+}
+
+// parseJolietPathTable loads Joliet path table bytes, decoding UCS-2 directory names.
+func parseJolietPathTable(b []byte) *pathTable {
+	totalSize := len(b)
+	entries := make([]*pathTableEntry, 0, 20)
+	for i := 0; i < totalSize; {
+		var nameSize = b[i]
+		if nameSize == 0 {
+			break
+		}
+		size := 8 + uint16(nameSize)
+		if nameSize%2 != 0 {
+			size++
+		}
+		var extAttrSize = b[i+1]
+		location := binary.LittleEndian.Uint32(b[i+2 : i+6])
+		parent := binary.LittleEndian.Uint16(b[i+6 : i+8])
+		nameBytes := b[i+8 : i+8+int(nameSize)]
+		var name string
+		if nameSize == 1 {
+			name = string(nameBytes) // root entry (0x01)
+		} else {
+			name = bytesToUCS2String(nameBytes)
+		}
 		entry := &pathTableEntry{
 			nameSize:      nameSize,
 			size:          size,

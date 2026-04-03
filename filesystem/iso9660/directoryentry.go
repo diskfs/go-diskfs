@@ -38,6 +38,7 @@ type directoryEntry struct {
 	hasMoreEntries           bool
 	isSelf                   bool
 	isParent                 bool
+	joliet                   bool
 	volumeSequence           uint16
 	filesystem               *FileSystem
 	filename                 string
@@ -53,7 +54,11 @@ func (de *directoryEntry) countNamelenBytes() int {
 	case de.isParent:
 		namelen = 1
 	default:
-		namelen = len(de.filename)
+		if de.joliet {
+			namelen = len(ucs2StringToBytes(de.filename))
+		} else {
+			namelen = len(de.filename)
+		}
 	}
 
 	return namelen
@@ -118,27 +123,31 @@ func (de *directoryEntry) toBytes(skipExt bool, ceBlocks []uint32) ([][]byte, er
 	case de.isParent:
 		filenameBytes = []byte{0x01}
 	default:
-		// first validate the filename
-		err = validateFilename(de.filename, de.isSubdirectory, de.filesystem.suspEnabled)
-		if err != nil {
-			nametype := "filename"
-			if de.isSubdirectory {
-				nametype = "directory"
+		if de.joliet {
+			filenameBytes = ucs2StringToBytes(de.filename)
+		} else {
+			// first validate the filename
+			err = validateFilename(de.filename, de.isSubdirectory, de.filesystem.suspEnabled)
+			if err != nil {
+				nametype := "filename"
+				if de.isSubdirectory {
+					nametype = "directory"
+				}
+				return nil, fmt.Errorf("invalid %s %s: %v", nametype, de.filename, err)
 			}
-			return nil, fmt.Errorf("invalid %s %s: %v", nametype, de.filename, err)
-		}
-		filenameBytes, err = stringToASCIIBytes(de.filename)
-		if err != nil {
-			return nil, fmt.Errorf("error converting filename to bytes: %v", err)
+			filenameBytes, err = stringToASCIIBytes(de.filename)
+			if err != nil {
+				return nil, fmt.Errorf("error converting filename to bytes: %v", err)
+			}
 		}
 	}
 
 	// copy it over
 	copy(b[33:], filenameBytes)
 
-	// output directory entry extensions - but only if we did not skip it
+	// output directory entry extensions - but only if we did not skip it (Joliet entries never have SUSP)
 	var extBytes [][]byte
-	if !skipExt {
+	if !skipExt && !de.joliet {
 		extBytes, err = dirEntryExtensionsToBytes(de.extensions, directoryEntryMaxSize-len(b), de.filesystem.blocksize, ceBlocks)
 		if err != nil {
 			return nil, fmt.Errorf("enable to convert directory entry SUSP extensions to bytes: %v", err)
@@ -200,6 +209,10 @@ func dirEntryExtensionsToBytes(extensions []directoryEntrySystemUseExtension, ma
 }
 
 func dirEntryFromBytes(b []byte, ext []suspExtension) (*directoryEntry, error) {
+	return dirEntryFromBytesWithJoliet(b, ext, false)
+}
+
+func dirEntryFromBytesWithJoliet(b []byte, ext []suspExtension, joliet bool) (*directoryEntry, error) {
 	// has to be at least 34 bytes
 	if len(b) < int(directoryEntryMinSize) {
 		return nil, fmt.Errorf("cannot read directoryEntry from %d bytes, fewer than minimum of %d bytes", len(b), directoryEntryMinSize)
@@ -244,12 +257,16 @@ func dirEntryFromBytes(b []byte, ext []suspExtension) (*directoryEntry, error) {
 		filename = ""
 		isParent = true
 	default:
-		filename = string(nameBytes)
+		if joliet {
+			filename = bytesToUCS2String(nameBytes)
+		} else {
+			filename = string(nameBytes)
+		}
 	}
 
-	// and now for extensions in the system use area
+	// and now for extensions in the system use area (Joliet entries never have SUSP)
 	suspFields := make([]directoryEntrySystemUseExtension, 0)
-	if len(b) > 33+int(nameLenWithPadding) {
+	if !joliet && len(b) > 33+int(nameLenWithPadding) {
 		var err error
 		suspFields, err = parseDirectoryEntryExtensions(b[33+nameLenWithPadding:], ext)
 		if err != nil {
@@ -270,6 +287,7 @@ func dirEntryFromBytes(b []byte, ext []suspExtension) (*directoryEntry, error) {
 		hasMoreEntries:           hasMoreEntries,
 		isSelf:                   isSelf,
 		isParent:                 isParent,
+		joliet:                   joliet,
 		volumeSequence:           volumeSequence,
 		filename:                 filename,
 		extensions:               suspFields,
@@ -357,6 +375,28 @@ func parseDirEntries(b []byte, f *FileSystem) ([]*directoryEntry, error) {
 		if de != nil {
 			dirEntries = append(dirEntries, de)
 		}
+		i += entryLen
+	}
+	return dirEntries, nil
+}
+
+// parseDirEntriesJoliet parses directory entries from a Joliet (SVD) directory extent.
+// Filenames are decoded as UCS-2 and no SUSP extensions are parsed.
+func parseDirEntriesJoliet(b []byte, f *FileSystem) ([]*directoryEntry, error) {
+	dirEntries := make([]*directoryEntry, 0, 20)
+	count := 0
+	for i := 0; i < len(b); count++ {
+		entryLen := int(b[i+0])
+		if entryLen == 0 {
+			i += (int(f.blocksize) - i%int(f.blocksize))
+			continue
+		}
+		de, err := dirEntryFromBytesWithJoliet(b[i:i+entryLen], nil, true)
+		if err != nil {
+			return nil, fmt.Errorf("invalid Joliet directory entry %d at byte %d: %v", count, i, err)
+		}
+		de.filesystem = f
+		dirEntries = append(dirEntries, de)
 		i += entryLen
 	}
 	return dirEntries, nil

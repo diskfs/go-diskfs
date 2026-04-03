@@ -24,17 +24,20 @@ const (
 
 // FileSystem implements the FileSystem interface
 type FileSystem struct {
-	workspace      string
-	size           int64
-	start          int64
-	backend        backend.Storage
-	blocksize      int64
-	volumes        volumeDescriptors
-	pathTable      *pathTable
-	rootDir        *directoryEntry
-	suspEnabled    bool  // is the SUSP in use?
-	suspSkip       uint8 // how many bytes to skip in each directory record
-	suspExtensions []suspExtension
+	workspace        string
+	size             int64
+	start            int64
+	backend          backend.Storage
+	blocksize        int64
+	volumes          volumeDescriptors
+	pathTable        *pathTable
+	rootDir          *directoryEntry
+	suspEnabled      bool  // is the SUSP in use?
+	suspSkip         uint8 // how many bytes to skip in each directory record
+	suspExtensions   []suspExtension
+	jolietEnabled    bool
+	jolietPathTable  *pathTable
+	jolietRootDir    *directoryEntry
 }
 
 // Equal compare if two filesystems are equal
@@ -166,8 +169,9 @@ func Read(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) 
 	vds := make([]volumeDescriptor, 0, 128)
 	terminated := false
 	var (
-		pvd *primaryVolumeDescriptor
-		vd  volumeDescriptor
+		pvd       *primaryVolumeDescriptor
+		jolietSVD *supplementaryVolumeDescriptor
+		vd        volumeDescriptor
 	)
 	for i := 0; !terminated; i++ {
 		vdBytes := make([]byte, volumeDescriptorSize)
@@ -192,6 +196,11 @@ func Read(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) 
 		case volumeDescriptorPrimary:
 			vds = append(vds, vd)
 			pvd, _ = vd.(*primaryVolumeDescriptor)
+		case volumeDescriptorSupplementary:
+			vds = append(vds, vd)
+			if svd, ok := vd.(*supplementaryVolumeDescriptor); ok && isJolietSVD(svd) {
+				jolietSVD = svd
+			}
 		default:
 			vds = append(vds, vd)
 		}
@@ -214,6 +223,24 @@ func Read(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) 
 			return nil, fmt.Errorf("read %d bytes of path table instead of expected %d at location %d", read, pvd.pathTableSize, pathTableLocation)
 		}
 		pt = parsePathTable(pathTableBytes)
+	}
+
+	// load Joliet path table and root if present
+	var (
+		jolietPT      *pathTable
+		jolietRootDir *directoryEntry
+		jolietEnabled bool
+	)
+	if jolietSVD != nil {
+		jolietRootDir = jolietSVD.rootDirectoryEntry
+		jolietRootDir.joliet = true
+		jolietPathTableBytes := make([]byte, jolietSVD.pathTableSize)
+		jolietPTLoc := jolietSVD.pathTableLLocation * uint32(jolietSVD.blocksize)
+		read, err = b.ReadAt(jolietPathTableBytes, int64(jolietPTLoc))
+		if err == nil && read == len(jolietPathTableBytes) {
+			jolietPT = parseJolietPathTable(jolietPathTableBytes)
+			jolietEnabled = true
+		}
 	}
 
 	// is system use enabled?
@@ -275,17 +302,24 @@ func Read(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) 
 		size:      size,
 		backend:   b,
 		volumes: volumeDescriptors{
-			descriptors: vds,
-			primary:     pvd,
+			descriptors:   vds,
+			primary:       pvd,
+			supplementary: jolietSVD,
 		},
-		blocksize:      blocksize,
-		pathTable:      pt,
-		rootDir:        rootDirEntry,
-		suspEnabled:    suspEnabled,
-		suspSkip:       skipBytes,
-		suspExtensions: suspHandlers,
+		blocksize:       blocksize,
+		pathTable:       pt,
+		rootDir:         rootDirEntry,
+		suspEnabled:     suspEnabled,
+		suspSkip:        skipBytes,
+		suspExtensions:  suspHandlers,
+		jolietEnabled:   jolietEnabled,
+		jolietPathTable: jolietPT,
+		jolietRootDir:   jolietRootDir,
 	}
 	rootDirEntry.filesystem = fs
+	if jolietRootDir != nil {
+		jolietRootDir.filesystem = fs
+	}
 	return fs, nil
 }
 
@@ -575,7 +609,17 @@ func (fsm *FileSystem) Stat(name string) (iofs.FileInfo, error) {
 }
 
 // readDirectory - read directory entry on iso only (not workspace)
+// When Joliet is enabled and Rock Ridge is not, reads from the Joliet (SVD) tree
+// to get full Unicode filenames.
 func (fsm *FileSystem) readDirectory(p string) ([]*directoryEntry, error) {
+	// use Joliet tree when available and Rock Ridge is not active
+	if fsm.jolietEnabled && !fsm.suspEnabled {
+		return fsm.readDirectoryJoliet(p)
+	}
+	return fsm.readDirectoryPVD(p)
+}
+
+func (fsm *FileSystem) readDirectoryPVD(p string) ([]*directoryEntry, error) {
 	var (
 		location, size uint32
 		err            error
@@ -635,6 +679,50 @@ func (fsm *FileSystem) readDirectory(p string) ([]*directoryEntry, error) {
 	entries, err := parseDirEntries(b, fsm)
 	if err != nil {
 		return nil, fmt.Errorf("could not parse directory entries for %s: %v", p, err)
+	}
+	return entries, nil
+}
+
+// readDirectoryJoliet reads a directory from the Joliet (SVD) tree, decoding UCS-2 filenames.
+func (fsm *FileSystem) readDirectoryJoliet(p string) ([]*directoryEntry, error) {
+	var (
+		location, size uint32
+		n              int
+	)
+
+	if fsm.jolietPathTable != nil {
+		location = fsm.jolietPathTable.getLocation(p)
+	}
+
+	if location != 0 {
+		dirb := make([]byte, 4)
+		n, err := fsm.backend.ReadAt(dirb, int64(location)*fsm.blocksize+10)
+		if err != nil {
+			return nil, fmt.Errorf("could not read Joliet directory %s: %v", p, err)
+		}
+		if n != len(dirb) {
+			return nil, fmt.Errorf("read %d bytes instead of expected %d", n, len(dirb))
+		}
+		size = binary.LittleEndian.Uint32(dirb)
+	} else if fsm.jolietRootDir != nil {
+		location, size, _ = fsm.jolietRootDir.getLocation(p)
+	}
+
+	if location == 0 {
+		return nil, fmt.Errorf("could not find Joliet directory %s", p)
+	}
+
+	b := make([]byte, size)
+	n, err := fsm.backend.ReadAt(b, int64(location)*fsm.blocksize)
+	if err != nil {
+		return nil, fmt.Errorf("could not read Joliet directory entries for %s: %v", p, err)
+	}
+	if n != int(size) {
+		return nil, fmt.Errorf("reading Joliet directory %s returned %d bytes read instead of expected %d", p, n, size)
+	}
+	entries, err := parseDirEntriesJoliet(b, fsm)
+	if err != nil {
+		return nil, fmt.Errorf("could not parse Joliet directory entries for %s: %v", p, err)
 	}
 	return entries, nil
 }
