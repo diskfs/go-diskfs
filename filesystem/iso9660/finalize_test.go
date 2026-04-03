@@ -581,7 +581,7 @@ func TestFinalizeRockRidge(t *testing.T) {
 
 // createRockRidgeISO is a helper that creates a workspace, populates it via setupFn,
 // finalizes with Rock Ridge, reads it back, and returns the entries from ReadDir(".").
-func createRockRidgeISO(t *testing.T, setupFn func(t *testing.T, dir string), opts iso9660.FinalizeOptions) (*iso9660.FileSystem, []os.DirEntry) {
+func createRockRidgeISO(t *testing.T, setupFn func(t *testing.T, dir string), opts iso9660.FinalizeOptions) (fs *iso9660.FileSystem, entries []os.DirEntry) {
 	t.Helper()
 	blocksize := int64(2048)
 
@@ -620,6 +620,7 @@ func createRockRidgeISO(t *testing.T, setupFn func(t *testing.T, dir string), op
 	return fs, entries
 }
 
+//nolint:gocyclo // we really do not care about the cyclomatic complexity of a test function. Maybe someday we will improve it.
 func TestFinalizeRockRidgeRoundTrips(t *testing.T) {
 	t.Run("permissions", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
