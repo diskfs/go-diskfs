@@ -622,17 +622,27 @@ func validateElTorito(t *testing.T, f *os.File) {
 	mounts := map[string]string{
 		f.Name(): mpath,
 	}
-	err := testhelper.DockerRun(nil, output, false, true, mounts, intImage, "isoinfo", "-d", "-i", mpath)
+	err := testhelper.DockerRun(nil, output, false, true, mounts, intImage, "xorriso", "-indev", mpath, "-report_el_torito", "plain")
 	outString := output.String()
 	if err != nil {
 		t.Errorf("unexpected err: %v", err)
 		t.Log(outString)
 	}
-	// look for El Torito line
-	re := regexp.MustCompile(`El Torito VD version 1 found, boot catalog is in sector (\d+)\n`)
-	matches := re.FindStringSubmatch(outString)
-	if len(matches) < 1 {
-		t.Fatalf("unable to match El Torito information")
+	// look for El Torito lines
+	re1 := regexp.MustCompile(`Boot record\s*:\s*El Torito`)
+	matches1 := re1.FindStringSubmatch(outString)
+	if len(matches1) < 1 {
+		t.Error("unable to match El Torito boot record line")
+	}
+	re2 := regexp.MustCompile(`El Torito cat path\s*:\s*(\S+)\n`)
+	matches2 := re2.FindStringSubmatch(outString)
+	if len(matches2) < 1 {
+		t.Error("unable to match El Torito catalog path")
+	}
+	re3 := regexp.MustCompile(`El Torito catalog\s*:\s*(\d+)`)
+	matches3 := re3.FindStringSubmatch(outString)
+	if len(matches3) < 1 {
+		t.Error("unable to match El Torito catalog")
 	}
 	// what sector should it be in?
 }
