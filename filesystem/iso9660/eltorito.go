@@ -14,6 +14,8 @@ import (
 const (
 	elToritoSector        = 0x11
 	elToritoDefaultBlocks = 4
+	elToritoEmulBlocks    = 1
+	elToritoMaxBlocks     = 0xffff
 )
 
 // Platform target booting system for a bootable iso
@@ -76,11 +78,18 @@ type ElToritoEntry struct {
 	// filesystem, but inserts it on the fly.
 	BootTable bool
 	// SystemType type of system the partition is, according to the MBR standard
-	SystemType mbr.Type
-	// LoadSize how many blocks of BootFile to load, equivalent to genisoimage option `-boot-load-size`
-	LoadSize uint16
-	size     uint32
-	location uint32
+	SystemType  mbr.Type
+	loadSize    uint16
+	loadSizeSet bool
+	size        uint32
+	location    uint32
+}
+
+// SetLoadSize sets how many 512-byte blocks of BootFile to load, equivalent to
+// genisoimage option `-boot-load-size`. When unset, uses default calculation.
+func (e *ElToritoEntry) SetLoadSize(loadSize uint16) {
+	e.loadSize = loadSize
+	e.loadSizeSet = true
 }
 
 // generateCatalog generate the el torito boot catalog file
@@ -128,9 +137,21 @@ func (e *ElToritoEntry) headerBytes(last bool, entries uint16) []byte {
 
 // toBytes convert ElToritoEntry to appropriate entry bytes
 func (e *ElToritoEntry) entryBytes() []byte {
-	blocks := e.LoadSize
-	if blocks == 0 {
-		blocks = uint16((e.size + 511) / 512)
+	blocks := e.loadSize
+	if !e.loadSizeSet {
+		actualBlocks := (e.size + 511) / 512
+		switch {
+		case e.Platform == EFI:
+			if actualBlocks > elToritoMaxBlocks {
+				blocks = 0
+			} else {
+				blocks = uint16(actualBlocks)
+			}
+		case e.Emulation == NoEmulation:
+			blocks = elToritoDefaultBlocks
+		default:
+			blocks = elToritoEmulBlocks
+		}
 	}
 	b := make([]byte, 0x20)
 	b[0] = 0x88
