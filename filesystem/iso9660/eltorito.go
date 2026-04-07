@@ -57,12 +57,15 @@ type ElTorito struct {
 	HideBootCatalog bool
 	// Entries list of ElToritoEntry boot entries
 	Entries []*ElToritoEntry
-	// Platform supported platform
+	// Platform supported platform for the very first boot entry
 	Platform Platform
 }
 
 // ElToritoEntry single entry in an el torito boot catalog
 type ElToritoEntry struct {
+	// Platform supported platform for this entry. NOTE: For the very
+	// first boot entry (Entries[0]), this is not used; set Platform
+	// in the outer ElTorito struct instead.
 	Platform     Platform
 	Emulation    Emulation
 	BootFile     string

@@ -140,9 +140,9 @@ func finalizeElTorito(t *testing.T, workspace string) {
 	err = fs.Finalize(iso9660.FinalizeOptions{ElTorito: &iso9660.ElTorito{
 		BootCatalog:     "/BOOT.CAT",
 		HideBootCatalog: false,
-		Platform:        iso9660.EFI,
+		Platform:        iso9660.BIOS,
 		Entries: []*iso9660.ElToritoEntry{
-			{Platform: iso9660.BIOS, Emulation: iso9660.NoEmulation, BootFile: "/BOOT1.IMG", HideBootFile: true, LoadSegment: 0, SystemType: mbr.Fat32LBA},
+			{Emulation: iso9660.NoEmulation, BootFile: "/BOOT1.IMG", HideBootFile: true, LoadSegment: 0, SystemType: mbr.Fat32LBA},
 			{Platform: iso9660.EFI, Emulation: iso9660.NoEmulation, BootFile: "/BOOT2.IMG", HideBootFile: false, LoadSegment: 0, SystemType: mbr.Fat32LBA},
 		},
 	},

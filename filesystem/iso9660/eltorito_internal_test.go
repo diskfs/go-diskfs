@@ -12,9 +12,9 @@ func TestElToritoGenerateCatalog(t *testing.T) {
 	et := &ElTorito{
 		BootCatalog:     "/boot.cat",
 		HideBootCatalog: false,
-		Platform:        EFI,
+		Platform:        BIOS,
 		Entries: []*ElToritoEntry{
-			{Platform: BIOS, Emulation: HardDiskEmulation, BootFile: "/abc.img", HideBootFile: false, LoadSegment: 23, SystemType: mbr.Linux, size: 10, location: 100},
+			{Emulation: HardDiskEmulation, BootFile: "/abc.img", HideBootFile: false, LoadSegment: 23, SystemType: mbr.Linux, size: 10, location: 100},
 			{Platform: BIOS, Emulation: NoEmulation, BootFile: "/def.img", HideBootFile: false, LoadSegment: 0, SystemType: mbr.Fat32LBA, size: 20, location: 200},
 			{Platform: EFI, Emulation: NoEmulation, BootFile: "/qrs.img", HideBootFile: false, LoadSegment: 0, SystemType: mbr.Fat16, size: 30, location: 300},
 		},
