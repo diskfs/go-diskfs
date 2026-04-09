@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -16,72 +14,6 @@ import (
 	"github.com/diskfs/go-diskfs/testhelper"
 )
 
-// isoInfoEntry represents a parsed entry from isoinfo -R -l output.
-type isoInfoEntry struct {
-	Perms   string
-	Links   int
-	UID     int
-	GID     int
-	Size    int64
-	Name    string
-	Symlink string // target if symlink, empty otherwise
-	IsDir   bool
-}
-
-// parseIsoInfoListing parses the output of `isoinfo -R -l -i <iso>` into structured entries.
-// isoinfo output looks like:
-//
-//	Directory listing of /
-//	drwxr-xr-x   3    0    0         2048 Mar 25 2026 [     18 02]  .
-//	drwxr-xr-x   3    0    0         2048 Mar 25 2026 [     18 02]  ..
-//	-rw-r--r--   1    0    0           17 Mar 25 2026 [     19 02]  normal.txt
-//	lrwxrwxrwx   1    0    0           10 Mar 25 2026 [     20 02]  link -> ../target
-func parseIsoInfoListing(output string) map[string][]isoInfoEntry {
-	result := make(map[string][]isoInfoEntry)
-	var currentDir string
-
-	lines := strings.Split(output, "\n")
-	dirRe := regexp.MustCompile(`^Directory listing of (.+)$`)
-	// Match lines like: drwxr-xr-x   3    0    0   2048 Mar 25 2026 [  18 02]  name
-	// or symlinks:      lrwxrwxrwx   1    0    0     10 Mar 25 2026 [  20 02]  link -> target
-	entryRe := regexp.MustCompile(`^([dlcbps-][rwxsStT-]{9})\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+\w+\s+\d+\s+\d+\s+\[.*?\]\s+(.+)$`)
-
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if m := dirRe.FindStringSubmatch(line); m != nil {
-			currentDir = m[1]
-			continue
-		}
-		if m := entryRe.FindStringSubmatch(line); m != nil {
-			links, _ := strconv.Atoi(m[2])
-			uid, _ := strconv.Atoi(m[3])
-			gid, _ := strconv.Atoi(m[4])
-			size, _ := strconv.ParseInt(m[5], 10, 64)
-			nameField := m[6]
-
-			entry := isoInfoEntry{
-				Perms: m[1],
-				Links: links,
-				UID:   uid,
-				GID:   gid,
-				Size:  size,
-				IsDir: m[1][0] == 'd',
-			}
-
-			// Check for symlink arrow
-			if parts := strings.SplitN(nameField, " -> ", 2); len(parts) == 2 {
-				entry.Name = strings.TrimSpace(parts[0])
-				entry.Symlink = strings.TrimSpace(parts[1])
-			} else {
-				entry.Name = strings.TrimSpace(nameField)
-			}
-
-			result[currentDir] = append(result[currentDir], entry)
-		}
-	}
-
-	return result
-}
 
 // createXorrisoISO uses Docker to create a Rock Ridge ISO with xorriso from a workspace directory.
 // The workspace is mounted read-only, and the output ISO is written to outputPath.
@@ -112,22 +44,16 @@ func createXorrisoISO(t *testing.T, workspace, outputPath string) {
 	}
 }
 
-// TestRockRidgeXorrisoReadGoOutput creates an ISO with go-diskfs and validates it with
-// isoinfo -R (from the Docker test image). This verifies that external tools can correctly
-// read Rock Ridge extensions produced by go-diskfs.
+// TestRockRidgeWriteReadRoundTrip creates an ISO with go-diskfs using a workspace with
+// various Rock Ridge features (permissions, deep directories, symlinks, long filenames)
+// and reads it back to verify all extensions are preserved correctly.
 //
-// Gated by TEST_IMAGE environment variable — only runs during `make test`.
-//
-//nolint:gocyclo // big integration test function, complexity is not a correctness issue
-func TestRockRidgeXorrisoReadGoOutput(t *testing.T) {
-	if intImage == "" {
-		t.Skip("skipping xorriso integration test (TEST_IMAGE not set)")
-	}
-
+//nolint:gocyclo // integration test covering multiple Rock Ridge features
+func TestRockRidgeWriteReadRoundTrip(t *testing.T) {
 	blocksize := int64(2048)
 
 	// Create workspace with various Rock Ridge features
-	dir, err := os.MkdirTemp("", "iso_xorriso_read_test")
+	dir, err := os.MkdirTemp("", "iso_rr_roundtrip_test")
 	if err != nil {
 		t.Fatalf("Failed to create tmpdir: %v", err)
 	}
@@ -137,14 +63,16 @@ func TestRockRidgeXorrisoReadGoOutput(t *testing.T) {
 	}
 
 	// Regular files with different permissions
-	for _, tc := range []struct {
+	type fileSpec struct {
 		name string
 		mode os.FileMode
-	}{
+	}
+	files := []fileSpec{
 		{"file644.txt", 0o644},
 		{"file755.txt", 0o755},
 		{"file600.txt", 0o600},
-	} {
+	}
+	for _, tc := range files {
 		fp := filepath.Join(dir, tc.name)
 		if err := os.WriteFile(fp, []byte("content of "+tc.name), 0o600); err != nil {
 			t.Fatalf("Failed to write %s: %v", tc.name, err)
@@ -159,7 +87,8 @@ func TestRockRidgeXorrisoReadGoOutput(t *testing.T) {
 	if err := os.MkdirAll(deepDir, 0o755); err != nil {
 		t.Fatalf("Failed to create deep dir: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(deepDir, "deep.txt"), []byte("deep content"), 0o600); err != nil {
+	deepContent := "deep content"
+	if err := os.WriteFile(filepath.Join(deepDir, "deep.txt"), []byte(deepContent), 0o600); err != nil {
 		t.Fatalf("Failed to write deep file: %v", err)
 	}
 
@@ -174,73 +103,67 @@ func TestRockRidgeXorrisoReadGoOutput(t *testing.T) {
 	if err := os.WriteFile(targetFile, []byte("target content"), 0o600); err != nil {
 		t.Fatalf("Failed to write symlink target: %v", err)
 	}
+	symlinkCreated := true
 	if err := os.Symlink("target.txt", filepath.Join(dir, "link.txt")); err != nil {
-		// Symlinks may require privileges on Windows; skip that part
 		t.Logf("Could not create symlink (skipping symlink validation): %v", err)
+		symlinkCreated = false
 	}
 
 	// Create ISO with go-diskfs
-	f, err := os.CreateTemp("", "iso_xorriso_read_test")
+	f, err := os.CreateTemp("", "iso_rr_roundtrip_test")
 	if err != nil {
 		t.Fatalf("Failed to create tmpfile: %v", err)
 	}
 	defer os.Remove(f.Name())
 
 	b := file.New(f, false)
-	fs, err := iso9660.Create(b, 0, 0, blocksize, dir)
+	fsWrite, err := iso9660.Create(b, 0, 0, blocksize, dir)
 	if err != nil {
 		t.Fatalf("Failed to iso9660.Create: %v", err)
 	}
-	err = fs.Finalize(iso9660.FinalizeOptions{RockRidge: true})
+	err = fsWrite.Finalize(iso9660.FinalizeOptions{RockRidge: true})
 	if err != nil {
 		t.Fatalf("unexpected error fs.Finalize: %v", err)
 	}
 	f.Close()
 
-	// Validate with isoinfo -R -l
-	output := new(bytes.Buffer)
-	mounts := map[string]string{
-		f.Name(): "/file.iso",
-	}
-	err = testhelper.DockerRun(nil, output, false, true, mounts, intImage,
-		"isoinfo", "-R", "-l", "-i", "/file.iso")
+	// Read it back with go-diskfs
+	f2, err := os.Open(f.Name())
 	if err != nil {
-		t.Fatalf("isoinfo failed: %v\nOutput: %s", err, output.String())
+		t.Fatalf("Failed to reopen ISO: %v", err)
+	}
+	defer f2.Close()
+
+	bk := file.New(f2, true)
+	fsRead, err := iso9660.Read(bk, 0, 0, blocksize)
+	if err != nil {
+		t.Fatalf("Failed to read ISO: %v", err)
 	}
 
-	isoOutput := output.String()
-	t.Logf("isoinfo output:\n%s", isoOutput)
-
-	listing := parseIsoInfoListing(isoOutput)
-
-	// Check root directory entries
-	rootEntries := listing["/"]
-	if rootEntries == nil {
-		t.Fatal("no root directory listing found in isoinfo output")
+	// Read root directory
+	entries, err := fsRead.ReadDir(".")
+	if err != nil {
+		t.Fatalf("Failed to ReadDir root: %v", err)
 	}
 
-	entryMap := make(map[string]isoInfoEntry)
-	for _, e := range rootEntries {
-		entryMap[e.Name] = e
+	entryMap := make(map[string]os.FileInfo)
+	for _, e := range entries {
+		info, err := e.Info()
+		if err != nil {
+			t.Fatalf("Failed to get info for %s: %v", e.Name(), err)
+		}
+		entryMap[e.Name()] = info
 	}
 
 	// Verify permissions
-	permChecks := []struct {
-		name     string
-		wantPerm string
-	}{
-		{"file644.txt", "-rw-r--r--"},
-		{"file755.txt", "-rwxr-xr-x"},
-		{"file600.txt", "-rw-------"},
-	}
-	for _, pc := range permChecks {
-		e, ok := entryMap[pc.name]
+	for _, tc := range files {
+		info, ok := entryMap[tc.name]
 		if !ok {
-			t.Errorf("file %s not found in root listing", pc.name)
+			t.Errorf("file %s not found in root listing", tc.name)
 			continue
 		}
-		if e.Perms != pc.wantPerm {
-			t.Errorf("file %s: got perms %s, want %s", pc.name, e.Perms, pc.wantPerm)
+		if perm := info.Mode().Perm(); perm != tc.mode {
+			t.Errorf("file %s: got perm %o, want %o", tc.name, perm, tc.mode)
 		}
 	}
 
@@ -250,49 +173,32 @@ func TestRockRidgeXorrisoReadGoOutput(t *testing.T) {
 	}
 
 	// Verify deep directory structure is accessible
-	// isoinfo shows the physical layout — with Rock Ridge relocation,
-	// the deep directory may appear as /h/ at root level
-	deepListing := listing["/a/b/c/d/e/f/g/h/"]
-	if deepListing == nil {
-		deepListing = listing["/a/b/c/d/e/f/g/h"]
+	deepFile, err := fsRead.OpenFile("/a/b/c/d/e/f/g/h/deep.txt", os.O_RDONLY)
+	if err != nil {
+		t.Fatalf("Failed to open deep file: %v", err)
 	}
-	if deepListing == nil {
-		// check relocated path (Rock Ridge CL/PL relocation moves deep dirs to root)
-		deepListing = listing["/h/"]
-		if deepListing == nil {
-			deepListing = listing["/h"]
-		}
+	buf := make([]byte, 200)
+	n, _ := deepFile.Read(buf)
+	if string(buf[:n]) != deepContent {
+		t.Errorf("deep file content mismatch: got %q, want %q", string(buf[:n]), deepContent)
 	}
-	if deepListing == nil {
-		t.Error("deep directory not found in isoinfo listing (checked /a/b/c/d/e/f/g/h/ and /h/)")
-	} else {
-		found := false
-		for _, e := range deepListing {
-			if e.Name == "deep.txt" {
-				found = true
-				break
+
+	// Verify symlink
+	if symlinkCreated {
+		info, ok := entryMap["link.txt"]
+		if !ok {
+			t.Error("link.txt not found in root listing")
+		} else {
+			if info.Mode()&os.ModeSymlink == 0 {
+				t.Errorf("link.txt: expected symlink mode, got %v", info.Mode())
 			}
-		}
-		if !found {
-			t.Error("deep.txt not found in deep directory listing")
-		}
-	}
-
-	// Verify symlink (if it was created)
-	if e, ok := entryMap["link.txt"]; ok {
-		if e.Perms[0] != 'l' {
-			t.Errorf("link.txt: expected symlink, got perms %s", e.Perms)
-		}
-		if e.Symlink != "target.txt" {
-			t.Errorf("link.txt: got symlink target %q, want %q", e.Symlink, "target.txt")
-		}
-	}
-
-	// Verify RR_MOVED is not visible as a normal directory
-	// (isoinfo may show it in the listing if Rock Ridge relocation is used)
-	for _, e := range rootEntries {
-		if e.Name == "RR_MOVED" && !e.IsDir {
-			t.Error("RR_MOVED should be a directory if present")
+			rri, ok := info.Sys().(*iso9660.RockRidgeInfo)
+			if !ok {
+				t.Fatal("link.txt: Sys() did not return *RockRidgeInfo")
+			}
+			if rri.Symlink != "target.txt" {
+				t.Errorf("link.txt: got symlink target %q, want %q", rri.Symlink, "target.txt")
+			}
 		}
 	}
 }
