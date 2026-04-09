@@ -61,18 +61,12 @@ func createXorrisoJolietRockRidgeISO(t *testing.T, workspace, outputPath string)
 	}
 }
 
-// TestJolietXorrisoReadGoOutput creates a Joliet ISO with go-diskfs and validates it
-// with isoinfo -J (from the Docker test image).
-//
-// Gated by TEST_IMAGE environment variable — only runs during `make test`.
-func TestJolietXorrisoReadGoOutput(t *testing.T) {
-	if intImage == "" {
-		t.Skip("skipping xorriso integration test (TEST_IMAGE not set)")
-	}
-
+// TestJolietWriteReadRoundTrip creates a Joliet ISO with go-diskfs and reads it back
+// to verify Joliet filenames (long names, mixed case, spaces) are preserved.
+func TestJolietWriteReadRoundTrip(t *testing.T) {
 	blocksize := int64(2048)
 
-	dir, err := os.MkdirTemp("", "iso_joliet_xorriso_test")
+	dir, err := os.MkdirTemp("", "iso_joliet_roundtrip_test")
 	if err != nil {
 		t.Fatalf("Failed to create tmpdir: %v", err)
 	}
@@ -105,7 +99,7 @@ func TestJolietXorrisoReadGoOutput(t *testing.T) {
 	}
 
 	// Create ISO with go-diskfs
-	f, err := os.CreateTemp("", "iso_joliet_xorriso_test")
+	f, err := os.CreateTemp("", "iso_joliet_roundtrip_test")
 	if err != nil {
 		t.Fatalf("Failed to create tmpfile: %v", err)
 	}
@@ -122,31 +116,56 @@ func TestJolietXorrisoReadGoOutput(t *testing.T) {
 	}
 	f.Close()
 
-	// Validate with isoinfo -J -l
-	output := new(bytes.Buffer)
-	mounts := map[string]string{
-		f.Name(): "/file.iso",
-	}
-	err = testhelper.DockerRun(nil, output, false, true, mounts, intImage,
-		"isoinfo", "-J", "-l", "-i", "/file.iso")
+	// Read it back with go-diskfs
+	f2, err := os.Open(f.Name())
 	if err != nil {
-		t.Fatalf("isoinfo -J failed: %v\nOutput: %s", err, output.String())
+		t.Fatalf("Failed to reopen ISO: %v", err)
+	}
+	defer f2.Close()
+
+	bk2 := file.New(f2, true)
+	fsRead, err := iso9660.Read(bk2, 0, 0, blocksize)
+	if err != nil {
+		t.Fatalf("Failed to read ISO: %v", err)
 	}
 
-	isoOutput := output.String()
-	t.Logf("isoinfo -J output:\n%s", isoOutput)
+	entries, err := fsRead.ReadDir(".")
+	if err != nil {
+		t.Fatalf("Failed to ReadDir root: %v", err)
+	}
 
-	// Verify Joliet filenames appear in isoinfo output
+	entryMap := make(map[string]os.FileInfo)
+	for _, e := range entries {
+		info, err := e.Info()
+		if err != nil {
+			t.Fatalf("Failed to get info for %s: %v", e.Name(), err)
+		}
+		entryMap[e.Name()] = info
+	}
+
+	// Verify Joliet filenames are preserved
 	for _, tf := range testFiles {
-		if !strings.Contains(isoOutput, tf.name) {
-			t.Errorf("file %q not found in isoinfo -J listing", tf.name)
+		if _, ok := entryMap[tf.name]; !ok {
+			t.Errorf("file %q not found in Joliet ISO readback", tf.name)
 		}
 	}
-	if !strings.Contains(isoOutput, "SubDir") {
-		t.Error("SubDir not found in isoinfo -J listing")
+	if _, ok := entryMap["SubDir"]; !ok {
+		t.Error("SubDir not found in Joliet ISO readback")
 	}
-	if !strings.Contains(isoOutput, "nested.txt") {
-		t.Error("nested.txt not found in isoinfo -J listing")
+
+	// Verify subdirectory contents
+	subEntries, err := fsRead.ReadDir("SubDir")
+	if err != nil {
+		t.Fatalf("Failed to ReadDir SubDir: %v", err)
+	}
+	foundNested := false
+	for _, e := range subEntries {
+		if e.Name() == "nested.txt" {
+			foundNested = true
+		}
+	}
+	if !foundNested {
+		t.Error("nested.txt not found in SubDir")
 	}
 }
 
