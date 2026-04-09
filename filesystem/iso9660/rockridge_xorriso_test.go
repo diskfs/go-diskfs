@@ -14,7 +14,6 @@ import (
 	"github.com/diskfs/go-diskfs/testhelper"
 )
 
-
 // createXorrisoISO uses Docker to create a Rock Ridge ISO with xorriso from a workspace directory.
 // The workspace is mounted read-only, and the output ISO is written to outputPath.
 func createXorrisoISO(t *testing.T, workspace, outputPath string) {
@@ -47,8 +46,6 @@ func createXorrisoISO(t *testing.T, workspace, outputPath string) {
 // TestRockRidgeWriteReadRoundTrip creates an ISO with go-diskfs using a workspace with
 // various Rock Ridge features (permissions, deep directories, symlinks, long filenames)
 // and reads it back to verify all extensions are preserved correctly.
-//
-//nolint:gocyclo // integration test covering multiple Rock Ridge features
 func TestRockRidgeWriteReadRoundTrip(t *testing.T) {
 	blocksize := int64(2048)
 
