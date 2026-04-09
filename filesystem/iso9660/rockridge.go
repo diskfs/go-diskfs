@@ -608,6 +608,12 @@ func (r *rockRidgeExtension) parseSymlink(b []byte) (directoryEntrySystemUseExte
 	}
 	continued := b[4] == 1
 	name := ""
+	appendComponent := func(component string) {
+		if name != "" && name != "/" {
+			name += "/"
+		}
+		name += component
+	}
 	for i := 5; i < len(b); {
 		// make it easier to work with
 		b2 := b[i:]
@@ -618,20 +624,11 @@ func (r *rockRidgeExtension) parseSymlink(b []byte) (directoryEntrySystemUseExte
 		case flags&0x08 != 0:
 			name = "/"
 		case flags&0x04 != 0:
-			if name != "" && name != "/" {
-				name += "/"
-			}
-			name += ".."
+			appendComponent("..")
 		case flags&0x02 != 0:
-			if name != "" && name != "/" {
-				name += "/"
-			}
-			name += "."
+			appendComponent(".")
 		case size > 0:
-			if name != "" && name != "/" {
-				name += "/"
-			}
-			name += string(b2[2 : 2+size])
+			appendComponent(string(b2[2 : 2+size]))
 		}
 
 		i += 2 + int(size)
