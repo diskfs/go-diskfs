@@ -759,13 +759,13 @@ func (fsm *FileSystem) Finalize(options FinalizeOptions) error {
 
 	// build Joliet directory tree if enabled
 	var (
-		jolietDirs             []*Directory
-		jolietPathTableLBytes  []byte
-		jolietPathTableMBytes  []byte
-		jolietPathTableSize    int
-		jolietPathTableLLoc    uint32
-		jolietPathTableMLoc    uint32
-		jolietRootLocation     uint32
+		jolietDirs            []*Directory
+		jolietPathTableLBytes []byte
+		jolietPathTableMBytes []byte
+		jolietPathTableSize   int
+		jolietPathTableLLoc   uint32
+		jolietPathTableMLoc   uint32
+		jolietRootLocation    uint32
 	)
 	if options.Joliet {
 		jolietRootLocation = location
@@ -792,7 +792,7 @@ func (fsm *FileSystem) Finalize(options FinalizeOptions) error {
 			}
 			dirSize := calculateJolietDirectorySize(jd, blocksize)
 			blocks := calculateBlocks(int64(dirSize), int64(blocksize))
-			jd.directoryEntry.size = uint32(dirSize)
+			jd.size = uint32(dirSize)
 			jd.entries[0].size = uint32(dirSize) // self entry
 			jolietDirs[i] = jd
 			location += blocks
@@ -861,7 +861,7 @@ func (fsm *FileSystem) Finalize(options FinalizeOptions) error {
 			if err != nil {
 				return fmt.Errorf("could not convert Joliet directory to bytes: %v", err)
 			}
-			jolietWriteAt := int64(jd.directoryEntry.location) * int64(blocksize)
+			jolietWriteAt := int64(jd.location) * int64(blocksize)
 			for _, e := range p {
 				_, _ = f.WriteAt(e, jolietWriteAt)
 				jolietWriteAt += int64(len(e))

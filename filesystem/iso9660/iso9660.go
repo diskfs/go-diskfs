@@ -24,20 +24,20 @@ const (
 
 // FileSystem implements the FileSystem interface
 type FileSystem struct {
-	workspace        string
-	size             int64
-	start            int64
-	backend          backend.Storage
-	blocksize        int64
-	volumes          volumeDescriptors
-	pathTable        *pathTable
-	rootDir          *directoryEntry
-	suspEnabled      bool  // is the SUSP in use?
-	suspSkip         uint8 // how many bytes to skip in each directory record
-	suspExtensions   []suspExtension
-	jolietEnabled    bool
-	jolietPathTable  *pathTable
-	jolietRootDir    *directoryEntry
+	workspace       string
+	size            int64
+	start           int64
+	backend         backend.Storage
+	blocksize       int64
+	volumes         volumeDescriptors
+	pathTable       *pathTable
+	rootDir         *directoryEntry
+	suspEnabled     bool  // is the SUSP in use?
+	suspSkip        uint8 // how many bytes to skip in each directory record
+	suspExtensions  []suspExtension
+	jolietEnabled   bool
+	jolietPathTable *pathTable
+	jolietRootDir   *directoryEntry
 }
 
 // Equal compare if two filesystems are equal
@@ -226,74 +226,12 @@ func Read(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) 
 	}
 
 	// load Joliet path table and root if present
-	var (
-		jolietPT      *pathTable
-		jolietRootDir *directoryEntry
-		jolietEnabled bool
-	)
-	if jolietSVD != nil {
-		jolietRootDir = jolietSVD.rootDirectoryEntry
-		jolietRootDir.joliet = true
-		jolietPathTableBytes := make([]byte, jolietSVD.pathTableSize)
-		jolietPTLoc := jolietSVD.pathTableLLocation * uint32(jolietSVD.blocksize)
-		read, err = b.ReadAt(jolietPathTableBytes, int64(jolietPTLoc))
-		if err == nil && read == len(jolietPathTableBytes) {
-			jolietPT = parseJolietPathTable(jolietPathTableBytes)
-			jolietEnabled = true
-		}
-	}
+	jolietPT, jolietRootDir, jolietEnabled := loadJoliet(jolietSVD, b)
 
-	// is system use enabled?
-	location := int64(rootDirEntry.location) * blocksize
-	// get the size of the directory entry
-	dirEntBytes := make([]byte, 1)
-	read, err = b.ReadAt(dirEntBytes, location)
+	// detect SUSP/Rock Ridge from root directory entry
+	suspEnabled, skipBytes, suspHandlers, err := detectSUSP(rootDirEntry, b, blocksize)
 	if err != nil {
-		return nil, fmt.Errorf("unable to read root directory size at location %d: %v", location, err)
-	}
-	if read != len(dirEntBytes) {
-		return nil, fmt.Errorf("root directory entry size, read %d bytes instead of expected %d", read, len(dirEntBytes))
-	}
-	if dirEntBytes[0] == 0 {
-		return nil, fmt.Errorf("root directory entry size at location %d was zero, check header and blocksize, given as %d", location, blocksize)
-	}
-	// now read the whole entry
-	dirEntBytes = make([]byte, dirEntBytes[0])
-	read, err = b.ReadAt(dirEntBytes, location)
-	if err != nil {
-		return nil, fmt.Errorf("unable to read root directory entry at location %d: %v", location, err)
-	}
-	if read != len(dirEntBytes) {
-		return nil, fmt.Errorf("root directory entry, read %d bytes instead of expected %d", read, len(dirEntBytes))
-	}
-	// parse it - we do not have any handlers yet
-	de, err := parseDirEntry(dirEntBytes, &FileSystem{
-		suspEnabled: true,
-		backend:     b,
-		blocksize:   blocksize,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("error parsing root entry from bytes: %v", err)
-	}
-	// is the SUSP in use?
-	var (
-		suspEnabled  bool
-		skipBytes    uint8
-		suspHandlers []suspExtension
-	)
-	for _, ext := range de.extensions {
-		if s, ok := ext.(directoryEntrySystemUseExtensionSharingProtocolIndicator); ok {
-			suspEnabled = true
-			skipBytes = s.SkipBytes()
-		}
-
-		// register any extension handlers
-		if s, ok := ext.(directoryEntrySystemUseExtensionReference); suspEnabled && ok {
-			extHandler := getRockRidgeExtension(s.ExtensionID())
-			if extHandler != nil {
-				suspHandlers = append(suspHandlers, extHandler)
-			}
-		}
+		return nil, err
 	}
 
 	fs := &FileSystem{
@@ -321,6 +259,72 @@ func Read(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) 
 		jolietRootDir.filesystem = fs
 	}
 	return fs, nil
+}
+
+// detectSUSP reads the root directory entry and checks for SUSP/Rock Ridge extensions.
+func detectSUSP(rootDirEntry *directoryEntry, b backend.Storage, blocksize int64) (bool, uint8, []suspExtension, error) {
+	location := int64(rootDirEntry.location) * blocksize
+	dirEntBytes := make([]byte, 1)
+	read, err := b.ReadAt(dirEntBytes, location)
+	if err != nil {
+		return false, 0, nil, fmt.Errorf("unable to read root directory size at location %d: %v", location, err)
+	}
+	if read != len(dirEntBytes) {
+		return false, 0, nil, fmt.Errorf("root directory entry size, read %d bytes instead of expected %d", read, len(dirEntBytes))
+	}
+	if dirEntBytes[0] == 0 {
+		return false, 0, nil, fmt.Errorf("root directory entry size at location %d was zero, check header and blocksize, given as %d", location, blocksize)
+	}
+	dirEntBytes = make([]byte, dirEntBytes[0])
+	read, err = b.ReadAt(dirEntBytes, location)
+	if err != nil {
+		return false, 0, nil, fmt.Errorf("unable to read root directory entry at location %d: %v", location, err)
+	}
+	if read != len(dirEntBytes) {
+		return false, 0, nil, fmt.Errorf("root directory entry, read %d bytes instead of expected %d", read, len(dirEntBytes))
+	}
+	de, err := parseDirEntry(dirEntBytes, &FileSystem{
+		suspEnabled: true,
+		backend:     b,
+		blocksize:   blocksize,
+	})
+	if err != nil {
+		return false, 0, nil, fmt.Errorf("error parsing root entry from bytes: %v", err)
+	}
+	var (
+		suspEnabled  bool
+		skipBytes    uint8
+		suspHandlers []suspExtension
+	)
+	for _, ext := range de.extensions {
+		if s, ok := ext.(directoryEntrySystemUseExtensionSharingProtocolIndicator); ok {
+			suspEnabled = true
+			skipBytes = s.SkipBytes()
+		}
+		if s, ok := ext.(directoryEntrySystemUseExtensionReference); suspEnabled && ok {
+			extHandler := getRockRidgeExtension(s.ExtensionID())
+			if extHandler != nil {
+				suspHandlers = append(suspHandlers, extHandler)
+			}
+		}
+	}
+	return suspEnabled, skipBytes, suspHandlers, nil
+}
+
+// loadJoliet loads the Joliet path table and root directory entry from a supplementary volume descriptor.
+func loadJoliet(svd *supplementaryVolumeDescriptor, b backend.Storage) (*pathTable, *directoryEntry, bool) {
+	if svd == nil {
+		return nil, nil, false
+	}
+	rootDir := svd.rootDirectoryEntry
+	rootDir.joliet = true
+	pathTableBytes := make([]byte, svd.pathTableSize)
+	ptLoc := svd.pathTableLLocation * uint32(svd.blocksize)
+	read, err := b.ReadAt(pathTableBytes, int64(ptLoc))
+	if err != nil || read != len(pathTableBytes) {
+		return nil, rootDir, false
+	}
+	return parseJolietPathTable(pathTableBytes), rootDir, true
 }
 
 // interface guard

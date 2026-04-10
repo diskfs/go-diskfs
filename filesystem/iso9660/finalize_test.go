@@ -925,7 +925,7 @@ func TestFinalizeJolietRoundTrip(t *testing.T) {
 		{"deeply_nested_file_name_exceeding_8dot3_limits.txt", "deep content"},
 	}
 	for _, tf := range testFiles {
-		if err := os.WriteFile(filepath.Join(dir, tf.name), []byte(tf.content), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, tf.name), []byte(tf.content), 0o600); err != nil {
 			t.Fatalf("Failed to write %s: %v", tf.name, err)
 		}
 	}
@@ -935,7 +935,7 @@ func TestFinalizeJolietRoundTrip(t *testing.T) {
 	if err := os.MkdirAll(sub, 0o755); err != nil {
 		t.Fatalf("Failed to create subdir: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(sub, "nested.txt"), []byte("nested"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(sub, "nested.txt"), []byte("nested"), 0o600); err != nil {
 		t.Fatalf("Failed to write nested file: %v", err)
 	}
 
@@ -1019,7 +1019,7 @@ func TestFinalizeJolietWithRockRidge(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 
-	if err := os.WriteFile(filepath.Join(dir, "hello.txt"), []byte("hello"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "hello.txt"), []byte("hello"), 0o600); err != nil {
 		t.Fatalf("Failed to write file: %v", err)
 	}
 
