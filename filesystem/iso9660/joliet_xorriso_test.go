@@ -206,7 +206,7 @@ func TestJolietGoReadXorrisoOutput(t *testing.T) {
 	if err := os.MkdirAll(sub, 0o755); err != nil {
 		t.Fatalf("Failed to create subdir: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(sub, "nested.txt"), []byte("nested\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(sub, "nested.txt"), []byte("nested\n"), 0o600); err != nil {
 		t.Fatalf("Failed to write nested file: %v", err)
 	}
 
@@ -320,7 +320,7 @@ func TestJolietSVDComparison(t *testing.T) {
 		t.Fatalf("Failed to chmod workspace: %v", err)
 	}
 
-	if err := os.WriteFile(filepath.Join(workspace, "hello.txt"), []byte("hello\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(workspace, "hello.txt"), []byte("hello\n"), 0o600); err != nil {
 		t.Fatalf("Failed to write file: %v", err)
 	}
 
