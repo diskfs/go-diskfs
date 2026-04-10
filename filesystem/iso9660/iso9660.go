@@ -262,7 +262,7 @@ func Read(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) 
 }
 
 // detectSUSP reads the root directory entry and checks for SUSP/Rock Ridge extensions.
-func detectSUSP(rootDirEntry *directoryEntry, b backend.Storage, blocksize int64) (susp bool, skipBytes uint8, extensions []suspExtension, err error) {
+func detectSUSP(rootDirEntry *directoryEntry, b backend.Storage, blocksize int64) (suspFound bool, suspSkip uint8, extensions []suspExtension, err error) {
 	location := int64(rootDirEntry.location) * blocksize
 	dirEntBytes := make([]byte, 1)
 	read, err := b.ReadAt(dirEntBytes, location)
