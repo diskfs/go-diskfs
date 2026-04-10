@@ -85,7 +85,7 @@ func TestJolietWriteReadRoundTrip(t *testing.T) {
 		{"MixedCase.Data", "mixed case"},
 	}
 	for _, tf := range testFiles {
-		if err := os.WriteFile(filepath.Join(dir, tf.name), []byte(tf.content), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, tf.name), []byte(tf.content), 0o600); err != nil {
 			t.Fatalf("Failed to write %s: %v", tf.name, err)
 		}
 	}
@@ -94,7 +94,7 @@ func TestJolietWriteReadRoundTrip(t *testing.T) {
 	if err := os.MkdirAll(sub, 0o755); err != nil {
 		t.Fatalf("Failed to create subdir: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(sub, "nested.txt"), []byte("nested"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(sub, "nested.txt"), []byte("nested"), 0o600); err != nil {
 		t.Fatalf("Failed to write nested file: %v", err)
 	}
 
@@ -197,7 +197,7 @@ func TestJolietGoReadXorrisoOutput(t *testing.T) {
 		{"A Long Filename For Joliet.txt", "long joliet name\n"},
 	} {
 		fp := filepath.Join(workspace, tc.name)
-		if err := os.WriteFile(fp, []byte(tc.content), 0o644); err != nil {
+		if err := os.WriteFile(fp, []byte(tc.content), 0o600); err != nil {
 			t.Fatalf("Failed to write %s: %v", tc.name, err)
 		}
 	}
