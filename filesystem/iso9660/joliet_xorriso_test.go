@@ -421,10 +421,36 @@ func TestJolietSVDComparison(t *testing.T) {
 	}
 	t.Logf("SVD path table sizes: go=%d, xorriso=%d", goPTSize, xorrisoPTSize)
 
+	// Log path table L locations and root entries for debugging
+	goPTLLoc := binary.LittleEndian.Uint32(goSVD[140:144])
+	xorrisoPTLLoc := binary.LittleEndian.Uint32(xorrisoSVD[140:144])
+	t.Logf("SVD path table L locations: go=%d, xorriso=%d", goPTLLoc, xorrisoPTLLoc)
+
+	// Read and dump first path table entry (root) from xorriso
+	xorrisoPTOffset := int64(xorrisoPTLLoc) * blocksize
+	xorrisoPTBytes := xorrisoISO[xorrisoPTOffset : xorrisoPTOffset+int64(xorrisoPTSize)]
+	t.Logf("xorriso Joliet path table (%d bytes): %x", len(xorrisoPTBytes), xorrisoPTBytes)
+	if len(xorrisoPTBytes) >= 8 {
+		ptRootLoc := binary.LittleEndian.Uint32(xorrisoPTBytes[2:6])
+		t.Logf("xorriso Joliet path table root entry location: %d", ptRootLoc)
+	}
+
 	// Compare that both have Joliet directory entries with UCS-2 filenames
 	// Read root directory from both SVDs and check for UCS-2 encoded "hello.txt"
 	goRootDir := readSVDRootDir(t, goISO, goSVD, blocksize)
 	xorrisoRootDir := readSVDRootDir(t, xorrisoISO, xorrisoSVD, blocksize)
+
+	// Also read the root dir at the path table's root location (may differ from SVD root dir record)
+	if len(xorrisoPTBytes) >= 8 {
+		ptRootLoc := binary.LittleEndian.Uint32(xorrisoPTBytes[2:6])
+		if ptRootLoc != xorrisoRootLBA {
+			ptOffset := int64(ptRootLoc) * blocksize
+			ptRootSelfEntry := xorrisoISO[ptOffset : ptOffset+34]
+			ptRootSize := binary.LittleEndian.Uint32(ptRootSelfEntry[10:14])
+			ptRootDir := xorrisoISO[ptOffset : ptOffset+int64(ptRootSize)]
+			t.Logf("xorriso path table root dir (at LBA %d, %d bytes): %x", ptRootLoc, ptRootSize, ptRootDir)
+		}
+	}
 
 	helloUCS2 := ucs2Encode("hello.txt")
 	if !bytes.Contains(goRootDir, helloUCS2) {
