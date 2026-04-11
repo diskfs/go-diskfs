@@ -419,12 +419,12 @@ func TestJolietSVDComparison(t *testing.T) {
 	goRootDir := readSVDRootDir(t, goISO, goSVD, blocksize)
 	xorrisoRootDir := readSVDRootDir(t, xorrisoISO, xorrisoSVD, blocksize)
 
-	helloUCS2 := ucs2Encode("hello.txt;1")
+	helloUCS2 := ucs2Encode("hello.txt")
 	if !bytes.Contains(goRootDir, helloUCS2) {
-		t.Error("go-diskfs SVD root directory does not contain UCS-2 encoded 'hello.txt;1'")
+		t.Error("go-diskfs SVD root directory does not contain UCS-2 encoded 'hello.txt'")
 	}
 	if !bytes.Contains(xorrisoRootDir, helloUCS2) {
-		t.Error("xorriso SVD root directory does not contain UCS-2 encoded 'hello.txt;1'")
+		t.Error("xorriso SVD root directory does not contain UCS-2 encoded 'hello.txt'")
 	}
 }
 

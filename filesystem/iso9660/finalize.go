@@ -340,12 +340,9 @@ func (fi *finalizeFileInfo) calculateDirectorySize(fsm *FileSystem) (dirEntrySiz
 }
 
 // jolietFilename returns the Joliet filename for a finalizeFileInfo entry.
-// For files, appends ";1" version suffix. For directories, returns just the name.
+// Joliet entries omit the ";1" version suffix (matching xorriso behavior).
 func jolietFilename(fi *finalizeFileInfo) string {
-	if fi.isDir {
-		return fi.name
-	}
-	return fi.name + ";1"
+	return fi.name
 }
 
 // toJolietDirectoryEntry creates a Joliet directory entry from a finalizeFileInfo.
