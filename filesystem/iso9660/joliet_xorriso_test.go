@@ -20,7 +20,7 @@ func createXorrisoJolietISO(t *testing.T, workspace, outputPath string) {
 	outputDir := filepath.Dir(outputPath)
 	outputName := filepath.Base(outputPath)
 
-	script := "cd /workspace && xorriso -as mkisofs -J -V JOLIET_REF -o /output/" + outputName + " ."
+	script := "cd /workspace && xorriso -as mkisofs -J --norock -V JOLIET_REF -o /output/" + outputName + " ."
 
 	mounts := map[string]string{
 		workspace: "/workspace",
@@ -362,6 +362,13 @@ func TestJolietSVDComparison(t *testing.T) {
 		t.Fatalf("Failed to read xorriso ISO: %v", err)
 	}
 
+	// Log PVD root LBAs so we can detect shared PVD/SVD root directories
+	goPVD := goISO[16*blocksize : 17*blocksize]
+	xorrisoPVD := xorrisoISO[16*blocksize : 17*blocksize]
+	goPVDRootLBA := binary.LittleEndian.Uint32(goPVD[158:162])
+	xorrisoPVDRootLBA := binary.LittleEndian.Uint32(xorrisoPVD[158:162])
+	t.Logf("PVD root LBAs: go=%d, xorriso=%d", goPVDRootLBA, xorrisoPVDRootLBA)
+
 	// Find SVDs in both ISOs
 	goSVD := findSVD(t, goISO, blocksize)
 	xorrisoSVD := findSVD(t, xorrisoISO, blocksize)
@@ -420,14 +427,11 @@ func TestJolietSVDComparison(t *testing.T) {
 	xorrisoRootDir := readSVDRootDir(t, xorrisoISO, xorrisoSVD, blocksize)
 
 	helloUCS2 := ucs2Encode("hello.txt")
-	t.Logf("looking for UCS-2 bytes: %x", helloUCS2)
-	t.Logf("go-diskfs SVD root dir (%d bytes): %x", len(goRootDir), goRootDir)
-	t.Logf("xorriso SVD root dir (%d bytes): %x", len(xorrisoRootDir), xorrisoRootDir)
 	if !bytes.Contains(goRootDir, helloUCS2) {
-		t.Error("go-diskfs SVD root directory does not contain UCS-2 encoded 'hello.txt'")
+		t.Errorf("go-diskfs SVD root directory does not contain UCS-2 encoded 'hello.txt'\n  looking for: %x\n  root dir (%d bytes): %x", helloUCS2, len(goRootDir), goRootDir)
 	}
 	if !bytes.Contains(xorrisoRootDir, helloUCS2) {
-		t.Error("xorriso SVD root directory does not contain UCS-2 encoded 'hello.txt'")
+		t.Errorf("xorriso SVD root directory does not contain UCS-2 encoded 'hello.txt'\n  looking for: %x\n  root dir (%d bytes): %x", helloUCS2, len(xorrisoRootDir), xorrisoRootDir)
 	}
 }
 
