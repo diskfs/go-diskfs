@@ -53,12 +53,10 @@ func (de *directoryEntry) countNamelenBytes() int {
 		namelen = 1
 	case de.isParent:
 		namelen = 1
+	case de.joliet:
+		namelen = len(ucs2StringToBytes(de.filename))
 	default:
-		if de.joliet {
-			namelen = len(ucs2StringToBytes(de.filename))
-		} else {
-			namelen = len(de.filename)
-		}
+		namelen = len(de.filename)
 	}
 
 	return namelen
@@ -122,30 +120,29 @@ func (de *directoryEntry) toBytes(skipExt bool, ceBlocks []uint32) ([][]byte, er
 		filenameBytes = []byte{0x00}
 	case de.isParent:
 		filenameBytes = []byte{0x01}
+	case de.joliet:
+		filenameBytes = ucs2StringToBytes(de.filename)
 	default:
-		if de.joliet {
-			filenameBytes = ucs2StringToBytes(de.filename)
-		} else {
-			// first validate the filename
-			err = validateFilename(de.filename, de.isSubdirectory, de.filesystem.suspEnabled)
-			if err != nil {
-				nametype := "filename"
-				if de.isSubdirectory {
-					nametype = "directory"
-				}
-				return nil, fmt.Errorf("invalid %s %s: %v", nametype, de.filename, err)
+		// first validate the filename
+		err = validateFilename(de.filename, de.isSubdirectory, de.filesystem.suspEnabled)
+		if err != nil {
+			nametype := "filename"
+			if de.isSubdirectory {
+				nametype = "directory"
 			}
-			filenameBytes, err = stringToASCIIBytes(de.filename)
-			if err != nil {
-				return nil, fmt.Errorf("error converting filename to bytes: %v", err)
-			}
+			return nil, fmt.Errorf("invalid %s %s: %v", nametype, de.filename, err)
+		}
+		filenameBytes, err = stringToASCIIBytes(de.filename)
+		if err != nil {
+			return nil, fmt.Errorf("error converting filename to bytes: %v", err)
 		}
 	}
 
 	// copy it over
 	copy(b[33:], filenameBytes)
 
-	// output directory entry extensions - but only if we did not skip it (Joliet entries never have SUSP)
+	// output directory entry extensions - but only if we did not skip it
+	// Joliet SVD entries don't carry SUSP; Rock Ridge extensions live in the PVD tree only
 	var extBytes [][]byte
 	if !skipExt && !de.joliet {
 		extBytes, err = dirEntryExtensionsToBytes(de.extensions, directoryEntryMaxSize-len(b), de.filesystem.blocksize, ceBlocks)
@@ -256,15 +253,14 @@ func dirEntryFromBytesWithJoliet(b []byte, ext []suspExtension, joliet bool) (*d
 	case namelen == 1 && nameBytes[0] == 0x01:
 		filename = ""
 		isParent = true
+	case joliet:
+		filename = bytesToUCS2String(nameBytes)
 	default:
-		if joliet {
-			filename = bytesToUCS2String(nameBytes)
-		} else {
-			filename = string(nameBytes)
-		}
+		filename = string(nameBytes)
 	}
 
-	// and now for extensions in the system use area (Joliet entries never have SUSP)
+	// and now for extensions in the system use area
+	// Joliet SVD entries don't carry SUSP; Rock Ridge extensions live in the PVD tree only
 	suspFields := make([]directoryEntrySystemUseExtension, 0)
 	if !joliet && len(b) > 33+int(nameLenWithPadding) {
 		var err error

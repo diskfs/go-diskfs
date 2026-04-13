@@ -622,12 +622,12 @@ func (fsm *FileSystem) Finalize(options FinalizeOptions) error {
 	dirs = append(dirs, subdirs...)
 
 	// calculate the sizes and locations of the directories from the flat list and assign blocks
+	// sector layout starting at 16: PVD, terminator, [boot VD], [Joliet SVD], root dir...
+	// each optional volume descriptor takes one sector, pushing root forward
 	rootLocation := uint32(dataStartSector + 2)
-	// if el torito was enabled, use one sector for boot volume entry
 	if options.ElTorito != nil {
 		rootLocation++
 	}
-	// if Joliet was enabled, use one sector for the supplementary volume descriptor
 	if options.Joliet {
 		rootLocation++
 	}
@@ -755,6 +755,8 @@ func (fsm *FileSystem) Finalize(options FinalizeOptions) error {
 	}
 
 	// build Joliet directory tree if enabled
+	// these vars are declared here because they're used across multiple Joliet blocks below
+	// (directory writing, path table writing, and SVD construction)
 	var (
 		jolietDirs            []*Directory
 		jolietPathTableLBytes []byte
