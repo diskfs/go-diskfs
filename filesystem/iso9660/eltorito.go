@@ -59,8 +59,6 @@ type ElTorito struct {
 	HideBootCatalog bool
 	// Entries list of ElToritoEntry boot entries
 	Entries []*ElToritoEntry
-	// Platform supported platform for the very first boot entry
-	Platform Platform
 }
 
 // ElToritoEntry single entry in an el torito boot catalog
@@ -93,9 +91,13 @@ func (e *ElToritoEntry) SetLoadSize(loadSize uint16) {
 }
 
 // generateCatalog generate the el torito boot catalog file
-func (et *ElTorito) generateCatalog() []byte {
+func (et *ElTorito) generateCatalog() ([]byte, error) {
 	b := make([]byte, 0)
-	b = append(b, et.validationEntry()...)
+	veBytes, err := et.validationEntry()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate validation entry: %v", err)
+	}
+	b = append(b, veBytes...)
 	for i, e := range et.Entries {
 		// only subsequent entries have a header, not the first
 		if i != 0 {
@@ -103,13 +105,16 @@ func (et *ElTorito) generateCatalog() []byte {
 		}
 		b = append(b, e.entryBytes()...)
 	}
-	return b
+	return b, nil
 }
 
-func (et *ElTorito) validationEntry() []byte {
+func (et *ElTorito) validationEntry() ([]byte, error) {
 	b := make([]byte, 0x20)
 	b[0] = 1
-	b[1] = byte(et.Platform)
+	if len(et.Entries) == 0 {
+		return nil, fmt.Errorf("validation entry requires at least one entry in the catalog")
+	}
+	b[1] = byte(et.Entries[0].Platform)
 	copy(b[4:0x1c], version.AppName)
 	b[0x1e] = 0x55
 	b[0x1f] = 0xaa
@@ -119,7 +124,7 @@ func (et *ElTorito) validationEntry() []byte {
 		checksum += binary.LittleEndian.Uint16(b[i : i+2])
 	}
 	binary.LittleEndian.PutUint16(b[0x1c:0x1e], -checksum)
-	return b
+	return b, nil
 }
 
 // toHeaderBytes provide header bytes

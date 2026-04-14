@@ -552,7 +552,10 @@ func (fsm *FileSystem) Finalize(options FinalizeOptions) error {
 	)
 
 	if options.ElTorito != nil {
-		bootcat = options.ElTorito.generateCatalog()
+		bootcat, err = options.ElTorito.generateCatalog()
+		if err != nil {
+			return fmt.Errorf("error generating El Torito boot catalog: %v", err)
+		}
 		// figure out where to save it on disk
 		catname := options.ElTorito.BootCatalog
 		switch {
@@ -663,7 +666,10 @@ func (fsm *FileSystem) Finalize(options FinalizeOptions) error {
 
 	// now that we have all of the files with their locations, we can rebuild the boot catalog using the correct data
 	if catEntry != nil {
-		bootcat = options.ElTorito.generateCatalog()
+		bootcat, err = options.ElTorito.generateCatalog()
+		if err != nil {
+			return fmt.Errorf("error generating El Torito boot catalog: %v", err)
+		}
 		catEntry.content = bootcat
 	}
 

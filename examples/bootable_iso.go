@@ -43,6 +43,7 @@ func CreateBootableIso(diskImg string) {
 		Emulation: iso9660.NoEmulation,
 		BootFile:  "isolinux/isolinux.bin",
 		BootTable: true,
+		Platform:  iso9660.BIOS,
 	}
 	biosEntry.SetLoadSize(4)
 
@@ -50,7 +51,6 @@ func CreateBootableIso(diskImg string) {
 		VolumeIdentifier: "my-volume",
 		ElTorito: &iso9660.ElTorito{
 			BootCatalog: "isolinux/boot.cat",
-			Platform:    iso9660.BIOS, // platform for the first boot entry
 			Entries: []*iso9660.ElToritoEntry{
 				biosEntry,
 				{
