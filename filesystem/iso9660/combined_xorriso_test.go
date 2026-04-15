@@ -95,9 +95,8 @@ func TestCombinedRockRidgeJolietElTorito(t *testing.T) {
 		ElTorito: &iso9660.ElTorito{
 			BootCatalog:     "/BOOT.CAT",
 			HideBootCatalog: false,
-			Platform:        iso9660.BIOS,
 			Entries: []*iso9660.ElToritoEntry{
-				{Emulation: iso9660.NoEmulation, BootFile: "/BOOT1.IMG", HideBootFile: true, LoadSegment: 0, SystemType: mbr.Fat32LBA},
+				{Platform: iso9660.BIOS, Emulation: iso9660.NoEmulation, BootFile: "/BOOT1.IMG", HideBootFile: true, LoadSegment: 0, SystemType: mbr.Fat32LBA},
 				{Platform: iso9660.EFI, Emulation: iso9660.NoEmulation, BootFile: "/BOOT2.IMG", HideBootFile: false, LoadSegment: 0, SystemType: mbr.Fat32LBA},
 			},
 		},
