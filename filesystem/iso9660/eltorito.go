@@ -14,6 +14,8 @@ import (
 const (
 	elToritoSector        = 0x11
 	elToritoDefaultBlocks = 4
+	elToritoEmulBlocks    = 1
+	elToritoMaxBlocks     = 0xffff
 )
 
 // Platform target booting system for a bootable iso
@@ -57,8 +59,6 @@ type ElTorito struct {
 	HideBootCatalog bool
 	// Entries list of ElToritoEntry boot entries
 	Entries []*ElToritoEntry
-	// Platform supported platform for the very first boot entry
-	Platform Platform
 }
 
 // ElToritoEntry single entry in an el torito boot catalog
@@ -76,17 +76,28 @@ type ElToritoEntry struct {
 	// filesystem, but inserts it on the fly.
 	BootTable bool
 	// SystemType type of system the partition is, according to the MBR standard
-	SystemType mbr.Type
-	// LoadSize how many blocks of BootFile to load, equivalent to genisoimage option `-boot-load-size`
-	LoadSize uint16
-	size     uint32
-	location uint32
+	SystemType  mbr.Type
+	loadSize    uint16
+	loadSizeSet bool
+	size        uint32
+	location    uint32
+}
+
+// SetLoadSize sets how many 512-byte blocks of BootFile to load, equivalent to
+// genisoimage option `-boot-load-size`. When unset, uses default calculation.
+func (e *ElToritoEntry) SetLoadSize(loadSize uint16) {
+	e.loadSize = loadSize
+	e.loadSizeSet = true
 }
 
 // generateCatalog generate the el torito boot catalog file
-func (et *ElTorito) generateCatalog() []byte {
+func (et *ElTorito) generateCatalog() ([]byte, error) {
 	b := make([]byte, 0)
-	b = append(b, et.validationEntry()...)
+	veBytes, err := et.validationEntry()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate validation entry: %v", err)
+	}
+	b = append(b, veBytes...)
 	for i, e := range et.Entries {
 		// only subsequent entries have a header, not the first
 		if i != 0 {
@@ -94,13 +105,16 @@ func (et *ElTorito) generateCatalog() []byte {
 		}
 		b = append(b, e.entryBytes()...)
 	}
-	return b
+	return b, nil
 }
 
-func (et *ElTorito) validationEntry() []byte {
+func (et *ElTorito) validationEntry() ([]byte, error) {
 	b := make([]byte, 0x20)
 	b[0] = 1
-	b[1] = byte(et.Platform)
+	if len(et.Entries) == 0 {
+		return nil, fmt.Errorf("validation entry requires at least one entry in the catalog")
+	}
+	b[1] = byte(et.Entries[0].Platform)
 	copy(b[4:0x1c], version.AppName)
 	b[0x1e] = 0x55
 	b[0x1f] = 0xaa
@@ -110,7 +124,7 @@ func (et *ElTorito) validationEntry() []byte {
 		checksum += binary.LittleEndian.Uint16(b[i : i+2])
 	}
 	binary.LittleEndian.PutUint16(b[0x1c:0x1e], -checksum)
-	return b
+	return b, nil
 }
 
 // toHeaderBytes provide header bytes
@@ -128,9 +142,21 @@ func (e *ElToritoEntry) headerBytes(last bool, entries uint16) []byte {
 
 // toBytes convert ElToritoEntry to appropriate entry bytes
 func (e *ElToritoEntry) entryBytes() []byte {
-	blocks := e.LoadSize
-	if blocks == 0 {
-		blocks = uint16((e.size + 511) / 512)
+	blocks := e.loadSize
+	if !e.loadSizeSet {
+		actualBlocks := (e.size + 511) / 512
+		switch {
+		case e.Platform == EFI:
+			if actualBlocks > elToritoMaxBlocks {
+				blocks = 0
+			} else {
+				blocks = uint16(actualBlocks)
+			}
+		case e.Emulation == NoEmulation:
+			blocks = elToritoDefaultBlocks
+		default:
+			blocks = elToritoEmulBlocks
+		}
 	}
 	b := make([]byte, 0x20)
 	b[0] = 0x88

@@ -39,18 +39,20 @@ func CreateBootableIso(diskImg string) {
 	// the below assumes that you have the boot files isolinux/isolinux.bin,
 	// isolinux/ldlinux.c32, images/efiboot.img already loaded in the files to
 	// be added to the iso.
+	biosEntry := &iso9660.ElToritoEntry{
+		Emulation: iso9660.NoEmulation,
+		BootFile:  "isolinux/isolinux.bin",
+		BootTable: true,
+		Platform:  iso9660.BIOS,
+	}
+	biosEntry.SetLoadSize(4)
+
 	options := iso9660.FinalizeOptions{
 		VolumeIdentifier: "my-volume",
 		ElTorito: &iso9660.ElTorito{
 			BootCatalog: "isolinux/boot.cat",
-			Platform:    iso9660.BIOS, // platform for the first boot entry
 			Entries: []*iso9660.ElToritoEntry{
-				{
-					Emulation: iso9660.NoEmulation,
-					BootFile:  "isolinux/isolinux.bin",
-					BootTable: true,
-					LoadSize:  4,
-				},
+				biosEntry,
 				{
 					Platform:  iso9660.EFI,
 					Emulation: iso9660.NoEmulation,
