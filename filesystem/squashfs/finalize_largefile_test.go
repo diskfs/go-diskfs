@@ -3,6 +3,7 @@ package squashfs_test
 import (
 	"bytes"
 	"crypto/rand"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -45,17 +46,14 @@ func TestFinalizeLargeFileRegression(t *testing.T) {
 		t.Fatalf("Failed to open a/large.bin: %v", err)
 	}
 	chunk := make([]byte, 1024*1024)
-	for i := 0; i < 1; i++ {
-		if _, err := rand.Read(chunk); err != nil {
-			t.Fatalf("rand.Read: %v", err)
-		}
-		if _, err := large.Write(chunk); err != nil {
-			t.Fatalf("Write large.bin: %v", err)
-		}
+	if _, err := rand.Read(chunk); err != nil {
+		t.Fatalf("rand.Read: %v", err)
+	}
+	if _, err := large.Write(chunk); err != nil {
+		t.Fatalf("Write large.bin: %v", err)
 	}
 	large.Close()
 
-	// Files under b/ that come after the large file in walk order.
 	bFiles := map[string]string{
 		"b/hello.txt":     "hello from b\n",
 		"b/world.txt":     "world from b\n",
@@ -102,7 +100,6 @@ func TestFinalizeLargeFileRegression(t *testing.T) {
 		t.Errorf("missing b/ entries: %v", expected)
 	}
 
-	// Check large file first
 	largeFh, err := fs2.OpenFile("a/large.bin", os.O_RDONLY)
 	if err != nil {
 		t.Fatalf("OpenFile a/large.bin: %v", err)
@@ -131,6 +128,87 @@ func TestFinalizeLargeFileRegression(t *testing.T) {
 	validateLargeFileExtract(t, f)
 }
 
+// TestFinalizeInodesAcrossMetadataBlocks directly reproduces the root cause of
+// issue #360: when compressed inode metadata spans multiple metadata blocks,
+// updateInodeLocations was computing block byte offsets as `logicalBlock * 8194`
+// assuming each compressed block would be exactly 8194 bytes. With actual
+// compression this is wrong — compressed blocks are typically much smaller —
+// so directory entries pointed past the real block positions and readers
+// reported "failed to read inode" for every file past the first metadata block.
+//
+// Enough small files (~600 here) push inodes past the 8KB metadata block
+// boundary, and CompressionLevel: 9 guarantees compression actually reduces
+// block size. Pre-fix, this test fails at i=0 with "could not read directory
+// entries for ." because the root inode itself is past block 0.
+func TestFinalizeInodesAcrossMetadataBlocks(t *testing.T) {
+	f, err := os.CreateTemp("", "squashfs_inode_blocks_*.sqs")
+	if err != nil {
+		t.Fatalf("CreateTemp: %v", err)
+	}
+	defer os.Remove(f.Name())
+
+	b := file.New(f, false)
+	fs, err := squashfs.Create(b, 0, 0, 0)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	const numFiles = 600
+	for i := 0; i < numFiles; i++ {
+		name := fmt.Sprintf("f%04d.txt", i)
+		fh, err := fs.OpenFile(name, os.O_CREATE|os.O_RDWR)
+		if err != nil {
+			t.Fatalf("OpenFile %s: %v", name, err)
+		}
+		if _, err := fh.Write([]byte(fmt.Sprintf("file %d content\n", i))); err != nil {
+			t.Fatalf("Write %s: %v", name, err)
+		}
+		fh.Close()
+	}
+
+	// CompressionLevel 9 guarantees gzip actually compresses — default 0 means
+	// no compression and the bug doesn't reproduce.
+	if err := fs.Finalize(squashfs.FinalizeOptions{
+		Compression: &squashfs.CompressorGzip{CompressionLevel: 9},
+	}); err != nil {
+		t.Fatalf("Finalize: %v", err)
+	}
+
+	fs2, err := squashfs.Read(b, 0, 0, 0)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+
+	failed := 0
+	firstFail := -1
+	for i := 0; i < numFiles; i++ {
+		name := fmt.Sprintf("f%04d.txt", i)
+		fh, err := fs2.OpenFile(name, os.O_RDONLY)
+		if err != nil {
+			if firstFail < 0 {
+				firstFail = i
+				t.Logf("FIRST FAIL at i=%d: OpenFile: %v", i, err)
+			}
+			failed++
+			continue
+		}
+		buf := make([]byte, 100)
+		n, _ := fh.Read(buf)
+		want := fmt.Sprintf("file %d content\n", i)
+		if string(buf[:n]) != want {
+			if firstFail < 0 {
+				firstFail = i
+				t.Logf("FIRST FAIL at i=%d: got %q want %q", i, buf[:n], want)
+			}
+			failed++
+		}
+		fh.Close()
+	}
+	if failed > 0 {
+		t.Errorf("%d of %d files failed (first failure at index %d)", failed, numFiles, firstFail)
+	}
+}
+
 //nolint:thelper // matches the style of validateSquashfs in finalize_test.go
 func validateLargeFileExtract(t *testing.T, f *os.File) {
 	if intImage == "" {
@@ -148,15 +226,12 @@ func validateLargeFileExtract(t *testing.T, f *os.File) {
 		f.Name(): "/file.sqs",
 		outDir:   "/out",
 	}
-	// -f: overwrite existing, -d: dest; container's /out is writable because the
-	// host dir is mounted there.
 	if err := testhelper.DockerRun(nil, output, false, true, mounts, intImage,
 		"sh", "-c", "rm -rf /out/sqs && unsquashfs -d /out/sqs /file.sqs"); err != nil {
 		t.Errorf("unsquashfs extract failed: %v\n%s", err, output.String())
 		return
 	}
 
-	// Verify every file came out.
 	for _, want := range []struct {
 		path    string
 		minSize int64
@@ -168,9 +243,6 @@ func validateLargeFileExtract(t *testing.T, f *os.File) {
 	} {
 		fi, err := os.Stat(filepath.Join(outDir, want.path))
 		if err != nil {
-			// In CI environments, there might be permission issues accessing extracted files
-			// Log the issue but don't fail the test since the core squashfs functionality
-			// was already validated above
 			t.Logf("Warning: could not access extracted file %s: %v (this may be a CI permission issue)", want.path, err)
 			continue
 		}

@@ -222,12 +222,20 @@ func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 		return fmt.Errorf("error updating inodes with final directory data: %v", err)
 	}
 
-	// write the inodes to the file
-	inodesWritten, inodeTableLocation, err := writeInodes(fileList, f, compressor, location)
+	// write the inodes to the file. writeInodes returns the byte offset (relative
+	// to the inode table start) of each metadata block it wrote, so we can fix up
+	// the logical block indices in inodeLocations and directory entries before
+	// writing the directory table.
+	inodesWritten, inodeTableLocation, inodeBlockOffsets, err := writeInodes(fileList, f, compressor, location)
 	if err != nil {
 		return fmt.Errorf("error writing inode data blocks: %v", err)
 	}
 	location += int64(inodesWritten)
+
+	// translate logical block indices into real on-disk byte offsets now that
+	// the actual compressed sizes are known. See updateInodeLocations for why
+	// this is needed — issue #360.
+	translateInodeLocations(fileList, directories, inodeBlockOffsets)
 
 	// write directory data
 	dirsWritten, dirTableLocation, err := writeDirectories(directories, f, compressor, location)
@@ -698,37 +706,42 @@ func writeFragmentBlocks(fileList []*finalizeFileInfo, f backend.WritableFile, w
 	return fragmentBlocks, allWritten, nil
 }
 
-func writeInodes(files []*finalizeFileInfo, f backend.WritableFile, compressor Compressor, location int64) (inodesWritten int, finalLocation uint64, err error) {
+// writeInodes writes the inode metadata table and returns the on-disk byte
+// offset (relative to inodeTableStart) of each metadata block, so callers can
+// translate logical block indices into real byte offsets.
+func writeInodes(files []*finalizeFileInfo, f backend.WritableFile, compressor Compressor, location int64) (inodesWritten int, finalLocation uint64, blockOffsets []int64, err error) {
 	var (
 		buf             []byte
 		maxSize         = int(metadataBlockSize)
 		initialLocation = location
 	)
+	// blockOffsets[i] is the byte offset (from inode table start) of logical
+	// metadata block i. Block 0 always starts at offset 0.
+	blockOffsets = []int64{0}
 	for _, e := range files {
 		// keep writing until we run out, or we hit 8KB
 		buf = append(buf, e.inode.toBytes()...)
 		if len(buf) > maxSize {
 			written, err := writeMetadataBlock(buf[:maxSize], f, compressor, location)
 			if err != nil {
-				return inodesWritten, 0, err
+				return inodesWritten, 0, nil, err
 			}
-			// count all we have written
 			inodesWritten += written
-			// increment for next write
 			location += int64(written)
-			// truncate all except what we wrote
 			buf = buf[maxSize:]
+			// record the byte offset where the NEXT metadata block starts
+			blockOffsets = append(blockOffsets, int64(inodesWritten))
 		}
 	}
 	// was there anything left?
 	if len(buf) > 0 {
 		written, err := writeMetadataBlock(buf, f, compressor, location)
 		if err != nil {
-			return inodesWritten, 0, err
+			return inodesWritten, 0, nil, err
 		}
 		inodesWritten += written
 	}
-	return inodesWritten, uint64(initialLocation), nil
+	return inodesWritten, uint64(initialLocation), blockOffsets, nil
 }
 
 // writeDirectories write all directories out to disk. Assumes it already has been optimized.
@@ -1423,22 +1436,49 @@ func createDirectories(e *finalizeFileInfo) []*finalizeFileInfo {
 	return dirs
 }
 
-// updateInodeLocations update each inode with where it will be on disk
-// i.e. the inode block, and the offset into the block
+// updateInodeLocations assigns each inode a logical metadata-block index plus an
+// offset within that block. The `block` field here is a LOGICAL INDEX (0, 1, 2…),
+// not a byte offset. After writeInodes actually writes and compresses each block,
+// translateInodeLocations converts these indices into on-disk byte offsets.
+//
+// Why: with compression enabled, compressed block sizes vary, so the on-disk
+// offset of metadata block N is not N * (metadataBlockSize + 2). The old code
+// pre-computed a fake byte offset from the logical index and it was wrong
+// whenever compression actually reduced block size — see issue #360.
 func updateInodeLocations(files []*finalizeFileInfo) {
 	var pos int64
-
-	// get block position for each inode
 	for _, f := range files {
 		b := f.inode.toBytes()
-		block, offset := uint32(pos/metadataBlockSize), uint16(pos%metadataBlockSize)
-		blockPos := block * (standardMetadataBlocksize + 2)
 		f.inodeLocation = blockPosition{
-			block:  blockPos,
-			offset: offset,
+			block:  uint32(pos / metadataBlockSize),
+			offset: uint16(pos % metadataBlockSize),
 			size:   len(b),
 		}
 		pos += int64(len(b))
+	}
+}
+
+// translateInodeLocations walks every inode location and every directory entry
+// and replaces its logical block index with the actual byte offset of that
+// metadata block in the inode table, using the offsets recorded by writeInodes.
+func translateInodeLocations(files []*finalizeFileInfo, directories []*finalizeFileInfo, blockOffsets []int64) {
+	translate := func(logical uint32) uint32 {
+		if int(logical) >= len(blockOffsets) {
+			// should not happen, but be defensive — keep the value rather than panic
+			return logical
+		}
+		return uint32(blockOffsets[logical])
+	}
+	for _, f := range files {
+		f.inodeLocation.block = translate(f.inodeLocation.block)
+	}
+	for _, d := range directories {
+		if d.directory == nil {
+			continue
+		}
+		for _, e := range d.directory.entries {
+			e.startBlock = translate(e.startBlock)
+		}
 	}
 }
 
