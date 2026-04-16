@@ -50,7 +50,7 @@ func TestFinalizeInodesAcrossMetadataBlocks(t *testing.T) {
 		if err != nil {
 			t.Fatalf("OpenFile %s: %v", name, err)
 		}
-		if _, err := fh.Write([]byte(fmt.Sprintf("file %d content\n", i))); err != nil {
+		if _, err := fmt.Fprintf(fh, "file %d content\n", i); err != nil {
 			t.Fatalf("Write %s: %v", name, err)
 		}
 		fh.Close()
