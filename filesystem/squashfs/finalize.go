@@ -1461,7 +1461,7 @@ func updateInodeLocations(files []*finalizeFileInfo) {
 // translateInodeLocations walks every inode location and every directory entry
 // and replaces its logical block index with the actual byte offset of that
 // metadata block in the inode table, using the offsets recorded by writeInodes.
-func translateInodeLocations(files []*finalizeFileInfo, directories []*finalizeFileInfo, blockOffsets []int64) {
+func translateInodeLocations(files, directories []*finalizeFileInfo, blockOffsets []int64) {
 	translate := func(logical uint32) uint32 {
 		if int(logical) >= len(blockOffsets) {
 			// should not happen, but be defensive — keep the value rather than panic
