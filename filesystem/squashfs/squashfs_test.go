@@ -867,6 +867,7 @@ func TestCreateAndReadFile(t *testing.T) {
 	if _, err = rw.Write(content); err != nil {
 		t.Fatal(err)
 	}
+	rw.Close() // Ensure data is flushed before finalization
 
 	sqs, ok := fs.(*squashfs.FileSystem)
 	if !ok {
@@ -878,6 +879,11 @@ func TestCreateAndReadFile(t *testing.T) {
 		NoCompressFragments: true,
 	}); err != nil {
 		t.Fatal(err)
+	}
+
+	// Close the writing disk object to release file handles
+	if err := mydisk.Close(); err != nil {
+		t.Logf("Warning: failed to close mydisk: %v", err)
 	}
 
 	di, err := diskfs.Open(initdataImagePath, diskfs.WithSectorSize(4096))
@@ -898,6 +904,13 @@ func TestCreateAndReadFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	f.Close() // Close the file handle to ensure proper cleanup
+
+	// Close disk objects to ensure file handles are released
+	if err := di.Close(); err != nil {
+		t.Logf("Warning: failed to close disk: %v", err)
+	}
+
 	diff, diffString := testhelper.DumpByteSlicesWithDiffs(b, content, 32, false, true, true)
 	if diff {
 		t.Errorf("groupdescriptor.toBytes() mismatched, actual then expected\n%s", diffString)

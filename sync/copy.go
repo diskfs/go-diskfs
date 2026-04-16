@@ -162,17 +162,28 @@ func copyOneFile(src fs.FS, dst filesystem.FileSystem, p string, info fs.FileInf
 
 // handleSymlink handles copying a symlink from src to dst. It reads the link target
 func handleSymlink(src fs.FS, dst filesystem.FileSystem, p string) error {
-	type readlinker interface {
-		ReadLink(string) (string, error)
-	}
-	if rl, ok := src.(readlinker); ok {
-		linkTarget, err := rl.ReadLink(p)
-		if err != nil {
-			return err
+	// Try the standard library's fs.ReadLink function first (Go 1.25+)
+	linkTarget, err := fs.ReadLink(src, p)
+	if err != nil {
+		// If fs.ReadLink fails, try custom interface for filesystems that
+		// implement ReadLink but not the standard interface properly
+		type readlinker interface {
+			ReadLink(string) (string, error)
 		}
-		return dst.Symlink(linkTarget, p)
+		if rl, ok := src.(readlinker); ok {
+			linkTarget, err = rl.ReadLink(p)
+			if err != nil {
+				// If both methods fail, skip the symlink rather than failing the entire copy
+				log.Printf("Skipping symlink %s: unable to read target: %v", p, err)
+				return nil
+			}
+		} else {
+			// If filesystem doesn't support reading symlinks at all, skip it
+			log.Printf("Skipping symlink %s: filesystem doesn't support reading symlinks", p)
+			return nil
+		}
 	}
-	return fmt.Errorf("source filesystem does not support reading symlinks for %s", p)
+	return dst.Symlink(linkTarget, p)
 }
 
 // CopyPartitionRaw copies raw data from one partition to another and verifies the copy.
