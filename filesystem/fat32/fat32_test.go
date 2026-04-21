@@ -537,9 +537,14 @@ func TestFat32Create(t *testing.T) {
 	}{
 		{500, 6000, nil, fmt.Errorf("blocksize for FAT32 must be")},
 		{513, 6000, nil, fmt.Errorf("blocksize for FAT32 must be")},
+		{4095, 6000, nil, fmt.Errorf("blocksize for FAT32 must be")},
+		{4097, 6000, nil, fmt.Errorf("blocksize for FAT32 must be")},
 		{512, fat32.Fat32MaxSize + 100000, nil, fmt.Errorf("requested size is larger than maximum allowed FAT32")},
+		{4096, fat32.Fat32MaxSize + 100000, nil, fmt.Errorf("requested size is larger than maximum allowed FAT32")},
 		{512, 0, nil, fmt.Errorf("requested size is smaller than minimum allowed FAT32")},
+		{4096, 0, nil, fmt.Errorf("requested size is smaller than minimum allowed FAT32")},
 		{512, 10000000, &fat32.FileSystem{}, nil},
+		{4096, 10000000, &fat32.FileSystem{}, nil},
 	}
 	//nolint:thelper // this is not a helper function
 	runTest := func(t *testing.T, pre, post int64) {

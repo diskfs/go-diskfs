@@ -61,9 +61,12 @@ func msDosBootSectorFromBytes(b []byte) (*msDosBootSector, error) {
 }
 
 // ToBytes output a byte slice representing the boot sector
-func (m *msDosBootSector) toBytes() ([]byte, error) {
+func (m *msDosBootSector) toBytes(sectorSize SectorSize) ([]byte, error) {
 	// exactly one sector
-	b := make([]byte, SectorSize512)
+	if sectorSize < SectorSize512 {
+		return nil, fmt.Errorf("sector size is too small: %v", sectorSize)
+	}
+	b := make([]byte, sectorSize)
 
 	// copy the 3-byte jump instruction
 	copy(b[0:3], m.jumpInstruction[:])

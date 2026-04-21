@@ -129,7 +129,10 @@ func TestFsInformationSectorFromBytes(t *testing.T) {
 func TestInformationSectorToBytes(t *testing.T) {
 	t.Run("valid FSInformationSector", func(t *testing.T) {
 		fsis := getValidFSInfoSector()
-		b := fsis.toBytes()
+		b, err := fsis.toBytes(SectorSize512)
+		if err != nil {
+			t.Fatalf("error was not nil, instead %v", err)
+		}
 		if b == nil {
 			t.Fatal("b was nil unexpectedly")
 		}

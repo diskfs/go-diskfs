@@ -141,7 +141,7 @@ func TestMsDosBootSectorToBytes(t *testing.T) {
 		name := "abc"
 		bs := getValidMsDosBootSector()
 		bs.oemName = name
-		b, err := bs.toBytes()
+		b, err := bs.toBytes(SectorSize512)
 		if err != nil {
 			t.Errorf("error was not nil, instead %v", err)
 		}
@@ -160,7 +160,7 @@ func TestMsDosBootSectorToBytes(t *testing.T) {
 	t.Run("long OEM Name", func(t *testing.T) {
 		bs := getValidMsDosBootSector()
 		bs.oemName = "abcdefghijklmnop"
-		b, err := bs.toBytes()
+		b, err := bs.toBytes(SectorSize512)
 		if err == nil {
 			t.Error("error was nil unexpectedly")
 		}
@@ -175,7 +175,7 @@ func TestMsDosBootSectorToBytes(t *testing.T) {
 	t.Run("non-ascii OEM Name", func(t *testing.T) {
 		bs := getValidMsDosBootSector()
 		bs.oemName = "\u0061\u6785"
-		b, err := bs.toBytes()
+		b, err := bs.toBytes(SectorSize512)
 		if err == nil {
 			t.Error("error was nil unexpectedly")
 		}
@@ -190,7 +190,7 @@ func TestMsDosBootSectorToBytes(t *testing.T) {
 	t.Run("short boot code", func(t *testing.T) {
 		bs := getValidMsDosBootSector()
 		bs.bootCode = []byte{0x45, 0x56}
-		b, err := bs.toBytes()
+		b, err := bs.toBytes(SectorSize512)
 		if err != nil {
 			t.Errorf("error was not nil, instead %v", err)
 		}
@@ -212,7 +212,7 @@ func TestMsDosBootSectorToBytes(t *testing.T) {
 		bc := make([]byte, 600)
 		_, _ = rand.Read(bc)
 		bs.bootCode = bc
-		b, err := bs.toBytes()
+		b, err := bs.toBytes(SectorSize512)
 		if err == nil {
 			t.Error("error was nil unexpectedly")
 		}
@@ -226,7 +226,7 @@ func TestMsDosBootSectorToBytes(t *testing.T) {
 	})
 	t.Run("valid Boot Sector", func(t *testing.T) {
 		bs := getValidMsDosBootSector()
-		b, err := bs.toBytes()
+		b, err := bs.toBytes(SectorSize512)
 		if err != nil {
 			t.Errorf("error was not nil, instead %v", err)
 		}

@@ -62,8 +62,11 @@ func fsInformationSectorFromBytes(b []byte) (*FSInformationSector, error) {
 }
 
 // ToBytes returns a FAT32 Filesystem Information Sector ready to be written to disk
-func (fsis *FSInformationSector) toBytes() []byte {
-	b := make([]byte, SectorSize512)
+func (fsis *FSInformationSector) toBytes(sectorSize SectorSize) ([]byte, error) {
+	if sectorSize < SectorSize512 {
+		return nil, fmt.Errorf("sector size is too small: %v", sectorSize)
+	}
+	b := make([]byte, sectorSize)
 
 	// signatures
 	binary.BigEndian.PutUint32(b[0:4], uint32(fsInfoSectorSignatureStart))
@@ -77,5 +80,5 @@ func (fsis *FSInformationSector) toBytes() []byte {
 	binary.LittleEndian.PutUint32(b[488:492], fsis.freeDataClustersCount)
 	binary.LittleEndian.PutUint32(b[492:496], fsis.lastAllocatedCluster)
 
-	return b
+	return b, nil
 }

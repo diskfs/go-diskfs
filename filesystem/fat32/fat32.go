@@ -30,6 +30,7 @@ type SectorSize = fat12.SectorSize
 
 const (
 	SectorSize512        SectorSize = 512
+	SectorSize4096       SectorSize = 4096
 	bytesPerSlot         int        = 32
 	maxCharsLongFilename int        = 13
 )
@@ -76,19 +77,25 @@ func (fs *FileSystem) SetLabel(volumeLabel string) error {
 
 // Create creates a FAT32 filesystem on the given backend.
 func Create(b backend.Storage, size, start, blocksize int64, volumeLabel string, reproducible bool) (*FileSystem, error) {
-	if blocksize != int64(SectorSize512) && blocksize > 0 {
-		return nil, fmt.Errorf("blocksize for FAT32 must be either 512 bytes or 0, not %d", blocksize)
+	// Check writability first so a readonly backend surfaces the plain
+	// backend error rather than a layout/size validation error.
+	if _, err := b.Writable(); err != nil {
+		return nil, err
+	}
+	if blocksize != int64(SectorSize512) && blocksize != int64(SectorSize4096) && blocksize > 0 {
+		return nil, fmt.Errorf("blocksize for FAT32 must be either 512 bytes, 4096 bytes, or 0; not %d", blocksize)
+	}
+	if blocksize == 0 {
+		blocksize = int64(SectorSize512)
 	}
 	if size > Fat32MaxSize {
 		return nil, fmt.Errorf("requested size is larger than maximum allowed FAT32, requested %d, maximum %d", size, Fat32MaxSize)
 	}
-	if size < blocksize*4 {
-		return nil, fmt.Errorf("requested size is smaller than minimum allowed FAT32, requested %d minimum %d", size, blocksize*4)
-	}
-	// Check writability early so callers get the plain backend error, not a
-	// wrapped one (preserves the error message that existing tests expect).
-	if _, err := b.Writable(); err != nil {
-		return nil, err
+	// Reserved area: boot sector at 0, FSInfo at 1, their backups at 6 and 7;
+	// rounded up to 32 so the first FAT begins on a 16 KiB boundary at 512 bps.
+	const reservedSectors = uint16(32)
+	if size < int64(reservedSectors)*blocksize {
+		return nil, fmt.Errorf("requested size is smaller than minimum allowed FAT32, requested %d minimum %d", size, int64(reservedSectors)*blocksize)
 	}
 
 	var volid uint32
@@ -100,25 +107,47 @@ func Create(b backend.Storage, size, start, blocksize int64, volumeLabel string,
 	fsisPrimarySector := uint16(1)
 	backupBootSector := uint16(6)
 
-	var sectorsPerCluster uint8
+	// Cluster size in bytes by volume size. Matches the table used by
+	// dosfstools' mkfs.fat (and Microsoft's format command):
+	var clusterBytes int64
 	switch {
 	case size <= 260*MB:
-		sectorsPerCluster = 1
+		clusterBytes = 512
 	case size <= 8*GB:
-		sectorsPerCluster = 8
+		clusterBytes = 4 * KB
 	case size <= 16*GB:
-		sectorsPerCluster = 32
+		clusterBytes = 8 * KB
 	case size <= 32*GB:
-		sectorsPerCluster = 64
-	case size <= Fat32MaxSize:
-		sectorsPerCluster = 128
+		clusterBytes = 16 * KB
+	default:
+		clusterBytes = 32 * KB
+	}
+	sectorsPerCluster := uint8(clusterBytes / blocksize)
+	// For small sizes, clusterBytes < blocksize and the integer division yields 0; clamp to 1.
+	if sectorsPerCluster == 0 {
+		sectorsPerCluster = 1
 	}
 
-	totalSectors := uint32(size / int64(SectorSize512))
-	reservedSectors := uint16(32)
-	dataSectors := totalSectors - uint32(reservedSectors)
-	totalClusters := dataSectors / uint32(sectorsPerCluster)
-	sectorsPerFat := uint16(totalClusters / 128)
+	totalSectors := uint32(size / blocksize)
+	// Closed-form equivalent of the dosfstools mkfs.fat sectors-per-FAT search:
+	// smallest X such that (reserved + 2X + clusters*SPC) == totalSectors and
+	// X * (bytesPerSector/4) >= clusters + 2.
+	fatEntryDenom := uint32(blocksize)*uint32(sectorsPerCluster) + 8
+	sectorsPerFat := uint16((4*(totalSectors-uint32(reservedSectors)) + fatEntryDenom - 1) / fatEntryDenom)
+
+	// The layout must yield at least one cluster and leave at least 32 KiB
+	// of data area beyond the reserved sectors and FATs (matches mkfs.fat checks).
+	dataSectors := int64(totalSectors) - int64(reservedSectors) - 2*int64(sectorsPerFat)
+	if dataSectors <= 0 {
+		return nil, fmt.Errorf("requested size %d leaves no room for data after %d reserved sectors and 2x%d-sector FATs", size, reservedSectors, sectorsPerFat)
+	}
+	clusterCount := uint32(dataSectors / int64(sectorsPerCluster))
+	if clusterCount == 0 {
+		return nil, fmt.Errorf("requested size %d yields zero data clusters", size)
+	}
+	if dataSectors*blocksize < 32*KB {
+		return nil, fmt.Errorf("requested size %d leaves only %d bytes of data area; >= 32 KiB required", size, dataSectors*blocksize)
+	}
 	mediaType := uint8(MediaFixedDisk)
 
 	fatIDbase := uint32(0x0f << 24)
@@ -130,7 +159,7 @@ func Create(b backend.Storage, size, start, blocksize int64, volumeLabel string,
 		FatCount:             2,
 		TotalSectors:         0,
 		MediaType:            mediaType,
-		BytesPerSector:       SectorSize512,
+		BytesPerSector:       SectorSize(blocksize),
 		RootDirectoryEntries: 0,
 		SectorsPerFat:        0,
 	}
@@ -164,8 +193,8 @@ func Create(b backend.Storage, size, start, blocksize int64, volumeLabel string,
 	}
 
 	eocMarker := uint32(0x0fffffff)
-	fatPrimaryStart := uint64(reservedSectors) * uint64(SectorSize512)
-	fatSize := uint32(sectorsPerFat) * uint32(SectorSize512)
+	fatPrimaryStart := uint64(reservedSectors) * uint64(blocksize)
+	fatSize := uint32(sectorsPerFat) * uint32(blocksize)
 	fatSecondaryStart := fatPrimaryStart + uint64(fatSize)
 	maxCluster := fatSize / 4
 	rootDirCluster := uint32(2)
@@ -182,7 +211,7 @@ func Create(b backend.Storage, size, start, blocksize int64, volumeLabel string,
 	}
 
 	dataStart := uint32(fatSecondaryStart) + fatSize
-	bytesPerCluster := int(sectorsPerCluster) * int(SectorSize512)
+	bytesPerCluster := int(sectorsPerCluster) * int(blocksize)
 
 	// Build the base fat12.FileSystem (nil bpb — FAT32 manages its own boot sector).
 	base := fat12.NewFileSystem(b, nil, fat,
@@ -236,7 +265,7 @@ func Create(b backend.Storage, size, start, blocksize int64, volumeLabel string,
 
 // Read reads a FAT32 filesystem from the backend.
 func Read(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) {
-	if blocksize != 0 && blocksize != int64(SectorSize512) && blocksize != 4096 {
+	if blocksize != 0 && blocksize != int64(SectorSize512) && blocksize != int64(SectorSize4096) {
 		return nil, fmt.Errorf("blocksize for FAT32 must be 0, 512, or 4096 bytes, not %d", blocksize)
 	}
 	if size > Fat32MaxSize {
@@ -246,7 +275,7 @@ func Read(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) 
 		return nil, fmt.Errorf("requested size is smaller than minimum allowed FAT32 size %d", blocksize*4)
 	}
 
-	maxSectorSize := 4096
+	maxSectorSize := int64(SectorSize4096)
 	bsb := make([]byte, maxSectorSize)
 	n, err := b.ReadAt(bsb, start)
 	if err != nil {
@@ -323,7 +352,9 @@ func (fs *FileSystem) writeBootSector() error {
 		bootCode:           []byte{},
 		biosParameterBlock: fs.bpbFat32,
 	}
-	b, err := bs.toBytes()
+	bpb := fs.bpbFat32
+	bps := int64(bpb.Dos331BPB.Dos20BPB.BytesPerSector)
+	b, err := bs.toBytes(SectorSize(bps))
 	if err != nil {
 		return fmt.Errorf("error converting MS-DOS Boot Sector to bytes: %w", err)
 	}
@@ -331,18 +362,17 @@ func (fs *FileSystem) writeBootSector() error {
 	if err != nil {
 		return fmt.Errorf("error writing MS-DOS Boot Sector to disk: %w", err)
 	}
-	if count != int(SectorSize512) {
-		return fmt.Errorf("wrote %d bytes of MS-DOS Boot Sector instead of expected %d", count, SectorSize512)
+	if count != len(b) {
+		return fmt.Errorf("wrote %d bytes of MS-DOS Boot Sector instead of expected %d", count, len(b))
 	}
 	if fs.bpbFat32.backupBootSector > 0 {
-		bps := int64(fs.bpbFat32.Dos331BPB.Dos20BPB.BytesPerSector)
 		count, err = writableFile.WriteAt(b,
 			int64(fs.bpbFat32.backupBootSector)*bps+fs.Start())
 		if err != nil {
 			return fmt.Errorf("error writing backup MS-DOS Boot Sector to disk: %w", err)
 		}
-		if count != int(SectorSize512) {
-			return fmt.Errorf("wrote %d bytes of backup MS-DOS Boot Sector instead of expected %d", count, SectorSize512)
+		if count != len(b) {
+			return fmt.Errorf("wrote %d bytes of backup MS-DOS Boot Sector instead of expected %d", count, len(b))
 		}
 	}
 	return nil
@@ -356,7 +386,10 @@ func (fs *FileSystem) writeFsis() error {
 	bps := int64(bpb.Dos331BPB.Dos20BPB.BytesPerSector)
 	fsisPrimary := int64(bpb.fsInformationSector) * bps
 
-	fsisBytes := fs.fsis.toBytes()
+	fsisBytes, err := fs.fsis.toBytes(SectorSize(bps))
+	if err != nil {
+		return fmt.Errorf("error converting FSInfo sector to bytes: %w", err)
+	}
 	writableFile, err := fs.Backend().Writable()
 	if err != nil {
 		return err
