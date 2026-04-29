@@ -110,7 +110,7 @@ func tableFromBytes(b []byte) (*Table, error) {
 
 func readPartitionTableUUID(b []byte) string {
 	ptUUID := b[partitionTableUUIDStart:partitionTableUUIDEnd]
-	return fmt.Sprintf("%x", binary.LittleEndian.Uint32(ptUUID))
+	return fmt.Sprintf("%08x", binary.LittleEndian.Uint32(ptUUID))
 }
 
 // UUID returns the partition table UUID used to identify disks
