@@ -280,6 +280,27 @@ func TestParsePrimaryVolumeDescriptor(t *testing.T) {
 		t.Log(diff)
 	}
 }
+func TestParsePrimaryVolumeDescriptorNullTimestamps(t *testing.T) {
+	validPvd, validBytes, err := get9660PrimaryVolumeDescriptor()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	nullBytes := []byte{48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 0}
+	dateLocations := []int{813, 830, 847, 864}
+	for _, loc := range dateLocations {
+		copy(validBytes[loc:loc+17], nullBytes)
+	}
+
+	pvd, err := parsePrimaryVolumeDescriptor(validBytes)
+	if err != nil {
+		t.Fatalf("error parsing primary volume descriptor with null timestamps: %v", err)
+	}
+	if diff := comparePrimaryVolumeDescriptorsIgnoreDates(pvd, validPvd); diff != nil {
+		t.Errorf("Mismatched primary volume descriptor, actual vs expected")
+		t.Log(diff)
+	}
+}
 func TestPrimaryVolumeDescriptorType(t *testing.T) {
 	pvd := &primaryVolumeDescriptor{}
 	if pvd.Type() != volumeDescriptorPrimary {

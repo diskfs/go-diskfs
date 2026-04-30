@@ -223,19 +223,26 @@ func volumeDescriptorFromBytes(b []byte) (volumeDescriptor, error) {
 func parsePrimaryVolumeDescriptor(b []byte) (*primaryVolumeDescriptor, error) {
 	blocksize := binary.LittleEndian.Uint16(b[128:130])
 
-	creation, err := decBytesToTime(b[813 : 813+17])
-	if err != nil {
-		return nil, fmt.Errorf("unable to convert creation date/time from bytes: %v", err)
-	}
-	modification, err := decBytesToTime(b[830 : 830+17])
-	if err != nil {
-		return nil, fmt.Errorf("unable to convert modification date/time from bytes: %v", err)
-	}
 	// expiration can be never
 	nullBytes := []byte{48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 0}
-	var expiration, effective time.Time
+	var err error
+	var creation, modification, expiration, effective time.Time
+	creationBytes := b[813 : 813+17]
+	modificationBytes := b[830 : 830+17]
 	expirationBytes := b[847 : 847+17]
 	effectiveBytes := b[864 : 864+17]
+	if !bytes.Equal(creationBytes, nullBytes) {
+		creation, err = decBytesToTime(creationBytes)
+		if err != nil {
+			return nil, fmt.Errorf("unable to convert creation date/time from bytes: %v", err)
+		}
+	}
+	if !bytes.Equal(modificationBytes, nullBytes) {
+		modification, err = decBytesToTime(modificationBytes)
+		if err != nil {
+			return nil, fmt.Errorf("unable to convert modification date/time from bytes: %v", err)
+		}
+	}
 	if !bytes.Equal(expirationBytes, nullBytes) {
 		expiration, err = decBytesToTime(expirationBytes)
 		if err != nil {
@@ -324,19 +331,26 @@ func parseSupplementaryVolumeDescriptor(b []byte) (*supplementaryVolumeDescripto
 	volumesize := binary.LittleEndian.Uint32(b[80:84])
 	volumesizeBytes := uint64(blocksize) * uint64(volumesize)
 
-	creation, err := decBytesToTime(b[813 : 813+17])
-	if err != nil {
-		return nil, fmt.Errorf("unable to convert creation date/time from bytes: %v", err)
-	}
-	modification, err := decBytesToTime(b[830 : 830+17])
-	if err != nil {
-		return nil, fmt.Errorf("unable to convert modification date/time from bytes: %v", err)
-	}
 	// expiration can be never
 	nullBytes := []byte{48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 0}
-	var expiration, effective time.Time
+	var err error
+	var creation, modification, expiration, effective time.Time
+	creationBytes := b[813 : 813+17]
+	modificationBytes := b[830 : 830+17]
 	expirationBytes := b[847 : 847+17]
 	effectiveBytes := b[864 : 864+17]
+	if !bytes.Equal(creationBytes, nullBytes) {
+		creation, err = decBytesToTime(creationBytes)
+		if err != nil {
+			return nil, fmt.Errorf("unable to convert creation date/time from bytes: %v", err)
+		}
+	}
+	if !bytes.Equal(modificationBytes, nullBytes) {
+		modification, err = decBytesToTime(modificationBytes)
+		if err != nil {
+			return nil, fmt.Errorf("unable to convert modification date/time from bytes: %v", err)
+		}
+	}
 	if !bytes.Equal(expirationBytes, nullBytes) {
 		expiration, err = decBytesToTime(expirationBytes)
 		if err != nil {
