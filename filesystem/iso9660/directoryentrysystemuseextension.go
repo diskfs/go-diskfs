@@ -511,7 +511,7 @@ func parseDirectoryEntryExtensions(b []byte, handlers []suspExtension) ([]direct
 	entries := make([]directoryEntrySystemUseExtension, 0)
 	lastEntryBySignature := map[string]directoryEntrySystemUseExtension{}
 	// minimum size of 4 bytes for any SUSP entry
-	for i := 0; i+4 < len(b); {
+	for i := 0; i+3 < len(b); {
 		// get the indicator
 		signature := string(b[i : i+2])
 		size := b[i+2]
