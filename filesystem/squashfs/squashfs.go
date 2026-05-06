@@ -284,7 +284,7 @@ func (fs *FileSystem) Mkdir(p string) error {
 	if fs.workspace == "" {
 		return filesystem.ErrReadonlyFilesystem
 	}
-	err := os.MkdirAll(path.Join(fs.workspace, p), 0o755)
+	err := os.MkdirAll(workspacePath(fs.workspace, p), 0o755)
 	if err != nil {
 		return fmt.Errorf("could not create directory %s: %v", p, err)
 	}
@@ -329,7 +329,7 @@ func (fs *FileSystem) Chmod(name string, mode os.FileMode) error {
 		return filesystem.ErrReadonlyFilesystem
 	}
 
-	return os.Chmod(path.Join(fs.workspace, name), mode)
+	return os.Chmod(workspacePath(fs.workspace, name), mode)
 }
 
 // Chown changes the numeric uid and gid of the named file. If the file is a symbolic link,
@@ -362,7 +362,7 @@ func (fs *FileSystem) ReadDir(p string) ([]iofs.DirEntry, error) {
 	// non-workspace: read from squashfs
 	// workspace: read from regular filesystem
 	if fs.workspace != "" {
-		fullPath := path.Join(fs.workspace, p)
+		fullPath := workspacePath(fs.workspace, p)
 		// read the entries
 		dirEntries, err := os.ReadDir(fullPath)
 		if err != nil {
@@ -457,7 +457,7 @@ func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 			return nil, err
 		}
 	} else {
-		f, err = os.OpenFile(path.Join(fs.workspace, p), flag, 0o644)
+		f, err = os.OpenFile(workspacePath(fs.workspace, p), flag, 0o644)
 		if err != nil {
 			return nil, fmt.Errorf("target file %s does not exist: %v", p, err)
 		}
@@ -481,14 +481,14 @@ func (fs *FileSystem) Rename(oldpath, newpath string) error {
 	if fs.workspace == "" {
 		return filesystem.ErrReadonlyFilesystem
 	}
-	return os.Rename(path.Join(fs.workspace, oldpath), path.Join(fs.workspace, newpath))
+	return os.Rename(workspacePath(fs.workspace, oldpath), workspacePath(fs.workspace, newpath))
 }
 
 func (fs *FileSystem) Remove(p string) error {
 	if fs.workspace == "" {
 		return filesystem.ErrReadonlyFilesystem
 	}
-	return os.Remove(path.Join(fs.workspace, p))
+	return os.Remove(workspacePath(fs.workspace, p))
 }
 
 // Stat returns a FileInfo describing the file.
