@@ -445,6 +445,8 @@ func walkTree(workspace string) ([]*finalizeFileInfo, error) {
 		fp = strings.TrimPrefix(fp, string(filepath.Separator))
 		if fp == "" {
 			fp = "."
+		} else {
+			fp = filepath.ToSlash(fp)
 		}
 		isRoot := fp == "."
 		name := d.Name()
@@ -503,7 +505,7 @@ func walkTree(workspace string) ([]*finalizeFileInfo, error) {
 		}
 
 		// we will have to save it as its parent
-		parentDir := filepath.Dir(fp)
+		parentDir := path.Dir(fp)
 		parentDirInfo := dirMap[parentDir]
 
 		if fi.IsDir() {
@@ -539,7 +541,7 @@ func getTableIdx(m map[uint32]uint16, index uint32) uint16 {
 }
 
 func writeFileDataBlocks(e *finalizeFileInfo, to backend.WritableFile, ws string, startBlock uint64, blocksize int, compressor Compressor, location int64) (blockCount, compressed int, err error) {
-	from, err := os.Open(path.Join(ws, e.path))
+	from, err := os.Open(workspacePath(ws, e.path))
 	if err != nil {
 		return 0, 0, fmt.Errorf("failed to open file for reading %s: %v", e.path, err)
 	}
@@ -667,7 +669,7 @@ func writeFragmentBlocks(fileList []*finalizeFileInfo, f backend.WritableFile, w
 		}
 		// save the fragment data from the file
 
-		from, err := os.Open(path.Join(ws, e.path))
+		from, err := os.Open(workspacePath(ws, e.path))
 		if err != nil {
 			return fragmentBlocks, 0, fmt.Errorf("failed to open file for reading %s: %v", e.path, err)
 		}
