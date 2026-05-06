@@ -314,6 +314,39 @@ func TestSquashfsOpenFile(t *testing.T) {
 	})
 }
 
+func TestSquashfsStatRoot(t *testing.T) {
+	t.Run("read-only", func(t *testing.T) {
+		fs, err := getValidSquashfsFSReadOnly()
+		if err != nil {
+			t.Fatalf("Failed to get read-only squashfs filesystem: %v", err)
+		}
+		fi, err := fs.Stat(".")
+		if err != nil {
+			t.Fatalf("Stat(.) unexpected error: %v", err)
+		}
+		if !fi.IsDir() {
+			t.Fatalf("Stat(.) returned non-directory file info")
+		}
+		if fi.Name() != "." {
+			t.Fatalf("Stat(.) name = %q, expected %q", fi.Name(), ".")
+		}
+	})
+
+	t.Run("workspace", func(t *testing.T) {
+		fs, err := getValidSquashfsFSWorkspace()
+		if err != nil {
+			t.Fatalf("Failed to get workspace: %v", err)
+		}
+		fi, err := fs.Stat(".")
+		if err != nil {
+			t.Fatalf("Stat(.) unexpected error: %v", err)
+		}
+		if !fi.IsDir() {
+			t.Fatalf("Stat(.) returned non-directory file info")
+		}
+	})
+}
+
 // Test the Open method on the directory entry
 func TestSquashfsOpen(t *testing.T) {
 	fs, err := getValidSquashfsFSReadOnly()

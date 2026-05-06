@@ -420,11 +420,9 @@ func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 
 		// what if we asked for root?
 		if dir == filename && filename == "." {
-			targetEntry = &directoryEntry{
-				fs:             fs,
-				inode:          fs.rootDir,
-				isSubdirectory: true,
-				name:           ".",
+			targetEntry, err = fs.directoryEntryFromInode(".", fs.rootDir, true)
+			if err != nil {
+				return nil, fmt.Errorf("could not read root directory info: %v", err)
 			}
 		} else {
 			// get the directory entries
@@ -493,6 +491,15 @@ func (fs *FileSystem) Remove(p string) error {
 
 // Stat returns a FileInfo describing the file.
 func (fs *FileSystem) Stat(name string) (iofs.FileInfo, error) {
+	if err := validatePath(name); err != nil {
+		return nil, err
+	}
+	if name == "." {
+		if fs.workspace != "" {
+			return os.Stat(workspacePath(fs.workspace, name))
+		}
+		return fs.directoryEntryFromInode(".", fs.rootDir, true)
+	}
 	dir := path.Dir(name)
 	basename := path.Base(name)
 	des, err := fs.ReadDir(dir)
@@ -595,29 +602,38 @@ func (fs *FileSystem) hydrateDirectoryEntries(entries []*directoryEntryRaw) ([]*
 		if err != nil {
 			return nil, fmt.Errorf("error finding inode for %s: %v", e.name, err)
 		}
-		body, header := in.getBody(), in.getHeader()
-		xattrIndex, has := body.xattrIndex()
-		xattrs := map[string]string{}
-		if has {
-			xattrs, err = fs.xattrs.find(int(xattrIndex))
-			if err != nil {
-				return nil, fmt.Errorf("error reading xattrs for %s: %v", e.name, err)
-			}
+		entry, err := fs.directoryEntryFromInode(e.name, in, e.isSubdirectory)
+		if err != nil {
+			return nil, err
 		}
-		fullEntries = append(fullEntries, &directoryEntry{
-			fs:             fs,
-			isSubdirectory: e.isSubdirectory,
-			name:           e.name,
-			size:           body.size(),
-			modTime:        header.modTime,
-			mode:           header.mode,
-			inode:          in,
-			uid:            fs.uidsGids[header.uidIdx],
-			gid:            fs.uidsGids[header.gidIdx],
-			xattrs:         xattrs,
-		})
+		fullEntries = append(fullEntries, entry)
 	}
 	return fullEntries, nil
+}
+
+func (fs *FileSystem) directoryEntryFromInode(name string, in inode, isSubdirectory bool) (*directoryEntry, error) {
+	body, header := in.getBody(), in.getHeader()
+	xattrIndex, has := body.xattrIndex()
+	xattrs := map[string]string{}
+	if has {
+		var err error
+		xattrs, err = fs.xattrs.find(int(xattrIndex))
+		if err != nil {
+			return nil, fmt.Errorf("error reading xattrs for %s: %v", name, err)
+		}
+	}
+	return &directoryEntry{
+		fs:             fs,
+		isSubdirectory: isSubdirectory,
+		name:           name,
+		size:           body.size(),
+		modTime:        header.modTime,
+		mode:           header.mode,
+		inode:          in,
+		uid:            fs.uidsGids[header.uidIdx],
+		gid:            fs.uidsGids[header.gidIdx],
+		xattrs:         xattrs,
+	}, nil
 }
 
 // getInode read a single inode, given the block offset, and the offset in the
