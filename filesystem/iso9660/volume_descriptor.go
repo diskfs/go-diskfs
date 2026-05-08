@@ -372,8 +372,8 @@ func parseSupplementaryVolumeDescriptor(b []byte) (*supplementaryVolumeDescripto
 
 	return &supplementaryVolumeDescriptor{
 		volumeFlags:                b[7],
-		systemIdentifier:           string(b[8:40]),
-		volumeIdentifier:           string(b[40:72]),
+		systemIdentifier:           bytesToUCS2String(b[8:40]),
+		volumeIdentifier:           bytesToUCS2String(b[40:72]),
 		volumeSize:                 volumesizeBytes,
 		escapeSequences:            append([]byte{}, b[88:120]...),
 		setSize:                    binary.LittleEndian.Uint16(b[120:122]),
@@ -408,8 +408,8 @@ func (v *supplementaryVolumeDescriptor) toBytes() []byte {
 	b := volumeDescriptorFirstBytes(volumeDescriptorSupplementary)
 
 	b[7] = v.volumeFlags
-	copy(b[8:40], v.systemIdentifier)
-	copy(b[40:72], v.volumeIdentifier)
+	copy(b[8:40], ucs2StringToBytes(v.systemIdentifier))
+	copy(b[40:72], ucs2StringToBytes(v.volumeIdentifier))
 	blockcount := uint32(v.volumeSize / uint64(v.blocksize))
 	binary.LittleEndian.PutUint32(b[80:84], blockcount)
 	binary.BigEndian.PutUint32(b[84:88], blockcount)
