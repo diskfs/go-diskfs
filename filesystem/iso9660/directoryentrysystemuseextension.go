@@ -515,6 +515,9 @@ func parseDirectoryEntryExtensions(b []byte, handlers []suspExtension) ([]direct
 		// get the indicator
 		signature := string(b[i : i+2])
 		size := b[i+2]
+		if size < 4 {
+			break
+		}
 		suspBytes := b[i : i+int(size)]
 		var (
 			entry directoryEntrySystemUseExtension
