@@ -138,10 +138,11 @@ func (pt *pathTable) toJolietMBytes() []byte {
 }
 
 // jolietPathTableName returns the UCS-2 encoded name for a path table entry.
-// The root entry (single byte 0x01) stays as-is; all others are UCS-2 encoded.
+// The root entry (single byte 0x00 per ECMA-119 (6th ed.) Annex C.4.6 a)
+// stays as-is; all others are UCS-2 encoded.
 func jolietPathTableName(dirname string) []byte {
-	if len(dirname) == 1 && dirname[0] == 0x01 {
-		return []byte{0x01}
+	if len(dirname) == 1 && dirname[0] == 0x00 {
+		return []byte{0x00}
 	}
 	return ucs2StringToBytes(dirname)
 }
@@ -230,7 +231,7 @@ func parseJolietPathTable(b []byte) *pathTable {
 		nameBytes := b[i+8 : i+8+int(nameSize)]
 		var name string
 		if nameSize == 1 {
-			name = string(nameBytes) // root entry (0x01)
+			name = string(nameBytes) // root entry: single (00) byte per ECMA-119 (6th ed.) Annex C.4.6 a)
 		} else {
 			name = bytesToUCS2String(nameBytes)
 		}

@@ -370,12 +370,24 @@ func parseSupplementaryVolumeDescriptor(b []byte) (*supplementaryVolumeDescripto
 		return nil, fmt.Errorf("unable to read root directory entry: %v", err)
 	}
 
+	// Joliet SVDs encode systemIdentifier and volumeIdentifier as UCS-2 BE;
+	// other SVDs store them as a1-/d1-characters. The rest of the identifier
+	// fields below have always been treated as UCS-2 in this package, so they
+	// are left as-is for backwards compatibility.
+	escapeSequences := append([]byte{}, b[88:120]...)
+	systemIdentifier := string(b[8:40])
+	volumeIdentifier := string(b[40:72])
+	if isJolietEscapeSequence(escapeSequences) {
+		systemIdentifier = bytesToUCS2String(b[8:40])
+		volumeIdentifier = bytesToUCS2String(b[40:72])
+	}
+
 	return &supplementaryVolumeDescriptor{
 		volumeFlags:                b[7],
-		systemIdentifier:           string(b[8:40]),
-		volumeIdentifier:           string(b[40:72]),
+		systemIdentifier:           systemIdentifier,
+		volumeIdentifier:           volumeIdentifier,
 		volumeSize:                 volumesizeBytes,
-		escapeSequences:            append([]byte{}, b[88:120]...),
+		escapeSequences:            escapeSequences,
 		setSize:                    binary.LittleEndian.Uint16(b[120:122]),
 		sequenceNumber:             binary.LittleEndian.Uint16(b[124:126]),
 		blocksize:                  blocksize,
@@ -408,8 +420,13 @@ func (v *supplementaryVolumeDescriptor) toBytes() []byte {
 	b := volumeDescriptorFirstBytes(volumeDescriptorSupplementary)
 
 	b[7] = v.volumeFlags
-	copy(b[8:40], v.systemIdentifier)
-	copy(b[40:72], v.volumeIdentifier)
+	if isJolietSVD(v) {
+		copy(b[8:40], ucs2StringToBytes(v.systemIdentifier))
+		copy(b[40:72], ucs2StringToBytes(v.volumeIdentifier))
+	} else {
+		copy(b[8:40], v.systemIdentifier)
+		copy(b[40:72], v.volumeIdentifier)
+	}
 	blockcount := uint32(v.volumeSize / uint64(v.blocksize))
 	binary.LittleEndian.PutUint32(b[80:84], blockcount)
 	binary.BigEndian.PutUint32(b[84:88], blockcount)
@@ -451,16 +468,25 @@ func (v *supplementaryVolumeDescriptor) toBytes() []byte {
 	return b
 }
 
+// isJolietEscapeSequence reports whether the given escape sequence bytes
+// indicate a Joliet SVD (UCS-2 Level 1, 2, or 3).
+func isJolietEscapeSequence(seq []byte) bool {
+	if len(seq) < 3 {
+		return false
+	}
+	head := seq[:3]
+	return bytes.Equal(head, []byte{0x25, 0x2F, 0x40}) || // Level 1
+		bytes.Equal(head, []byte{0x25, 0x2F, 0x43}) || // Level 2
+		bytes.Equal(head, []byte{0x25, 0x2F, 0x45}) // Level 3
+}
+
 // isJolietSVD returns true if the supplementary volume descriptor contains
 // Joliet escape sequences (UCS-2 Level 1, 2, or 3).
 func isJolietSVD(svd *supplementaryVolumeDescriptor) bool {
-	if svd == nil || len(svd.escapeSequences) < 3 {
+	if svd == nil {
 		return false
 	}
-	seq := svd.escapeSequences[:3]
-	return bytes.Equal(seq, []byte{0x25, 0x2F, 0x40}) || // Level 1
-		bytes.Equal(seq, []byte{0x25, 0x2F, 0x43}) || // Level 2
-		bytes.Equal(seq, []byte{0x25, 0x2F, 0x45}) // Level 3
+	return isJolietEscapeSequence(svd.escapeSequences)
 }
 
 // partitionVolumeDescriptor

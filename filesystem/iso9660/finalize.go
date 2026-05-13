@@ -1172,10 +1172,13 @@ func createJolietPathTable(dirs []*finalizeFileInfo, jolietLocations []uint32) *
 	indexMap := make(map[*finalizeFileInfo]int)
 	entries := make([]*pathTableEntry, 0, len(fis))
 	for i, e := range fis {
-		// root uses 0x01, others use original name
+		// Per ECMA-119 (6th ed.) Annex C.4.6 a) the root directory identifier
+		// in the path table is a single (00) byte even for the Joliet SVD.
+		// Other entries keep their original (UCS-2-encoded-on-disk) name so
+		// that lookups like readDirectoryJoliet("SubDir") can match.
 		var name string
 		if e.isRoot {
-			name = string([]byte{0x01})
+			name = "\x00"
 		} else {
 			name = e.name
 		}
