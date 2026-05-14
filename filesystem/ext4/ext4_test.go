@@ -808,3 +808,104 @@ func TestChown(t *testing.T) {
 		}
 	})
 }
+
+func TestStatSysInodeMetadata(t *testing.T) {
+	f, err := os.Open(imgFile)
+	if err != nil {
+		t.Fatalf("Error opening test image: %v", err)
+	}
+	defer f.Close()
+
+	b := file.New(f, true)
+	fs, err := Read(b, 100*MB, 0, 512)
+	if err != nil {
+		t.Fatalf("Error reading filesystem: %v", err)
+	}
+
+	tests := []struct {
+		name string
+		path string
+	}{
+		{"regular file", "/random.dat"},
+		{"directory", "/foo"},
+		{"root", "/"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fi, err := fs.Stat(tt.path)
+			if err != nil {
+				t.Fatalf("Stat failed: %v", err)
+			}
+			sys := fi.Sys()
+			if sys == nil {
+				t.Fatalf("Sys() returned nil")
+			}
+			stat, ok := sys.(*StatT)
+			if !ok {
+				t.Fatalf("Sys() did not return *StatT, got %T", sys)
+			}
+			if stat.Ino == 0 {
+				t.Errorf("expected non-zero inode number, got 0")
+			}
+			if stat.Nlink == 0 {
+				t.Errorf("expected non-zero hardlink count, got 0")
+			}
+			// modify time on FileInfo should match the inode-derived value through Stat
+			if fi.ModTime().IsZero() {
+				t.Errorf("ModTime is zero")
+			}
+			// timestamps must be plausible: not zero, and not absurdly in the future
+			if stat.AccessTime.IsZero() {
+				t.Errorf("AccessTime is zero")
+			}
+			if stat.ChangeTime.IsZero() {
+				t.Errorf("ChangeTime is zero")
+			}
+			upper := time.Now().AddDate(100, 0, 0)
+			lower := time.Date(1990, 1, 1, 0, 0, 0, 0, time.UTC)
+			if stat.AccessTime.After(upper) || stat.AccessTime.Before(lower) {
+				t.Errorf("AccessTime %v outside plausible range", stat.AccessTime)
+			}
+			if stat.ChangeTime.After(upper) || stat.ChangeTime.Before(lower) {
+				t.Errorf("ChangeTime %v outside plausible range", stat.ChangeTime)
+			}
+			// Confirm Stat returns stable values across repeated calls.
+			fi2, err := fs.Stat(tt.path)
+			if err != nil {
+				t.Fatalf("second Stat failed: %v", err)
+			}
+			stat2, ok := fi2.Sys().(*StatT)
+			if !ok {
+				t.Fatalf("second Sys() did not return *StatT")
+			}
+			if stat.UID != stat2.UID || stat.GID != stat2.GID {
+				t.Errorf("UID/GID not stable: %d:%d vs %d:%d", stat.UID, stat.GID, stat2.UID, stat2.GID)
+			}
+			if stat.Ino != stat2.Ino {
+				t.Errorf("inode number not stable: %d vs %d", stat.Ino, stat2.Ino)
+			}
+		})
+	}
+
+	t.Run("symlink target", func(t *testing.T) {
+		// On the test image, /symlink.dat is a symlink to random.dat. fs.Stat returns the
+		// link inode's metadata, which carries LinkTarget for symlinks.
+		// We look up the symlink via the directory entry path since fs.Stat may follow it.
+		_, entry, err := fs.getEntryAndParent("/symlink.dat")
+		if err != nil {
+			t.Fatalf("getEntryAndParent failed: %v", err)
+		}
+		if entry == nil {
+			t.Fatalf("symlink entry not found")
+		}
+		in, err := fs.readInode(entry.inode)
+		if err != nil {
+			t.Fatalf("readInode failed: %v", err)
+		}
+		s := in.stat()
+		if in.fileType == fileTypeSymbolicLink && s.LinkTarget == "" {
+			t.Errorf("expected non-empty LinkTarget for symlink inode")
+		}
+	})
+}
