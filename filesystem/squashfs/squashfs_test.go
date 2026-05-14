@@ -742,6 +742,72 @@ func TestSquashfsCreate(t *testing.T) {
 	}
 }
 
+func TestSquashfsInodeMetadata(t *testing.T) {
+	fs, err := getValidSquashfsFSReadOnly()
+	if err != nil {
+		t.Fatalf("Failed to get read-only squashfs filesystem: %v", err)
+	}
+
+	des, err := fs.ReadDir(".")
+	if err != nil {
+		t.Fatalf("Failed to read root dir: %v", err)
+	}
+	if len(des) == 0 {
+		t.Fatal("expected at least one entry in root dir")
+	}
+
+	for _, de := range des {
+		fi, err := de.Info()
+		if err != nil {
+			t.Fatalf("getting info for %s failed: %v", de.Name(), err)
+		}
+		sys, ok := fi.Sys().(squashfs.FileStat)
+		if !ok {
+			t.Fatalf("%s: Sys() did not return squashfs.FileStat", fi.Name())
+		}
+		if sys.Inode() == 0 {
+			t.Errorf("%s: expected non-zero Inode()", fi.Name())
+		}
+
+		typ := sys.InodeType()
+		switch typ {
+		case "basic-directory", "basic-file", "basic-symlink",
+			"basic-block-device", "basic-char-device", "basic-fifo", "basic-socket",
+			"extended-directory", "extended-file", "extended-symlink",
+			"extended-block-device", "extended-char-device", "extended-fifo", "extended-socket":
+			// ok
+		default:
+			t.Errorf("%s: unexpected InodeType() %q", fi.Name(), typ)
+		}
+
+		// Sanity check: directories should report a directory type
+		if fi.IsDir() && typ != "basic-directory" && typ != "extended-directory" {
+			t.Errorf("%s: directory has InodeType %q", fi.Name(), typ)
+		}
+	}
+
+	// Verify Stat-style access via OpenFile -> Stat too
+	fh, err := fs.OpenFile("README.md", os.O_RDONLY)
+	if err != nil {
+		t.Fatalf("OpenFile(README.md) failed: %v", err)
+	}
+	defer fh.Close()
+	fi, err := fh.Stat()
+	if err != nil {
+		t.Fatalf("Stat() failed: %v", err)
+	}
+	sys, ok := fi.Sys().(squashfs.FileStat)
+	if !ok {
+		t.Fatal("Sys() did not return squashfs.FileStat from Stat()")
+	}
+	if sys.Inode() == 0 {
+		t.Error("README.md: expected non-zero Inode() from Stat()")
+	}
+	if sys.InodeType() != "basic-file" && sys.InodeType() != "extended-file" {
+		t.Errorf("README.md: unexpected InodeType %q", sys.InodeType())
+	}
+}
+
 func TestSquashfsReadDirXattr(t *testing.T) {
 	fs, err := getValidSquashfsFSReadOnly()
 	if err != nil {

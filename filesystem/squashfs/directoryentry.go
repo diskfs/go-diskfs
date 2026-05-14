@@ -145,6 +145,53 @@ func (d *directoryEntry) Xattrs() map[string]string {
 	return d.xattrs
 }
 
+// Inode returns the squashfs inode number for this entry.
+func (d *directoryEntry) Inode() uint32 {
+	if d.inode == nil {
+		return 0
+	}
+	return d.inode.index()
+}
+
+// InodeType returns a human-readable name for the squashfs inode type.
+func (d *directoryEntry) InodeType() string {
+	if d.inode == nil {
+		return "unknown"
+	}
+	switch d.inode.inodeType() {
+	case inodeBasicDirectory:
+		return "basic-directory"
+	case inodeBasicFile:
+		return "basic-file"
+	case inodeBasicSymlink:
+		return "basic-symlink"
+	case inodeBasicBlock:
+		return "basic-block-device"
+	case inodeBasicChar:
+		return "basic-char-device"
+	case inodeBasicFifo:
+		return "basic-fifo"
+	case inodeBasicSocket:
+		return "basic-socket"
+	case inodeExtendedDirectory:
+		return "extended-directory"
+	case inodeExtendedFile:
+		return "extended-file"
+	case inodeExtendedSymlink:
+		return "extended-symlink"
+	case inodeExtendedBlock:
+		return "extended-block-device"
+	case inodeExtendedChar:
+		return "extended-char-device"
+	case inodeExtendedFifo:
+		return "extended-fifo"
+	case inodeExtendedSocket:
+		return "extended-socket"
+	default:
+		return "unknown"
+	}
+}
+
 // Readlink returns the destination of the symbolic link if this entry
 // is a symbolic link.
 //
