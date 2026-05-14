@@ -408,6 +408,32 @@ func TestFat12Stat(t *testing.T) {
 	}
 }
 
+func TestFat12StatSys(t *testing.T) {
+	_, fs := createFAT12(t, "SYSTEST")
+	writeFile(t, fs, "/sys.txt", []byte("sys"))
+
+	info, err := fs.Stat("sys.txt")
+	if err != nil {
+		t.Fatalf("Stat: %v", err)
+	}
+	stat, ok := info.Sys().(*fat12.StatT)
+	if !ok {
+		t.Fatalf("Sys() did not return *fat12.StatT, got %T", info.Sys())
+	}
+	if stat == nil {
+		t.Fatal("StatT is nil")
+	}
+	if stat.Cluster < 2 {
+		t.Errorf("Cluster = %d, expected >= 2 (data clusters start at 2)", stat.Cluster)
+	}
+	if stat.VolumeLabel {
+		t.Error("regular file should not have VolumeLabel set")
+	}
+	if stat.Hidden || stat.System || stat.ReadOnly {
+		t.Errorf("unexpected attribute bits set: Hidden=%v System=%v ReadOnly=%v", stat.Hidden, stat.System, stat.ReadOnly)
+	}
+}
+
 // ── ReadFile (fs.ReadFileFS) ──────────────────────────────────────────────────
 
 func TestFat12ReadFile(t *testing.T) {

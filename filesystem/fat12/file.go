@@ -30,6 +30,7 @@ func (fl *File) Stat() (iofs.FileInfo, error) {
 		shortName: fl.fullShortName(),
 		size:      int64(fl.fileSize),
 		isDir:     fl.isSubdirectory,
+		sys:       fl.stat(),
 	}, nil
 }
 

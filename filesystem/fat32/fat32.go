@@ -28,6 +28,9 @@ const (
 // is directly usable in fat12.Dos20BPB struct literals.
 type SectorSize = fat12.SectorSize
 
+// StatT is an alias for fat12.StatT, the metadata returned by FileInfo.Sys().
+type StatT = fat12.StatT
+
 const (
 	SectorSize512        SectorSize = 512
 	SectorSize4096       SectorSize = 4096

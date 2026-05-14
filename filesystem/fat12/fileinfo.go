@@ -14,6 +14,21 @@ type FileInfo struct {
 	shortName string
 	size      int64
 	isDir     bool
+	sys       *StatT
+}
+
+// StatT carries FAT-specific metadata returned by FileInfo.Sys(). FAT12/16/32
+// have no inodes, uid/gid, or POSIX permissions, but they do carry attribute
+// flags and additional timestamps that os.FileMode doesn't represent.
+type StatT struct {
+	ReadOnly    bool
+	Hidden      bool
+	System      bool
+	Archive     bool
+	VolumeLabel bool
+	CreateTime  time.Time
+	AccessTime  time.Time
+	Cluster     uint32
 }
 
 // IsDir abbreviation for Mode().IsDir()
@@ -63,9 +78,9 @@ func (fi FileInfo) Size() int64 {
 	return fi.size
 }
 
-// Sys underlying data source - not supported yet and so will return nil
+// Sys returns *StatT with FAT-specific metadata.
 //
 //nolint:gocritic // we need this to comply with fs.FileInfo
 func (fi FileInfo) Sys() interface{} {
-	return nil
+	return fi.sys
 }

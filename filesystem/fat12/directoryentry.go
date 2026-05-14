@@ -55,7 +55,21 @@ func (de *directoryEntry) Info() (iofs.FileInfo, error) {
 		shortName: de.fullShortName(),
 		size:      int64(de.fileSize),
 		isDir:     de.isSubdirectory,
+		sys:       de.stat(),
 	}, nil
+}
+
+func (de *directoryEntry) stat() *StatT {
+	return &StatT{
+		ReadOnly:    de.isReadOnly,
+		Hidden:      de.isHidden,
+		System:      de.isSystem,
+		Archive:     de.isArchiveDirty,
+		VolumeLabel: de.isVolumeLabel,
+		CreateTime:  de.createTime,
+		AccessTime:  de.accessTime,
+		Cluster:     de.clusterLocation,
+	}
 }
 
 func (de *directoryEntry) nameMatches(name string) bool {
