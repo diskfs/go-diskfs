@@ -189,12 +189,12 @@ func TestRockRidgeWriteReadRoundTrip(t *testing.T) {
 			if info.Mode()&os.ModeSymlink == 0 {
 				t.Errorf("link.txt: expected symlink mode, got %v", info.Mode())
 			}
-			rri, ok := info.Sys().(*iso9660.RockRidgeInfo)
+			stat, ok := info.Sys().(*iso9660.StatT)
 			if !ok {
-				t.Fatal("link.txt: Sys() did not return *RockRidgeInfo")
+				t.Fatal("link.txt: Sys() did not return *StatT")
 			}
-			if rri.Symlink != "target.txt" {
-				t.Errorf("link.txt: got symlink target %q, want %q", rri.Symlink, "target.txt")
+			if stat.LinkTarget != "target.txt" {
+				t.Errorf("link.txt: got symlink target %q, want %q", stat.LinkTarget, "target.txt")
 			}
 		}
 	}
@@ -400,12 +400,12 @@ func TestRockRidgeGoReadXorrisoOutput(t *testing.T) {
 			t.Errorf("link: expected symlink mode, got %v", info.Mode())
 		}
 		// Check symlink target via Sys()
-		rri, ok := info.Sys().(*iso9660.RockRidgeInfo)
+		stat, ok := info.Sys().(*iso9660.StatT)
 		if !ok {
-			t.Fatal("link: Sys() did not return *RockRidgeInfo")
+			t.Fatal("link: Sys() did not return *StatT")
 		}
-		if rri.Symlink != "hello.txt" {
-			t.Errorf("link: got symlink target %q, want %q", rri.Symlink, "hello.txt")
+		if stat.LinkTarget != "hello.txt" {
+			t.Errorf("link: got symlink target %q, want %q", stat.LinkTarget, "hello.txt")
 		}
 	})
 
@@ -415,16 +415,16 @@ func TestRockRidgeGoReadXorrisoOutput(t *testing.T) {
 		if !ok {
 			t.Skip("hello.txt not found")
 		}
-		rri, ok := info.Sys().(*iso9660.RockRidgeInfo)
+		stat, ok := info.Sys().(*iso9660.StatT)
 		if !ok {
-			t.Fatal("hello.txt: Sys() did not return *RockRidgeInfo")
+			t.Fatal("hello.txt: Sys() did not return *StatT")
 		}
 		// xorriso sets UID/GID to 0 by default in Docker (running as root)
-		if rri.UID != 0 {
-			t.Logf("hello.txt: UID = %d (expected 0 from Docker/xorriso)", rri.UID)
+		if stat.UID != 0 {
+			t.Logf("hello.txt: UID = %d (expected 0 from Docker/xorriso)", stat.UID)
 		}
-		if rri.GID != 0 {
-			t.Logf("hello.txt: GID = %d (expected 0 from Docker/xorriso)", rri.GID)
+		if stat.GID != 0 {
+			t.Logf("hello.txt: GID = %d (expected 0 from Docker/xorriso)", stat.GID)
 		}
 	})
 }

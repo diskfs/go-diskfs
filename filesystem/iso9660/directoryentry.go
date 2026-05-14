@@ -555,34 +555,9 @@ func (de *directoryEntry) IsDir() bool {
 	return de.isSubdirectory
 }
 
-// RockRidgeInfo holds POSIX metadata from Rock Ridge extensions.
-type RockRidgeInfo struct {
-	UID     uint32
-	GID     uint32
-	Nlink   uint32
-	Mode    os.FileMode
-	Symlink string
-}
-
-// Sys() interface{}   // underlying data source (can return nil)
+// Sys returns *StatT with ISO9660 and Rock Ridge metadata.
 func (de *directoryEntry) Sys() interface{} {
-	for _, ext := range de.extensions {
-		if px, ok := ext.(rockRidgePosixAttributes); ok {
-			rri := &RockRidgeInfo{
-				UID:   px.uid,
-				GID:   px.gid,
-				Nlink: px.linkCount,
-				Mode:  px.mode,
-			}
-			for _, ext2 := range de.extensions {
-				if sl, ok := ext2.(rockRidgeSymlink); ok {
-					rri.Symlink = sl.name
-				}
-			}
-			return rri
-		}
-	}
-	return nil
+	return de.statT()
 }
 
 // Info returns the FileInfo structure, which directoryEntry already implements
