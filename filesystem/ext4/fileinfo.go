@@ -16,13 +16,38 @@ type FileInfo struct {
 	sys     *StatT
 }
 
+// StatT carries ext4-specific metadata returned by FileInfo.Sys().
 type StatT struct {
-	UID   uint32
-	GID   uint32
-	Major uint32
-	Minor uint32
-	Ino   uint32
-	Nlink uint16
+	UID        uint32
+	GID        uint32
+	Major      uint32
+	Minor      uint32
+	Ino        uint32
+	Nlink      uint16
+	Blocks     uint64
+	AccessTime time.Time
+	ChangeTime time.Time
+	CreateTime time.Time
+	Flags      InodeFlags
+	LinkTarget string
+}
+
+// InodeFlags exposes the practically useful subset of ext4 inode flags.
+type InodeFlags struct {
+	Immutable          bool
+	AppendOnly         bool
+	NoDump             bool
+	NoAtime            bool
+	Synchronous        bool
+	Compressed         bool
+	Encrypted          bool
+	HashedIndexes      bool
+	JournalData        bool
+	HugeFile           bool
+	Extents            bool
+	ExtendedAttributes bool
+	InlineData         bool
+	TopDirectory       bool
 }
 
 // IsDir abbreviation for Mode().IsDir()
@@ -52,7 +77,7 @@ func (fi *FileInfo) Size() int64 {
 	return fi.size
 }
 
-// Sys underlying data source - not supported yet and so will return nil
+// Sys returns the underlying *StatT with ext4-specific metadata.
 func (fi *FileInfo) Sys() interface{} {
 	return fi.sys
 }

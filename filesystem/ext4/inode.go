@@ -174,13 +174,41 @@ func (i *inode) deviceNumber() (major, minor uint32) {
 
 func (i *inode) stat() *StatT {
 	major, minor := i.deviceNumber()
-	return &StatT{
-		UID:   i.owner,
-		GID:   i.group,
-		Major: major,
-		Minor: minor,
-		Ino:   i.number,
-		Nlink: i.hardLinks,
+	s := &StatT{
+		UID:        i.owner,
+		GID:        i.group,
+		Major:      major,
+		Minor:      minor,
+		Ino:        i.number,
+		Nlink:      i.hardLinks,
+		Blocks:     i.blocks,
+		AccessTime: i.accessTime,
+		ChangeTime: i.changeTime,
+		CreateTime: i.createTime,
+		LinkTarget: i.linkTarget,
+	}
+	if i.flags != nil {
+		s.Flags = inodeFlagsToInodeFlags(i.flags)
+	}
+	return s
+}
+
+func inodeFlagsToInodeFlags(f *inodeFlags) InodeFlags {
+	return InodeFlags{
+		Immutable:          f.immutable,
+		AppendOnly:         f.appendOnly,
+		NoDump:             f.noDump,
+		NoAtime:            f.noAccessTimeUpdate,
+		Synchronous:        f.synchronous,
+		Compressed:         f.compressed,
+		Encrypted:          f.encryptedInode,
+		HashedIndexes:      f.hashedDirectoryIndexes,
+		JournalData:        f.alwaysJournal,
+		HugeFile:           f.hugeFile,
+		Extents:            f.usesExtents,
+		ExtendedAttributes: f.extendedAttributes,
+		InlineData:         f.inlineData,
+		TopDirectory:       f.topDirectory,
 	}
 }
 
