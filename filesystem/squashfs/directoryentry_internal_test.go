@@ -31,21 +31,20 @@ func TestDirectoryEntry(t *testing.T) {
 	case de.Sys() == nil:
 		t.Errorf("Mismatched Sys(), unexpected nil")
 	}
-	// check that Sys() is convertible
-	fs, ok := de.Sys().(FileStat)
+	st, ok := de.Sys().(*StatT)
 	if !ok {
-		t.Errorf("Mismatched Sys(), could not convert to FileStat")
+		t.Fatalf("Sys() did not return *StatT")
 	}
-	uid := fs.UID()
-	if uid != fs.uid {
-		t.Errorf("Mismatched UID, actual %d expected %d", uid, fs.uid)
+	if st.UID != de.uid {
+		t.Errorf("Mismatched UID, actual %d expected %d", st.UID, de.uid)
 	}
-	gid := fs.GID()
-	if gid != fs.gid {
-		t.Errorf("Mismatched GID, actual %d expected %d", gid, fs.gid)
+	if st.GID != de.gid {
+		t.Errorf("Mismatched GID, actual %d expected %d", st.GID, de.gid)
 	}
-	xattrs := fs.Xattrs()
-	if !reflect.DeepEqual(xattrs, fs.xattrs) {
-		t.Errorf("Mismatched Xattrs, actual %+v expected %+v", xattrs, fs.xattrs)
+	if !reflect.DeepEqual(st.Xattrs, de.xattrs) {
+		t.Errorf("Mismatched Xattrs, actual %+v expected %+v", st.Xattrs, de.xattrs)
+	}
+	if st.InodeType != "unknown" {
+		t.Errorf("Expected InodeType %q for nil inode, got %q", "unknown", st.InodeType)
 	}
 }
