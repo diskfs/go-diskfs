@@ -31,33 +31,3 @@ type StatT struct {
 	// RockRidge is true if any Rock Ridge extension was found on the entry.
 	RockRidge bool
 }
-
-func (de *directoryEntry) statT() *StatT {
-	s := &StatT{
-		ExtAttrSize:              de.extAttrSize,
-		Location:                 de.location,
-		VolumeSequence:           de.volumeSequence,
-		IsHidden:                 de.isHidden,
-		IsAssociated:             de.isAssociated,
-		HasExtendedAttrs:         de.hasExtendedAttrs,
-		HasOwnerGroupPermissions: de.hasOwnerGroupPermissions,
-	}
-	for _, ext := range de.extensions {
-		switch e := ext.(type) {
-		case rockRidgePosixAttributes:
-			s.RockRidge = true
-			s.UID = e.uid
-			s.GID = e.gid
-			s.NLink = e.linkCount
-			s.Inode = uint32(e.serial)
-		case rockRidgeSymlink:
-			s.RockRidge = true
-			if !e.continued {
-				s.LinkTarget = e.name
-			}
-		case rockRidgeName, rockRidgeTimestamps, rockRidgeChildDirectory, rockRidgeParentDirectory, rockRidgeRelocatedDirectory, rockRidgeSparseFile, rockRidgePosixDeviceNumber:
-			s.RockRidge = true
-		}
-	}
-	return s
-}
