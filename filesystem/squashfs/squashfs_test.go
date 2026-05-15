@@ -347,7 +347,8 @@ func TestSquashfsStatRoot(t *testing.T) {
 	})
 }
 
-// Test the Open method on the directory entry
+// Test opening files and directories via FileSystem.OpenFile, which
+// internally exercises the directoryEntry shortcut path.
 func TestSquashfsOpen(t *testing.T) {
 	fs, err := getValidSquashfsFSReadOnly()
 	if err != nil {
@@ -356,26 +357,11 @@ func TestSquashfsOpen(t *testing.T) {
 	if _, err := fs.ReadDir("/"); err == nil {
 		t.Fatalf("Should have had an error with ReadDir(/)")
 	}
-	des, err := fs.ReadDir(".")
-	if err != nil {
+	if _, err := fs.ReadDir("."); err != nil {
 		t.Fatalf("Failed to list squashfs filesystem: %v", err)
 	}
-	var dir = make(map[string]os.FileInfo, len(des))
-	for _, de := range des {
-		fi, err := de.Info()
-		if err != nil {
-			t.Fatalf("getting info for %s failed: %v", de.Name(), err)
-		}
-		dir[fi.Name()] = fi
-	}
 
-	// Check a file
-	fi := dir["README.md"]
-	fix, ok := fi.Sys().(squashfs.FileStat)
-	if !ok {
-		t.Fatal("Wrong type")
-	}
-	fh, err := fix.Open()
+	fh, err := fs.OpenFile("README.md", os.O_RDONLY)
 	if err != nil {
 		t.Errorf("Failed to open file: %v", err)
 	}
@@ -383,23 +369,12 @@ func TestSquashfsOpen(t *testing.T) {
 	if err != nil {
 		t.Errorf("Failed to read file: %v", err)
 	}
-	err = fh.Close()
-	if err != nil {
+	if err := fh.Close(); err != nil {
 		t.Errorf("Failed to close file: %v", err)
 	}
 	wantBuf := "README\n"
 	if string(gotBuf) != wantBuf {
 		t.Errorf("Expecting to read %q from file but read %q", wantBuf, string(gotBuf))
-	}
-
-	// Check a directory
-	fi = dir["foo"]
-	fix, ok = fi.Sys().(squashfs.FileStat)
-	if !ok {
-		t.Fatal("Wrong type")
-	}
-	if _, err := fix.Open(); err != nil {
-		t.Errorf("Unexpected error when opening directory: %v", err)
 	}
 }
 
@@ -519,22 +494,12 @@ func TestSquashfsCheckListing(t *testing.T) {
 			if (gotMode & os.ModeType) != wantMode {
 				t.Errorf("%s: want mode 0o%o got mode 0o%o", p, wantMode, gotMode&os.ModeType)
 			}
-			fix, ok := fi.Sys().(squashfs.FileStat)
+			st, ok := fi.Sys().(*squashfs.StatT)
 			if !ok {
 				t.Fatal("Wrong type")
 			}
-			gotTarget, err := fix.Readlink()
-			if wantTarget == "" {
-				if err != iofs.ErrNotExist {
-					t.Errorf("%s: ReadLink want error %q got error %q", p, iofs.ErrNotExist, err)
-				}
-			} else {
-				if err != nil {
-					t.Errorf("%s: ReadLink returned error: %v", p, err)
-				}
-				if wantTarget != gotTarget {
-					t.Errorf("%s: ReadLink want target %q got target %q", p, wantTarget, gotTarget)
-				}
+			if wantTarget != st.LinkTarget {
+				t.Errorf("%s: LinkTarget want %q got %q", p, wantTarget, st.LinkTarget)
 			}
 		}
 	}
@@ -742,6 +707,73 @@ func TestSquashfsCreate(t *testing.T) {
 	}
 }
 
+func TestSquashfsStatT(t *testing.T) {
+	fs, err := getValidSquashfsFSReadOnly()
+	if err != nil {
+		t.Fatalf("Failed to get read-only squashfs filesystem: %v", err)
+	}
+
+	des, err := fs.ReadDir(".")
+	if err != nil {
+		t.Fatalf("Failed to read root dir: %v", err)
+	}
+	if len(des) == 0 {
+		t.Fatal("expected at least one entry in root dir")
+	}
+
+	for _, de := range des {
+		fi, err := de.Info()
+		if err != nil {
+			t.Fatalf("getting info for %s failed: %v", de.Name(), err)
+		}
+		st, ok := fi.Sys().(*squashfs.StatT)
+		if !ok {
+			t.Fatalf("%s: Sys() did not return *squashfs.StatT", fi.Name())
+		}
+		if st.Inode == 0 {
+			t.Errorf("%s: expected non-zero Inode", fi.Name())
+		}
+
+		switch st.InodeType {
+		case "basic-directory", "basic-file", "basic-symlink",
+			"basic-block-device", "basic-char-device", "basic-fifo", "basic-socket",
+			"extended-directory", "extended-file", "extended-symlink",
+			"extended-block-device", "extended-char-device", "extended-fifo", "extended-socket":
+			// ok
+		default:
+			t.Errorf("%s: unexpected InodeType %q", fi.Name(), st.InodeType)
+		}
+
+		if fi.IsDir() && st.InodeType != "basic-directory" && st.InodeType != "extended-directory" {
+			t.Errorf("%s: directory has InodeType %q", fi.Name(), st.InodeType)
+		}
+	}
+
+	// Verify *StatT also reachable via OpenFile -> Stat
+	fh, err := fs.OpenFile("README.md", os.O_RDONLY)
+	if err != nil {
+		t.Fatalf("OpenFile(README.md) failed: %v", err)
+	}
+	defer fh.Close()
+	fi, err := fh.Stat()
+	if err != nil {
+		t.Fatalf("Stat() failed: %v", err)
+	}
+	st, ok := fi.Sys().(*squashfs.StatT)
+	if !ok {
+		t.Fatal("Sys() did not return *squashfs.StatT from Stat()")
+	}
+	if st.Inode == 0 {
+		t.Error("README.md: expected non-zero Inode from Stat()")
+	}
+	if st.InodeType != "basic-file" && st.InodeType != "extended-file" {
+		t.Errorf("README.md: unexpected InodeType %q", st.InodeType)
+	}
+	if st.LinkTarget != "" {
+		t.Errorf("README.md: expected empty LinkTarget, got %q", st.LinkTarget)
+	}
+}
+
 func TestSquashfsReadDirXattr(t *testing.T) {
 	fs, err := getValidSquashfsFSReadOnly()
 	if err != nil {
@@ -783,12 +815,12 @@ func TestSquashfsReadDirXattr(t *testing.T) {
 			continue
 		}
 		sysbase := fi.Sys()
-		sys, ok := sysbase.(squashfs.FileStat)
+		sys, ok := sysbase.(*squashfs.StatT)
 		if !ok {
-			t.Errorf("could not convert fi.Sys() to FileStat")
+			t.Errorf("could not convert fi.Sys() to *StatT")
 			continue
 		}
-		xa := sys.Xattrs()
+		xa := sys.Xattrs
 		if !squashfs.CompareEqualMapStringString(xa, tt.xattrs) {
 			t.Errorf("Mismatched xattrs, actual then expected")
 			t.Logf("%v", xa)
