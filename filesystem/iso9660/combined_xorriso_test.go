@@ -141,10 +141,10 @@ func TestCombinedRockRidgeJolietElTorito(t *testing.T) {
 			if info.Mode()&os.ModeSymlink == 0 {
 				t.Errorf("link.txt: expected symlink mode, got %v", info.Mode())
 			}
-			if rri, ok := info.Sys().(*iso9660.RockRidgeInfo); !ok {
-				t.Error("link.txt: Sys() did not return *RockRidgeInfo")
-			} else if rri.Symlink != "target.txt" {
-				t.Errorf("link.txt: symlink target %q, want %q", rri.Symlink, "target.txt")
+			if stat, ok := info.Sys().(*iso9660.StatT); !ok {
+				t.Error("link.txt: Sys() did not return *StatT")
+			} else if stat.LinkTarget != "target.txt" {
+				t.Errorf("link.txt: symlink target %q, want %q", stat.LinkTarget, "target.txt")
 			}
 		}
 	}

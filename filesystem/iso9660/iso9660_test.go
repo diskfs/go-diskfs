@@ -663,3 +663,81 @@ func TestIso9660Finalize(t *testing.T) {
 		})
 	}
 }
+
+func findDirEntry(entries []iofs.DirEntry, name string) iofs.DirEntry {
+	for _, e := range entries {
+		if e.Name() == name {
+			return e
+		}
+	}
+	return nil
+}
+
+func TestSysStatT(t *testing.T) {
+	fs, err := getValidIso9660FSReadOnly()
+	if err != nil {
+		t.Fatalf("Failed to get read-only ISO9660 filesystem: %v", err)
+	}
+	entries, err := fs.ReadDir(".")
+	if err != nil {
+		t.Fatalf("ReadDir returned error: %v", err)
+	}
+	de := findDirEntry(entries, "README.MD")
+	if de == nil {
+		t.Fatalf("README.MD not found in root")
+	}
+	fi, err := de.Info()
+	if err != nil {
+		t.Fatalf("Info returned error: %v", err)
+	}
+	sys := fi.Sys()
+	st, ok := sys.(*iso9660.StatT)
+	if !ok {
+		t.Fatalf("Sys() returned %T, want *iso9660.StatT", sys)
+	}
+	if st.RockRidge {
+		t.Errorf("RockRidge = true, want false on plain ISO")
+	}
+	if st.Location == 0 {
+		t.Errorf("Location = 0, want non-zero extent LBA")
+	}
+	if st.IsHidden {
+		t.Errorf("IsHidden = true, want false for README.MD")
+	}
+	if st.LinkTarget != "" {
+		t.Errorf("LinkTarget = %q, want empty on plain ISO", st.LinkTarget)
+	}
+}
+
+func TestSysStatTRockRidge(t *testing.T) {
+	fs, err := getValidRockRidgeFSReadOnly()
+	if err != nil {
+		t.Fatalf("Failed to get read-only Rock Ridge filesystem: %v", err)
+	}
+	entries, err := fs.ReadDir(".")
+	if err != nil {
+		t.Fatalf("ReadDir returned error: %v", err)
+	}
+	de := findDirEntry(entries, "README.md")
+	if de == nil {
+		t.Fatalf("README.md not found in root")
+	}
+	fi, err := de.Info()
+	if err != nil {
+		t.Fatalf("Info returned error: %v", err)
+	}
+	sys := fi.Sys()
+	st, ok := sys.(*iso9660.StatT)
+	if !ok {
+		t.Fatalf("Sys() returned %T, want *iso9660.StatT", sys)
+	}
+	if !st.RockRidge {
+		t.Errorf("RockRidge = false, want true on Rock Ridge ISO")
+	}
+	if st.NLink < 1 {
+		t.Errorf("NLink = %d, want >= 1", st.NLink)
+	}
+	if st.Location == 0 {
+		t.Errorf("Location = 0, want non-zero extent LBA")
+	}
+}

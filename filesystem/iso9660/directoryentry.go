@@ -555,34 +555,39 @@ func (de *directoryEntry) IsDir() bool {
 	return de.isSubdirectory
 }
 
-// RockRidgeInfo holds POSIX metadata from Rock Ridge extensions.
-type RockRidgeInfo struct {
-	UID     uint32
-	GID     uint32
-	Nlink   uint32
-	Mode    os.FileMode
-	Symlink string
+// Sys returns *StatT with ISO9660 and Rock Ridge metadata.
+func (de *directoryEntry) Sys() interface{} {
+	return de.statT()
 }
 
-// Sys() interface{}   // underlying data source (can return nil)
-func (de *directoryEntry) Sys() interface{} {
+func (de *directoryEntry) statT() *StatT {
+	s := &StatT{
+		ExtAttrSize:              de.extAttrSize,
+		Location:                 de.location,
+		VolumeSequence:           de.volumeSequence,
+		IsHidden:                 de.isHidden,
+		IsAssociated:             de.isAssociated,
+		HasExtendedAttrs:         de.hasExtendedAttrs,
+		HasOwnerGroupPermissions: de.hasOwnerGroupPermissions,
+	}
 	for _, ext := range de.extensions {
-		if px, ok := ext.(rockRidgePosixAttributes); ok {
-			rri := &RockRidgeInfo{
-				UID:   px.uid,
-				GID:   px.gid,
-				Nlink: px.linkCount,
-				Mode:  px.mode,
+		switch e := ext.(type) {
+		case rockRidgePosixAttributes:
+			s.RockRidge = true
+			s.UID = e.uid
+			s.GID = e.gid
+			s.NLink = e.linkCount
+			s.Inode = uint32(e.serial)
+		case rockRidgeSymlink:
+			s.RockRidge = true
+			if !e.continued {
+				s.LinkTarget = e.name
 			}
-			for _, ext2 := range de.extensions {
-				if sl, ok := ext2.(rockRidgeSymlink); ok {
-					rri.Symlink = sl.name
-				}
-			}
-			return rri
+		case rockRidgeName, rockRidgeTimestamps, rockRidgeChildDirectory, rockRidgeParentDirectory, rockRidgeRelocatedDirectory, rockRidgeSparseFile, rockRidgePosixDeviceNumber:
+			s.RockRidge = true
 		}
 	}
-	return nil
+	return s
 }
 
 // Info returns the FileInfo structure, which directoryEntry already implements

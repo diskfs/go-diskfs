@@ -714,13 +714,13 @@ func testRockRidgeSymlinks(t *testing.T) {
 		if info.Mode()&os.ModeSymlink == 0 {
 			t.Errorf("symlink %s: mode %v does not have ModeSymlink", st.name, info.Mode())
 		}
-		rri, ok := info.Sys().(*iso9660.RockRidgeInfo)
-		if !ok || rri == nil {
-			t.Errorf("symlink %s: Sys() did not return *RockRidgeInfo", st.name)
+		stat, ok := info.Sys().(*iso9660.StatT)
+		if !ok || stat == nil {
+			t.Errorf("symlink %s: Sys() did not return *StatT", st.name)
 			continue
 		}
-		if rri.Symlink != st.target {
-			t.Errorf("symlink %s: got target %q, want %q", st.name, rri.Symlink, st.target)
+		if stat.LinkTarget != st.target {
+			t.Errorf("symlink %s: got target %q, want %q", st.name, stat.LinkTarget, st.target)
 		}
 	}
 }
