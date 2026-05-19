@@ -31,7 +31,7 @@ func CreateEfi(diskImg string) {
 	// create a partition table
 	table := &gpt.Table{
 		Partitions: []*gpt.Partition{
-			{Start: uint64(partitionStart), End: uint64(partitionEnd), Type: gpt.EFISystemPartition, Name: "EFI System"},
+			{Index: 1, Start: uint64(partitionStart), End: uint64(partitionEnd), Type: gpt.EFISystemPartition, Name: "EFI System"},
 		},
 	}
 	// apply the partition table

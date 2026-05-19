@@ -84,6 +84,7 @@ func ExampleCreate_gpt() {
 		ProtectiveMBR:      true,
 		Partitions: []*gpt.Partition{
 			{
+				Index: 1,
 				Start: 1 * 1024 * 1024 / 512,
 				Size:  10 * 1024 * 1024,
 				Type:  gpt.MBRPartitionScheme,
