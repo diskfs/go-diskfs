@@ -392,24 +392,60 @@ func (b *byteBufferReader) Close() error {
 }
 
 func TestRead(t *testing.T) {
-	t.Run("invalid EFI Partition Checksum", func(t *testing.T) {
+	// The 10 MiB fixture has 512-byte logical sectors. Primary partition
+	// entries start at LBA 2 (offset 1024). Backup header is at the last
+	// sector; backup partition entries occupy the 32 sectors immediately
+	// before it (sectors lastLBA-32 .. lastLBA-1). With 10 MiB / 512 =
+	// 20480 sectors, lastLBA = 20479 and backup entries start at
+	// LBA 20447 = byte offset 10468864.
+	const fixturePrimaryEntryByte = 512 + 512 + 400
+	const fixtureBackupEntryByte = 10468864 + 400
+
+	t.Run("primary entries corrupted recovers from backup", func(t *testing.T) {
 		b, err := os.ReadFile(gptFile)
 		if err != nil {
 			t.Fatalf("unable to read test fixture file %s: %v", gptFile, err)
 		}
-		// change a single byte in a partition entry
-		b[512+512+400]++
+		// Corrupt the primary partition entries CRC source.
+		b[fixturePrimaryEntryByte]++
+		buf := &byteBufferReader{b: b}
+		table, err := Read(buf, 512, 512)
+		if err != nil {
+			t.Fatalf("Read should have succeeded via backup fallback, got error: %v", err)
+		}
+		if table == nil {
+			t.Fatal("Read returned nil table after backup fallback")
+		}
+		if !table.RecoveredFromBackup {
+			t.Errorf("RecoveredFromBackup should be true after primary corruption")
+		}
+		expected := GetValidTable()
+		if !table.Equal(expected) {
+			t.Errorf("backup-recovered table does not match expected\nactual: %#v\nexpected: %#v", table, expected)
+		}
+	})
+	t.Run("primary and backup entries both corrupted", func(t *testing.T) {
+		b, err := os.ReadFile(gptFile)
+		if err != nil {
+			t.Fatalf("unable to read test fixture file %s: %v", gptFile, err)
+		}
+		b[fixturePrimaryEntryByte]++
+		b[fixtureBackupEntryByte]++
 		buf := &byteBufferReader{b: b}
 		table, err := Read(buf, 512, 512)
 		if table != nil {
-			t.Error("should return nil table")
+			t.Errorf("Read should have returned nil table when both copies are corrupt, got %#v", table)
 		}
 		if err == nil {
-			t.Error("should not return nil error")
+			t.Fatal("Read should have returned an error when both copies are corrupt")
 		}
-		expected := "invalid EFI Partition Entry Checksum"
-		if !strings.HasPrefix(err.Error(), expected) {
-			t.Errorf("error type %s instead of expected %s", err.Error(), expected)
+		// Error wraps both primary and backup failures; check for the
+		// load-bearing substring on each.
+		if !strings.Contains(err.Error(), "primary GPT invalid") {
+			t.Errorf("error should mention primary failure, got: %v", err)
+		}
+		if !strings.Contains(err.Error(), "backup GPT") {
+			t.Errorf("error should mention backup failure, got: %v", err)
 		}
 	})
 	t.Run("Valid table", func(t *testing.T) {

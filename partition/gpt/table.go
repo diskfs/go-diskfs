@@ -3,14 +3,28 @@ package gpt
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"hash/crc32"
+	"io"
 	"strings"
 
 	"github.com/diskfs/go-diskfs/backend"
 	"github.com/diskfs/go-diskfs/partition/part"
 	uuid "github.com/google/uuid"
 )
+
+// syncWritable best-effort flushes pending writes on f to durable storage.
+// It uses a runtime type assertion rather than a method on the
+// backend.WritableFile interface so existing implementations of that
+// interface do not need to be updated. *os.File satisfies it; in-memory
+// test backends do not, and silently no-op.
+func syncWritable(f backend.WritableFile) error {
+	if s, ok := f.(interface{ Sync() error }); ok {
+		return s.Sync()
+	}
+	return nil
+}
 
 // gptSize max potential size for partition array reserved 16384
 const (
@@ -25,19 +39,26 @@ const (
 
 // Table represents a partition table to be applied to a disk or read from a disk
 type Table struct {
-	Partitions             []*Partition // slice of Partition
-	LogicalSectorSize      int          // logical size of a sector
-	PhysicalSectorSize     int          // physical size of the sector
-	GUID                   string       // disk GUID, can be left blank to auto-generate
-	ProtectiveMBR          bool         // whether or not a protective MBR is in place
-	partitionArraySize     int          // how many entries are in the partition array size
-	partitionEntrySize     uint32       // size of the partition entry in the table, usually 128 bytes
-	partitionFirstLBA      uint64       // first LBA of the partition array
-	partitionEntryChecksum uint32       // checksum of the partition array
-	primaryHeader          uint64       // LBA of primary header, always 1
-	secondaryHeader        uint64       // LBA of secondary header, always last sectors on disk
-	firstDataSector        uint64       // LBA of first data sector
-	lastDataSector         uint64       // LBA of last data sector
+	Partitions         []*Partition // slice of Partition
+	LogicalSectorSize  int          // logical size of a sector
+	PhysicalSectorSize int          // physical size of the sector
+	GUID               string       // disk GUID, can be left blank to auto-generate
+	ProtectiveMBR      bool         // whether or not a protective MBR is in place
+	// RecoveredFromBackup is set to true by Read() when the primary GPT was
+	// invalid (bad signature / header CRC / partition-entries CRC) and the
+	// table was loaded from the backup GPT at end-of-disk. Callers should
+	// rewrite the primary by calling Write() with this table, or use an
+	// external tool such as sgdisk --repair, before treating subsequent
+	// reads as authoritative.
+	RecoveredFromBackup    bool
+	partitionArraySize     int    // how many entries are in the partition array size
+	partitionEntrySize     uint32 // size of the partition entry in the table, usually 128 bytes
+	partitionFirstLBA      uint64 // first LBA of the partition array
+	partitionEntryChecksum uint32 // checksum of the partition array
+	primaryHeader          uint64 // LBA of primary header, always 1
+	secondaryHeader        uint64 // LBA of secondary header, always last sectors on disk
+	firstDataSector        uint64 // LBA of first data sector
+	lastDataSector         uint64 // LBA of last data sector
 	initialized            bool
 }
 
@@ -473,87 +494,163 @@ func (t *Table) Type() string {
 	return "gpt"
 }
 
-// Write writes a GPT to disk
-// Must be passed the backend.WritableFile to which to write and the size of the disk
+// Write writes a GPT to disk. Must be passed the backend.WritableFile to
+// which to write and the size of the disk.
+//
+// Write order is designed to be crash-safe: the backup GPT (at end of disk)
+// is written and synced before the primary GPT (at LBA 1). Within each
+// side, the partition-entries array is written and synced before the
+// header sector that references its CRC. A power loss at any point leaves
+// the disk in one of:
+//
+//   - both copies still old (operation not yet observably started),
+//   - backup new, primary still old,
+//   - backup new, primary inconsistent (CRC mismatch — Read() falls back
+//     to the backup),
+//   - both copies fully new (success).
+//
+// In every case, a consumer that validates CRCs and falls back to the
+// backup on primary failure will see a consistent partition layout.
 func (t *Table) Write(f backend.WritableFile, size int64) error {
-	// it is possible that we are given a basic new table that we need to initialize
 	if !t.initialized {
 		t.initTable(size)
 	}
 
-	// write the protectiveMBR if any
-	// write the primary GPT header
-	// write the primary partition array
-	// write the secondary partition array
-	// write the secondary GPT header
-	var written int
-	var err error
-	if t.ProtectiveMBR {
-		fullMBR := t.generateProtectiveMBR()
-		protectiveMBR := fullMBR[mbrPartitionEntriesStart:]
-		written, err = f.WriteAt(protectiveMBR, mbrPartitionEntriesStart)
-		if err != nil {
-			return fmt.Errorf("error writing protective MBR to disk: %v", err)
-		}
-		if written != len(protectiveMBR) {
-			return fmt.Errorf("wrote %d bytes of protective MBR instead of %d", written, len(protectiveMBR))
-		}
-	}
-
-	primaryHeader, err := t.toGPTBytes(true)
+	// Serialize everything before touching the disk. Any encoding error
+	// here aborts cleanly without partial writes.
+	primaryHeaderBytes, err := t.toGPTBytes(true)
 	if err != nil {
 		return fmt.Errorf("error converting primary GPT header to byte array: %v", err)
 	}
-	written, err = f.WriteAt(primaryHeader, int64(t.LogicalSectorSize))
-	if err != nil {
-		return fmt.Errorf("error writing primary GPT to disk: %v", err)
-	}
-	if written != len(primaryHeader) {
-		return fmt.Errorf("wrote %d bytes of primary GPT header instead of %d", written, len(primaryHeader))
-	}
-
-	partitionArray, err := t.toPartitionArrayBytes()
-	if err != nil {
-		return fmt.Errorf("error converting primary GPT partitions to byte array: %v", err)
-	}
-	written, err = f.WriteAt(partitionArray, int64(t.LogicalSectorSize*int(t.partitionArraySector(true))))
-	if err != nil {
-		return fmt.Errorf("error writing primary partition arrayto disk: %v", err)
-	}
-	if written != len(partitionArray) {
-		return fmt.Errorf("wrote %d bytes of primary partition array instead of %d", written, len(primaryHeader))
-	}
-
-	written, err = f.WriteAt(partitionArray, int64(t.LogicalSectorSize)*int64(t.partitionArraySector(false)))
-	if err != nil {
-		return fmt.Errorf("error writing secondary partition array to disk: %v", err)
-	}
-	if written != len(partitionArray) {
-		return fmt.Errorf("wrote %d bytes of secondary partition array instead of %d", written, len(primaryHeader))
-	}
-
-	secondaryHeader, err := t.toGPTBytes(false)
+	secondaryHeaderBytes, err := t.toGPTBytes(false)
 	if err != nil {
 		return fmt.Errorf("error converting secondary GPT header to byte array: %v", err)
 	}
-	written, err = f.WriteAt(secondaryHeader, int64(t.secondaryHeader)*int64(t.LogicalSectorSize))
+	partitionArray, err := t.toPartitionArrayBytes()
 	if err != nil {
-		return fmt.Errorf("error writing secondary GPT to disk: %v", err)
+		return fmt.Errorf("error converting GPT partition array to byte array: %v", err)
 	}
-	if written != len(secondaryHeader) {
-		return fmt.Errorf("wrote %d bytes of secondary GPT header instead of %d", written, len(secondaryHeader))
+
+	sectorBytes := int64(t.LogicalSectorSize)
+	primaryArrayOff := sectorBytes * int64(t.partitionArraySector(true))
+	secondaryArrayOff := sectorBytes * int64(t.partitionArraySector(false))
+	primaryHeaderOff := sectorBytes
+	secondaryHeaderOff := int64(t.secondaryHeader) * sectorBytes
+
+	writeAtWithSync := func(buf []byte, off int64, what string) error {
+		n, err := f.WriteAt(buf, off)
+		if err != nil {
+			return fmt.Errorf("error writing %s to disk: %v", what, err)
+		}
+		if n != len(buf) {
+			return fmt.Errorf("wrote %d bytes of %s instead of %d", n, what, len(buf))
+		}
+		if err := syncWritable(f); err != nil {
+			return fmt.Errorf("error syncing %s to disk: %v", what, err)
+		}
+		return nil
+	}
+
+	// Protective MBR is essentially static; rewriting (and syncing) it is
+	// harmless and idempotent.
+	if t.ProtectiveMBR {
+		fullMBR := t.generateProtectiveMBR()
+		protectiveMBR := fullMBR[mbrPartitionEntriesStart:]
+		if err := writeAtWithSync(protectiveMBR, mbrPartitionEntriesStart, "protective MBR"); err != nil {
+			return err
+		}
+	}
+
+	// Backup side: entries first, then header, each synced before the next
+	// write. After the header sync the backup is fully durable and
+	// self-consistent.
+	if err := writeAtWithSync(partitionArray, secondaryArrayOff, "secondary partition array"); err != nil {
+		return err
+	}
+	if err := writeAtWithSync(secondaryHeaderBytes, secondaryHeaderOff, "secondary GPT header"); err != nil {
+		return err
+	}
+
+	// Primary side: same ordering. A crash during the primary write leaves
+	// the backup intact-and-new, so Read() with backup fallback recovers
+	// the new layout.
+	if err := writeAtWithSync(partitionArray, primaryArrayOff, "primary partition array"); err != nil {
+		return err
+	}
+	if err := writeAtWithSync(primaryHeaderBytes, primaryHeaderOff, "primary GPT header"); err != nil {
+		return err
 	}
 
 	return nil
 }
 
-// Read read a partition table from a disk
-// must be passed the backend.File from which to read, and the logical and physical block sizes
+// Read reads a partition table from a disk.
 //
-// if successful, returns a gpt.Table struct
-// returns errors if fails at any stage reading the disk or processing the bytes on disk as a GPT
+// Must be passed the backend.File from which to read, and the logical and
+// physical block sizes. If successful, returns a gpt.Table struct. Returns
+// an error if it fails at any stage reading the disk or processing the bytes
+// on disk as a GPT.
+//
+// If the primary GPT (LBA 1) parses and reads cleanly but fails CRC
+// validation (header CRC or partition-entries CRC), Read falls back to
+// the backup GPT at end-of-disk. On a successful fallback the returned
+// Table has RecoveredFromBackup set to true; the caller should rewrite
+// the primary by calling Write() before treating subsequent reads as
+// authoritative.
+//
+// I/O errors on the primary (read failure, short read) are propagated
+// directly without a backup attempt, because the backup is read through
+// the same I/O path and would fail the same way. Callers that want to
+// retry with a different reader can detect this case by inspecting the
+// returned error.
 func Read(f backend.File, logicalBlockSize, physicalBlockSize int) (*Table, error) {
-	// read the data off of the disk - first block is the compatibility MBR, ssecond is the GPT table
+	gptTable, primaryErr := readPrimary(f, logicalBlockSize, physicalBlockSize)
+	if primaryErr == nil {
+		return gptTable, nil
+	}
+	var contentErr *primaryContentError
+	if !errors.As(primaryErr, &contentErr) {
+		// I/O failure on the primary: do not attempt the backup, since
+		// the backup is read through the same I/O path. Propagate the
+		// underlying error unchanged.
+		return nil, primaryErr
+	}
+
+	// Primary parsed structurally but failed content validation; try the
+	// backup at end-of-disk.
+	diskSize, sizeErr := seekDiskSize(f)
+	if sizeErr != nil {
+		return nil, fmt.Errorf("primary GPT invalid (%v); cannot determine disk size to read backup: %w", primaryErr, sizeErr)
+	}
+	if diskSize < int64(logicalBlockSize)*2 {
+		return nil, fmt.Errorf("primary GPT invalid (%v); disk too small (%d bytes) for backup GPT", primaryErr, diskSize)
+	}
+	secondaryLBA := uint64(diskSize/int64(logicalBlockSize)) - 1
+
+	gptTable, backupErr := readBackup(f, logicalBlockSize, physicalBlockSize, secondaryLBA)
+	if backupErr != nil {
+		return nil, fmt.Errorf("primary GPT invalid (%v); backup GPT also invalid: %w", primaryErr, backupErr)
+	}
+	gptTable.RecoveredFromBackup = true
+	return gptTable, nil
+}
+
+// primaryContentError marks a primary-GPT validation failure (bad
+// signature, header CRC mismatch, or partition-entries CRC mismatch) as
+// opposed to an I/O failure during the read. Only content errors trigger
+// the backup-GPT fallback in Read; I/O errors propagate so the original
+// error message (and behavior) is preserved for callers that already
+// handle them.
+type primaryContentError struct{ err error }
+
+func (e *primaryContentError) Error() string { return e.err.Error() }
+func (e *primaryContentError) Unwrap() error { return e.err }
+
+// readPrimary reads bytes at the primary-GPT location and parses the
+// header, then reads and CRC-validates the partition-entries array. I/O
+// errors are returned unwrapped; content errors are wrapped in
+// *primaryContentError.
+func readPrimary(f backend.File, logicalBlockSize, physicalBlockSize int) (*Table, error) {
 	b := make([]byte, logicalBlockSize*2)
 	read, err := f.ReadAt(b, 0)
 	if err != nil {
@@ -562,33 +659,86 @@ func Read(f backend.File, logicalBlockSize, physicalBlockSize int) (*Table, erro
 	if read != len(b) {
 		return nil, fmt.Errorf("read only %d bytes of GPT from file instead of expected %d", read, len(b))
 	}
-	// get the gpt table
 	gptTable, err := tableFromBytes(b, logicalBlockSize, physicalBlockSize)
 	if err != nil {
-		return nil, fmt.Errorf("error reading GPT table: %w", err)
+		return nil, &primaryContentError{fmt.Errorf("error reading GPT table: %w", err)}
 	}
+	return loadEntries(f, gptTable, logicalBlockSize, physicalBlockSize)
+}
+
+// readBackup parses the backup GPT header at secondaryLBA and reads its
+// partition-entries array. The MBR sector is read separately so the
+// ProtectiveMBR field is set correctly on the recovered table.
+func readBackup(f backend.File, logicalBlockSize, physicalBlockSize int, secondaryLBA uint64) (*Table, error) {
+	// Read backup header sector.
+	hdr := make([]byte, logicalBlockSize)
+	hdrOff := int64(secondaryLBA) * int64(logicalBlockSize)
+	read, err := f.ReadAt(hdr, hdrOff)
+	if err != nil {
+		return nil, fmt.Errorf("error reading backup GPT header at offset %d: %w", hdrOff, err)
+	}
+	if read != len(hdr) {
+		return nil, fmt.Errorf("read only %d bytes of backup GPT header instead of expected %d", read, len(hdr))
+	}
+	gptTable, err := readGPTHeader(hdr)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing backup GPT header: %w", err)
+	}
+	// Sanity: the backup header's "My LBA" field (which readGPTHeader
+	// places in gptTable.primaryHeader) should be secondaryLBA.
+	if gptTable.primaryHeader != secondaryLBA {
+		return nil, fmt.Errorf("backup GPT header self-LBA mismatch: header says %d, found at %d", gptTable.primaryHeader, secondaryLBA)
+	}
+	// In a backup header the "My LBA" and "Alternate LBA" fields are
+	// swapped relative to a primary header (see toGPTBytes). Swap them
+	// back into the conventional orientation expected by the rest of
+	// the package.
+	gptTable.primaryHeader, gptTable.secondaryHeader = gptTable.secondaryHeader, gptTable.primaryHeader
+	gptTable.LogicalSectorSize = logicalBlockSize
+	gptTable.PhysicalSectorSize = physicalBlockSize
+	gptTable.initialized = true
+
+	// Detect the protective MBR by reading LBA 0 separately.
+	mbr := make([]byte, logicalBlockSize)
+	read, err = f.ReadAt(mbr, 0)
+	if err == nil && read == len(mbr) {
+		gptTable.ProtectiveMBR = readProtectiveMBR(mbr, uint32(gptTable.secondaryHeader))
+	}
+
+	return loadEntries(f, gptTable, logicalBlockSize, physicalBlockSize)
+}
+
+// loadEntries reads and CRC-validates the partition-entries array for a
+// header that has already been parsed. I/O errors are returned unwrapped;
+// content errors are wrapped in *primaryContentError so the caller can
+// route them to the backup fallback if appropriate.
+func loadEntries(f backend.File, gptTable *Table, logicalBlockSize, physicalBlockSize int) (*Table, error) {
 	start, size := gptTable.calculatePartitionArrayLocations()
-	b = make([]byte, size)
-	read, err = f.ReadAt(b, int64(start))
-	if read != len(b) {
-		return nil, fmt.Errorf("read only %d bytes of GPT from file instead of expected %d", read, len(b))
-	}
+	b := make([]byte, size)
+	read, err := f.ReadAt(b, int64(start))
 	if err != nil {
 		return nil, fmt.Errorf("error reading partitions from file: %w", err)
 	}
-	// we need a CRC/zlib of the partition entries, so we do those first, then append the bytes
+	if read != len(b) {
+		return nil, fmt.Errorf("read only %d bytes of partition entries instead of expected %d", read, len(b))
+	}
 	checksum := crc32.ChecksumIEEE(b)
 	if gptTable.partitionEntryChecksum != checksum {
-		return nil, fmt.Errorf("invalid EFI Partition Entry Checksum, expected %v, got %v", checksum, gptTable.partitionEntryChecksum)
+		return nil, &primaryContentError{fmt.Errorf("invalid EFI Partition Entry Checksum, expected %v, got %v", checksum, gptTable.partitionEntryChecksum)}
 	}
-
 	parts, err := readPartitionArrayBytes(b, int(gptTable.partitionEntrySize), logicalBlockSize, physicalBlockSize)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing partition data: %w", err)
 	}
 	gptTable.Partitions = parts
-	// get the partition table
 	return gptTable, nil
+}
+
+// seekDiskSize returns the size of the disk by seeking to end-of-file.
+// On regular image files and Linux block devices alike, Seek(0, SeekEnd)
+// returns the byte length of the device.
+func seekDiskSize(f backend.File) (int64, error) {
+	return f.Seek(0, io.SeekEnd)
 }
 
 // GetPartitions get the partitions
