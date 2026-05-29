@@ -27,7 +27,6 @@ type FileSystem struct {
 	workspace  string
 	superblock *superblock
 	size       int64
-	start      int64
 	backend    backend.Storage
 	blocksize  int64
 	compressor Compressor
@@ -104,7 +103,6 @@ func Create(b backend.Storage, size, start, blocksize int64) (*FileSystem, error
 	// there is nothing in there
 	return &FileSystem{
 		workspace: tmpdir,
-		start:     0,
 		size:      size,
 		backend:   b,
 		blocksize: blocksize,
@@ -231,7 +229,6 @@ func Read(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) 
 
 	fs := &FileSystem{
 		workspace:  "", // no workspace when we do nothing with it
-		start:      0,  // backend is already biased by start (if non-zero) via Sub above
 		size:       size,
 		backend:    b,
 		superblock: s,
