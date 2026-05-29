@@ -328,8 +328,16 @@ func Create(b backend.Storage, size, start, sectorsize int64, p *Params) (*FileS
 
 	// recalculate if it was not user provided
 	if !userProvidedBlocksize {
-		sectorsPerBlockR, blocksizeR, numblocksR := recalculateBlocksize(numblocks, size)
+		sectorsPerBlockR, blocksizeR, numblocksR := recalculateBlocksize(size)
 		_, blocksize, numblocks = uint8(sectorsPerBlockR), blocksizeR, numblocksR
+		// resize_inode / reserved-GDT growth isn't yet supported for
+		// non-1 KiB block sizes (see TODO further down). When *we*
+		// picked the non-1 KiB default, drop the feature so Create
+		// doesn't try to lay out blocks it can't read back.
+		const oneKiB = uint32(SectorSize512) * 2
+		if blocksize != oneKiB {
+			fflags.reservedGDTBlocksForExpansion = false
+		}
 	}
 
 	// how many blocks in each block group (and therefore how many block groups)
@@ -1865,36 +1873,21 @@ func (fs *FileSystem) readBlock(blockNumber uint64) ([]byte, error) {
 	return blockBytes, nil
 }
 
-// recalculate blocksize based on the existing number of blocks
-// -      0 <= blocks <   3MM         : floppy - blocksize = 1024
-// -    3MM <= blocks < 512MM         : small - blocksize = 1024
-// - 512MM <= blocks < 4*1024*1024MM  : default - blocksize =
-// - 4*1024*1024MM <= blocks < 16*1024*1024MM  : big - blocksize =
-// - 16*1024*1024MM <= blocks   : huge - blocksize =
-//
-// the original code from e2fsprogs https://git.kernel.org/pub/scm/fs/ext2/e2fsprogs.git/tree/misc/mke2fs.c
-func recalculateBlocksize(numblocks, size int64) (sectorsPerBlock int, blocksize uint32, numBlocksAdjusted int64) {
-	var (
-		million64     = int64(million)
-		sectorSize512 = uint32(SectorSize512)
-	)
-	switch {
-	case 0 <= numblocks && numblocks < 3*million64:
-		sectorsPerBlock = 2
-		blocksize = 2 * sectorSize512
-	case 3*million64 <= numblocks && numblocks < 512*million64:
-		sectorsPerBlock = 2
-		blocksize = 2 * sectorSize512
-	case 512*million64 <= numblocks && numblocks < 4*1024*1024*million64:
-		sectorsPerBlock = 2
-		blocksize = 2 * sectorSize512
-	case 4*1024*1024*million64 <= numblocks && numblocks < 16*1024*1024*million64:
-		sectorsPerBlock = 2
-		blocksize = 2 * sectorSize512
-	case numblocks > 16*1024*1024*million64:
-		sectorsPerBlock = 2
-		blocksize = 2 * sectorSize512
+// recalculateBlocksize picks a default ext4 block size when the caller
+// did not specify one. We follow mke2fs's "small" vs "default" split:
+// 1 KiB blocks below 512 MiB, 4 KiB blocks at or above. The previous
+// implementation hard-coded 1 KiB blocks for all sizes, which made the
+// journal allocator (capped at 128 MiB) need >65535 1-KiB blocks at a
+// few GiB — past both the per-extent cap and the inode's 4-extent root
+// limit. 4 KiB blocks keep a typical journal in a single extent.
+func recalculateBlocksize(size int64) (sectorsPerBlock int, blocksize uint32, numBlocksAdjusted int64) {
+	const smallFilesystemThreshold = 512 * 1024 * 1024 // 512 MiB
+	if size < smallFilesystemThreshold {
+		sectorsPerBlock = 2 // 1 KiB blocks
+	} else {
+		sectorsPerBlock = 8 // 4 KiB blocks
 	}
+	blocksize = uint32(sectorsPerBlock) * uint32(SectorSize512)
 	return sectorsPerBlock, blocksize, size / int64(blocksize)
 }
 
