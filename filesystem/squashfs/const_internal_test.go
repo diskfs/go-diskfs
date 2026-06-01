@@ -172,7 +172,6 @@ func testGetFilesystem(f fs.File) (*FileSystem, []byte, error) {
 		workspace:  "",
 		compressor: &CompressorGzip{},
 		size:       5251072,
-		start:      0,
 		backend:    file.New(f, true),
 		blocksize:  blocksize,
 		xattrs:     nil,

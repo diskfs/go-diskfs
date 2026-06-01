@@ -27,7 +27,6 @@ type FileSystem struct {
 	workspace  string
 	superblock *superblock
 	size       int64
-	start      int64
 	backend    backend.Storage
 	blocksize  int64
 	compressor Compressor
@@ -90,11 +89,20 @@ func Create(b backend.Storage, size, start, blocksize int64) (*FileSystem, error
 		return nil, fmt.Errorf("could not create working directory: %v", err)
 	}
 
+	// Wrap the backend so all internal ReadAt/WriteAt calls in this
+	// package use offsets relative to the start of the filesystem.
+	// Finalize and Read are coded throughout in terms of squashfs-
+	// internal offsets; without this wrapping, every write/read on a
+	// non-zero start (i.e. inside a partition) would land at the wrong
+	// place on the underlying disk.
+	if start != 0 {
+		b = backend.Sub(b, start, size)
+	}
+
 	// create root directory
 	// there is nothing in there
 	return &FileSystem{
 		workspace: tmpdir,
-		start:     start,
 		size:      size,
 		backend:   b,
 		blocksize: blocksize,
@@ -161,11 +169,21 @@ func Read(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) 
 		return nil, err
 	}
 
+	// Wrap the backend so all subsequent ReadAt calls use offsets
+	// relative to the start of the filesystem. The squashfs metadata
+	// (fragment table, inode table, etc.) carries squashfs-internal
+	// offsets, and helpers like readFragmentTable, readXattrsTable and
+	// readUidsGids ReadAt those offsets directly. Without wrapping,
+	// any non-zero start would land them at the wrong place on disk.
+	if start != 0 {
+		b = backend.Sub(b, start, size)
+	}
+
 	// load the information from the disk
 
 	// read the superblock
 	superblockBytes := make([]byte, superblockSize)
-	read, err = b.ReadAt(superblockBytes, start)
+	read, err = b.ReadAt(superblockBytes, 0)
 	if err != nil {
 		return nil, fmt.Errorf("unable to read bytes for superblock: %v", err)
 	}
@@ -211,7 +229,6 @@ func Read(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) 
 
 	fs := &FileSystem{
 		workspace:  "", // no workspace when we do nothing with it
-		start:      start,
 		size:       size,
 		backend:    b,
 		superblock: s,
