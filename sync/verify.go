@@ -21,25 +21,36 @@ func verifyBlockCopy(d *disk.Disk, from, to int, expectedSize int64) error {
 	if err != nil {
 		return err
 	}
-	// create a sha256sum of both partitions and compare
-	// but limit it to expectedSize
-	origHasher := sha256.New()
-	size, err := origPart.ReadContents(d.Backend, origHasher)
-	if err != nil {
-		return err
+
+	// Source partition must hold at least expectedSize bytes — the
+	// copy reported writing that many, so reading less than that back
+	// indicates a real inconsistency.
+	if got := origPart.GetSize(); got < expectedSize {
+		return fmt.Errorf("original partition size %d is smaller than expected size %d", got, expectedSize)
 	}
-	if size != expectedSize {
-		return fmt.Errorf("original partition size %d is different than expected size %d", size, expectedSize)
+	// Target partition must hold at least expectedSize bytes; it may
+	// be larger (the common case when growing a partition before a
+	// later swap+delete renames it into place). The verification only
+	// needs to confirm the leading expectedSize bytes match.
+	if got := targetPart.GetSize(); got < expectedSize {
+		return fmt.Errorf("target partition size %d is smaller than expected size %d", got, expectedSize)
+	}
+
+	// Hash the leading expectedSize bytes of both partitions and
+	// compare. NewLimitWriter caps the hasher's input, and
+	// origPart.ReadContents would otherwise feed all of the source
+	// partition's bytes into the hasher — for our purposes, we want
+	// only expectedSize bytes hashed on each side regardless of how
+	// large either partition is.
+	origHasher := sha256.New()
+	if _, err := origPart.ReadContents(d.Backend, NewLimitWriter(origHasher, expectedSize)); err != nil {
+		return err
 	}
 	origResult := origHasher.Sum(nil)
 
 	targetHasher := sha256.New()
-	size, err = targetPart.ReadContents(d.Backend, NewLimitWriter(targetHasher, expectedSize))
-	if err != nil {
+	if _, err := targetPart.ReadContents(d.Backend, NewLimitWriter(targetHasher, expectedSize)); err != nil {
 		return err
-	}
-	if size != expectedSize {
-		return fmt.Errorf("target partition size %d is different than expected size %d", size, expectedSize)
 	}
 	targetResult := targetHasher.Sum(nil)
 
