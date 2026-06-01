@@ -20,6 +20,9 @@ type FileSystem struct {
 // interface guard
 var _ filesystem.FileSystem = (*FileSystem)(nil)
 
+// StatT is an alias for fat12.StatT, the metadata returned by FileInfo.Sys().
+type StatT = fat12.StatT
+
 // Type returns filesystem.TypeFat16, overriding fat12.FileSystem.Type().
 func (fs *FileSystem) Type() filesystem.Type { return filesystem.TypeFat16 }
 
