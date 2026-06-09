@@ -69,6 +69,15 @@ func CompareFS(origFS, targetFS fs.FS) error {
 		if err != nil {
 			return err
 		}
+		// Skip the same entries CopyFileSystem skips (lost+found, etc.):
+		// the copy never writes them to the target, so requiring them here
+		// would always fail. Match on basename, exactly as the copy does.
+		if excludedPaths[path.Base(p)] {
+			if d.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
+		}
 		seen[p] = struct{}{}
 
 		// Check existence in target FS
@@ -103,11 +112,18 @@ func CompareFS(origFS, targetFS fs.FS) error {
 	}
 
 	// Ensure target FS has no extra files
-	//
-	//nolint:revive // keeping args for clarity of intent.
 	return fs.WalkDir(targetFS, ".", func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
+		}
+		// Excluded entries were never added to seen above, so skip them here
+		// too; otherwise a target that legitimately has its own lost+found
+		// (e.g. one created by mke2fs) would be flagged as an extra path.
+		if excludedPaths[path.Base(p)] {
+			if d.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
 		}
 		if _, ok := seen[p]; !ok {
 			return fmt.Errorf("extra path %q in target FS", p)
