@@ -614,8 +614,14 @@ func TestFat32Read(t *testing.T) {
 				// make any changes needed to corrupt it
 				corrupted := ""
 				if tt.bytechange >= 0 {
+					// Flip every bit of the target byte. Writing a random
+					// byte here could reproduce the original value (~1/256),
+					// leaving the sector valid and the negative test flaky.
 					b := make([]byte, 1)
-					_, _ = rand.Read(b)
+					if _, err := f.ReadAt(b, tt.bytechange+pre); err != nil {
+						t.Fatal(err)
+					}
+					b[0] ^= 0xff
 					_, _ = f.WriteAt(b, tt.bytechange+pre)
 					corrupted = fmt.Sprintf("corrupted %d", tt.bytechange+pre)
 				}
