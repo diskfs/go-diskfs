@@ -615,7 +615,10 @@ func TestFat32Read(t *testing.T) {
 				corrupted := ""
 				if tt.bytechange >= 0 {
 					b := make([]byte, 1)
-					_, _ = rand.Read(b)
+					f.ReadAt(b, tt.bytechange+pre)
+					// corrupt by adding exactly 10, rather than random, which might turn
+					// out to be the original value that was there
+					b[0] += 10
 					_, _ = f.WriteAt(b, tt.bytechange+pre)
 					corrupted = fmt.Sprintf("corrupted %d", tt.bytechange+pre)
 				}
