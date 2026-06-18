@@ -4,6 +4,7 @@
 package disk
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -46,6 +47,15 @@ func (d *Disk) ReReadPartitionTable() error {
 
 	if _, rrErr := unix.IoctlGetInt(fd, blkrrpart); rrErr != nil {
 		if pgErr := d.reconcilePartitionsBLKPG(fd); pgErr != nil {
+			// The table is already written to disk (Partition() does that before
+			// calling us). A BLKRRPART EBUSY means a partition is mounted/held —
+			// i.e. we are repartitioning the disk we booted from — and the BLKPG
+			// per-partition fallback can't tear down the in-use partition either.
+			// Signal reboot-to-apply rather than a hard failure: the next boot's
+			// partition scan reads the committed on-disk table cleanly.
+			if errors.Is(rrErr, unix.EBUSY) {
+				return fmt.Errorf("%w (BLKRRPART: %v; BLKPG: %v)", ErrReReadDeferred, rrErr, pgErr)
+			}
 			return fmt.Errorf("unable to re-read the partition table. Kernel still uses old partition table (BLKRRPART: %v; BLKPG: %v)", rrErr, pgErr)
 		}
 	}
