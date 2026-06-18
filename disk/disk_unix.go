@@ -4,20 +4,30 @@
 package disk
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
 	"golang.org/x/sys/unix"
 )
 
-const (
-	blkrrpart = 0x125f
-)
+// blkrrpart is the Linux BLKRRPART ioctl (uapi/linux/fs.h). The call compiles
+// on every unix via unix.IoctlGetInt and simply fails at runtime on platforms
+// that do not implement it.
+const blkrrpart = 0x125f
 
-// ReReadPartitionTable forces the kernel to re-read the partition table
-// on the disk.
+// ReReadPartitionTable makes the kernel pick up the on-disk partition table.
 //
-// It is done via an ioctl call with request as BLKRRPART.
+// It first tries a whole-disk re-read via the BLKRRPART ioctl. That is
+// all-or-nothing and fails with EBUSY whenever the kernel or udev is
+// transiently holding any partition -- which is common immediately after a
+// partition-table write, because the write triggers a udev re-probe -- or when
+// a partition is mounted. When BLKRRPART fails, it falls back to per-partition
+// BLKPG reconciliation (the same mechanism partx/parted use): it adds, removes,
+// and re-creates only the entries whose geometry changed, via BLKPG ioctls that
+// do not require a whole-disk exclusive re-read. This keeps the library free of
+// any dependency on external tools such as partx. The fallback is Linux-only;
+// on other platforms it reports that the re-read could not be completed.
 func (d *Disk) ReReadPartitionTable() error {
 	// the partition table needs to be re-read only if
 	// the disk file is an actual block device
@@ -25,16 +35,28 @@ func (d *Disk) ReReadPartitionTable() error {
 	if err != nil {
 		return err
 	}
+	if devInfo.Mode()&os.ModeDevice == 0 {
+		return nil
+	}
 
-	if devInfo.Mode()&os.ModeDevice != 0 {
-		osFile, err := d.Backend.Sys()
-		if err != nil {
-			return err
-		}
-		fd := osFile.Fd()
-		_, err = unix.IoctlGetInt(int(fd), blkrrpart)
-		if err != nil {
-			return fmt.Errorf("unable to re-read the partition table. Kernel still uses old partition table: %v", err)
+	osFile, err := d.Backend.Sys()
+	if err != nil {
+		return err
+	}
+	fd := int(osFile.Fd())
+
+	if _, rrErr := unix.IoctlGetInt(fd, blkrrpart); rrErr != nil {
+		if pgErr := d.reconcilePartitionsBLKPG(fd); pgErr != nil {
+			// The table is already written to disk (Partition() does that before
+			// calling us). A BLKRRPART EBUSY means a partition is mounted/held —
+			// i.e. we are repartitioning the disk we booted from — and the BLKPG
+			// per-partition fallback can't tear down the in-use partition either.
+			// Signal reboot-to-apply rather than a hard failure: the next boot's
+			// partition scan reads the committed on-disk table cleanly.
+			if errors.Is(rrErr, unix.EBUSY) {
+				return fmt.Errorf("%w (BLKRRPART: %v; BLKPG: %v)", ErrReReadDeferred, rrErr, pgErr)
+			}
+			return fmt.Errorf("unable to re-read the partition table. Kernel still uses old partition table (BLKRRPART: %v; BLKPG: %v)", rrErr, pgErr)
 		}
 	}
 

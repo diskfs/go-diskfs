@@ -22,6 +22,14 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// ErrReReadDeferred is returned (wrapped) by ReReadPartitionTable when the
+// on-disk partition table was written successfully but the kernel could not be
+// made to re-read it because the disk is busy (a partition is mounted/held — the
+// common case when repartitioning the disk you are booted from). The new table
+// is committed on disk; a reboot makes the kernel pick it up. Callers can detect
+// this with errors.Is and reboot-to-apply instead of treating it as a failure.
+var ErrReReadDeferred = errors.New("partition table written to disk but kernel re-read deferred (device busy); reboot to apply")
+
 // Disk is a reference to a single disk block device or image that has been Create() or Open()
 type Disk struct {
 	Backend           backend.Storage
