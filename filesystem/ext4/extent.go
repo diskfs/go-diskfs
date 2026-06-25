@@ -445,7 +445,7 @@ func extendLeafNode(node *extentLeafNode, added *extents, fs *FileSystem, parent
 		}
 
 		// Otherwise split the node
-		newNodes, metaBlocks, err := splitLeafNode(node, added, fs, parent)
+		newNodes, metaBlocks, err := splitLeafNode(node, added, fs)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -460,7 +460,7 @@ func extendLeafNode(node *extentLeafNode, added *extents, fs *FileSystem, parent
 	}
 
 	// If not enough space in a non-root node, split it
-	newNodes, splitMetaBlocks, err := splitLeafNode(node, added, fs, parent)
+	newNodes, splitMetaBlocks, err := splitLeafNode(node, added, fs)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -508,7 +508,7 @@ func extendLeafNode(node *extentLeafNode, added *extents, fs *FileSystem, parent
 	return parent, splitMetaBlocks, nil
 }
 
-func splitLeafNode(node *extentLeafNode, added *extents, fs *FileSystem, parent *extentInternalNode) ([]*extentLeafNode, uint64, error) {
+func splitLeafNode(node *extentLeafNode, added *extents, fs *FileSystem) ([]*extentLeafNode, uint64, error) {
 	// Combine existing and new extents
 	allExtents := node.extents
 	allExtents = append(allExtents, *added...)
@@ -546,55 +546,27 @@ func splitLeafNode(node *extentLeafNode, added *extents, fs *FileSystem, parent 
 		extents: allExtents[mid:],
 	}
 
-	var metaBlocks uint64
+	// Allocate disk blocks for the new leaf nodes explicitly. writeNodeToDisk cannot
+	// be used here because freshly split nodes are not yet registered in any parent's
+	// children list (the caller updates the parent after this function returns), so
+	// the parent-lookup path cannot resolve their block numbers.
+	blockAlloc, err := fs.allocateExtents(uint64(fs.superblock.blockSize)*2, nil)
+	if err != nil {
+		return nil, 0, fmt.Errorf("could not allocate blocks for split leaf nodes: %w", err)
+	}
+	allocatedExtents := *blockAlloc
+	if len(allocatedExtents) == 0 || allocatedExtents[0].count < 2 {
+		return nil, 0, fmt.Errorf("could not allocate enough blocks for split leaf nodes")
+	}
+	firstLeaf.diskBlock = allocatedExtents[0].startingBlock
+	secondLeaf.diskBlock = allocatedExtents[0].startingBlock + 1
+	metaBlocks := uint64(2)
 
-	// When splitting the root (parent == nil), we need to allocate new disk blocks
-	// for the child nodes since they will no longer live in the inode
-	if parent == nil {
-		// Allocate blocks for both new leaf nodes
-		blockAlloc, err := fs.allocateExtents(uint64(fs.superblock.blockSize)*2, nil)
-		if err != nil {
-			return nil, 0, fmt.Errorf("could not allocate blocks for split leaf nodes: %w", err)
-		}
-		// Get the starting block from the allocated extent
-		allocatedExtents := *blockAlloc
-		if len(allocatedExtents) == 0 || allocatedExtents[0].count < 2 {
-			return nil, 0, fmt.Errorf("could not allocate enough blocks for split leaf nodes")
-		}
-		firstLeaf.diskBlock = allocatedExtents[0].startingBlock
-		secondLeaf.diskBlock = allocatedExtents[0].startingBlock + 1
-		metaBlocks = 2
-
-		// Write the leaf nodes to their allocated blocks
-		if err := writeNodeToBlock(firstLeaf, fs, firstLeaf.diskBlock); err != nil {
-			return nil, 0, err
-		}
-		if err := writeNodeToBlock(secondLeaf, fs, secondLeaf.diskBlock); err != nil {
-			return nil, 0, err
-		}
-	} else {
-		// Non-root split: allocate disk blocks for the new leaf nodes.
-		// The parent-lookup path (writeNodeToDisk) cannot find freshly
-		// created nodes that aren't yet registered in parent.children,
-		// so we allocate explicitly and use writeNodeToBlock instead.
-		blockAlloc, err := fs.allocateExtents(uint64(fs.superblock.blockSize)*2, nil)
-		if err != nil {
-			return nil, 0, fmt.Errorf("could not allocate blocks for split leaf nodes: %w", err)
-		}
-		allocatedExtents := *blockAlloc
-		if len(allocatedExtents) == 0 || allocatedExtents[0].count < 2 {
-			return nil, 0, fmt.Errorf("could not allocate enough blocks for split leaf nodes")
-		}
-		firstLeaf.diskBlock = allocatedExtents[0].startingBlock
-		secondLeaf.diskBlock = allocatedExtents[0].startingBlock + 1
-		metaBlocks = 2
-
-		if err := writeNodeToBlock(firstLeaf, fs, firstLeaf.diskBlock); err != nil {
-			return nil, 0, err
-		}
-		if err := writeNodeToBlock(secondLeaf, fs, secondLeaf.diskBlock); err != nil {
-			return nil, 0, err
-		}
+	if err := writeNodeToBlock(firstLeaf, fs, firstLeaf.diskBlock); err != nil {
+		return nil, 0, err
+	}
+	if err := writeNodeToBlock(secondLeaf, fs, secondLeaf.diskBlock); err != nil {
+		return nil, 0, err
 	}
 
 	return []*extentLeafNode{firstLeaf, secondLeaf}, metaBlocks, nil
