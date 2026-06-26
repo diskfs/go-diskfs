@@ -546,21 +546,30 @@ func splitLeafNode(node *extentLeafNode, added *extents, fs *FileSystem) ([]*ext
 		extents: allExtents[mid:],
 	}
 
-	// Allocate disk blocks for the new leaf nodes explicitly. writeNodeToDisk cannot
-	// be used here because freshly split nodes are not yet registered in any parent's
-	// children list (the caller updates the parent after this function returns), so
-	// the parent-lookup path cannot resolve their block numbers.
-	blockAlloc, err := fs.allocateExtents(uint64(fs.superblock.blockSize)*2, nil)
+	// A non-root leaf already lives on disk (node.diskBlock != 0): reuse that
+	// block for one half and allocate a single new block for the other, matching
+	// ext4 ([A] -> [A, C]) and avoiding a leak. The inode-root leaf
+	// (node.diskBlock == 0) has no block to reuse, so allocate two.
+	newBlocks := 1
+	if node.diskBlock == 0 {
+		newBlocks = 2
+	}
+	blockAlloc, err := fs.allocateExtents(uint64(fs.superblock.blockSize)*uint64(newBlocks), nil)
 	if err != nil {
 		return nil, 0, fmt.Errorf("could not allocate blocks for split leaf nodes: %w", err)
 	}
 	allocatedExtents := *blockAlloc
-	if len(allocatedExtents) == 0 || allocatedExtents[0].count < 2 {
+	if len(allocatedExtents) == 0 || int(allocatedExtents[0].count) < newBlocks {
 		return nil, 0, fmt.Errorf("could not allocate enough blocks for split leaf nodes")
 	}
-	firstLeaf.diskBlock = allocatedExtents[0].startingBlock
-	secondLeaf.diskBlock = allocatedExtents[0].startingBlock + 1
-	metaBlocks := uint64(2)
+	if node.diskBlock != 0 {
+		firstLeaf.diskBlock = node.diskBlock
+		secondLeaf.diskBlock = allocatedExtents[0].startingBlock
+	} else {
+		firstLeaf.diskBlock = allocatedExtents[0].startingBlock
+		secondLeaf.diskBlock = allocatedExtents[0].startingBlock + 1
+	}
+	metaBlocks := uint64(newBlocks)
 
 	if err := writeNodeToBlock(firstLeaf, fs, firstLeaf.diskBlock); err != nil {
 		return nil, 0, err
