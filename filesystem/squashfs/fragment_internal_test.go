@@ -48,3 +48,19 @@ func TestFragmentEntryToBytes(t *testing.T) {
 		}
 	}
 }
+
+// TestReadFragmentTableNoFragments checks that an image with no fragments does
+// not attempt to read a (non-existent) fragment table. fragmentTableStart holds
+// the 0xffff... sentinel in that case, so reading it seeks to offset -1.
+// Regression test for reading squashfs-tools-ng images (rclone/rclone#9004).
+func TestReadFragmentTableNoFragments(t *testing.T) {
+	s := &superblock{fragmentCount: 0, fragmentTableStart: 0xffff_ffff_ffff_ffff}
+	// A nil file guarantees the test fails loudly if the code tries to read.
+	frags, err := readFragmentTable(s, nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(frags) != 0 {
+		t.Fatalf("expected no fragments, got %d", len(frags))
+	}
+}

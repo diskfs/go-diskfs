@@ -48,3 +48,25 @@ func TestDirectoryEntry(t *testing.T) {
 		t.Errorf("Expected InodeType %q for nil inode, got %q", "unknown", st.InodeType)
 	}
 }
+
+// TestDirectoryEntryFromInodeNilXattrTable checks that an inode advertising an
+// xattr index does not panic when the image has no xattr table. squashfs-tools-ng
+// sets the NO_XATTRS superblock flag (so fs.xattrs is nil) yet can leave a
+// non-sentinel xattr index in an inode. Regression test for rclone/rclone#9004.
+func TestDirectoryEntryFromInodeNilXattrTable(t *testing.T) {
+	fs := &FileSystem{xattrs: nil, uidsGids: []uint32{1000}}
+	in := &inodeImpl{
+		header: &inodeHeader{inodeType: inodeExtendedDirectory, mode: 0o755},
+		body:   extendedDirectory{xAttrIndex: 0}, // 0 != noXattrInodeFlag => has == true
+	}
+	entry, err := fs.directoryEntryFromInode("subdir", in, true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if entry == nil || entry.name != "subdir" {
+		t.Fatalf("unexpected entry: %+v", entry)
+	}
+	if len(entry.xattrs) != 0 {
+		t.Fatalf("expected no xattrs, got %v", entry.xattrs)
+	}
+}
