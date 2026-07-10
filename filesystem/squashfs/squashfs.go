@@ -632,7 +632,11 @@ func (fs *FileSystem) directoryEntryFromInode(name string, in inode, isSubdirect
 	body, header := in.getBody(), in.getHeader()
 	xattrIndex, has := body.xattrIndex()
 	xattrs := map[string]string{}
-	if has {
+	// An inode may advertise an xattr index even though the image was written
+	// without an xattr table (e.g. squashfs-tools-ng sets the NO_XATTRS superblock
+	// flag but leaves a non-sentinel index in the inode). fs.xattrs is nil in that
+	// case, so guard against it rather than dereferencing a nil table.
+	if has && fs.xattrs != nil {
 		var err error
 		xattrs, err = fs.xattrs.find(int(xattrIndex))
 		if err != nil {
@@ -798,6 +802,14 @@ func validateBlocksize(blocksize int64) error {
 }
 
 func readFragmentTable(s *superblock, file backend.File, c Compressor) ([]*fragmentEntry, error) {
+	// if there are no fragments there is no fragment table to read. In that case
+	// fragmentTableStart holds the 0xffff... "not present" sentinel, so reading it
+	// would seek to a negative offset (int64(0xffff...) == -1). Images written
+	// without tail-end packing (e.g. squashfs-tools-ng with -no-tail-packing, or a
+	// single empty directory) hit this.
+	if s.fragmentCount == 0 {
+		return nil, nil
+	}
 	// get the first level index, which is just the pointers to the fragment table metadata blocks
 	blockCount := s.fragmentCount / 512
 	if s.fragmentCount%512 > 0 {
