@@ -440,7 +440,7 @@ func extendLeafNode(node *extentLeafNode, added *extents, fs *FileSystem, parent
 			if err != nil {
 				return nil, 0, err
 			}
-			newRoot := createInternalNode([]extentBlockFinder{newLeaf}, nil, fs)
+			newRoot := createInternalNode([]extentBlockFinder{newLeaf})
 			return newRoot, metaBlocks, nil
 		}
 
@@ -455,7 +455,7 @@ func extendLeafNode(node *extentLeafNode, added *extents, fs *FileSystem, parent
 		for _, n := range newNodes {
 			newNodesAsBlockFinder = append(newNodesAsBlockFinder, n)
 		}
-		newRoot := createInternalNode(newNodesAsBlockFinder, nil, fs)
+		newRoot := createInternalNode(newNodesAsBlockFinder)
 		return newRoot, metaBlocks, nil
 	}
 
@@ -625,46 +625,25 @@ func promoteLeafToChild(node *extentLeafNode, added *extents, fs *FileSystem) (*
 	return newLeaf, 1, nil
 }
 
-func createInternalNode(nodes []extentBlockFinder, parent *extentInternalNode, fs *FileSystem) *extentInternalNode {
-	// Calculate max entries for internal nodes (based on block size)
-	// Each entry is 12 bytes, header is 12 bytes
-	// For root node in inode, max is 4
-	maxEntries := uint16(4)
-	if parent != nil {
-		maxEntries = uint16((nodes[0].getBlockSize() - 12) / 12)
-	}
-
+func createInternalNode(nodes []extentBlockFinder) *extentInternalNode {
+	// Always builds a new root internal node, which lives in the inode: capped at
+	// 4 entries and persisted with the inode, so nothing is written to disk here.
 	internalNode := &extentInternalNode{
 		extentNodeHeader: extentNodeHeader{
 			depth:     nodes[0].getDepth() + 1, // Depth is 1 more than the children
 			entries:   uint16(len(nodes)),
-			max:       maxEntries,
+			max:       4,
 			blockSize: nodes[0].getBlockSize(),
 		},
 		children: make([]*extentChildPtr, len(nodes)),
 	}
-
 	for i, node := range nodes {
-		var diskBlock uint64
-		if parent == nil {
-			// When creating a new root, get disk block from the node itself
-			diskBlock = getDiskBlockFromNode(node)
-		} else {
-			diskBlock = getBlockNumberFromNode(node, parent)
-		}
 		internalNode.children[i] = &extentChildPtr{
 			fileBlock: node.getFileBlock(),
 			count:     node.getCount(),
-			diskBlock: diskBlock,
+			diskBlock: getDiskBlockFromNode(node),
 		}
 	}
-
-	// Write the new internal node to the disk (root nodes live in inode, so parent==nil means no write)
-	err := writeNodeToDisk(internalNode, fs, parent)
-	if err != nil {
-		return nil
-	}
-
 	return internalNode
 }
 
@@ -755,7 +734,7 @@ func extendInternalNode(node *extentInternalNode, added *extents, fs *FileSystem
 				for _, n := range newInternalNodes {
 					newNodesAsBlockFinder = append(newNodesAsBlockFinder, n)
 				}
-				newRoot := createInternalNode(newNodesAsBlockFinder, nil, fs)
+				newRoot := createInternalNode(newNodesAsBlockFinder)
 				return newRoot, metaBlocks, nil
 			}
 			return nil, 0, fmt.Errorf("internal node split with non-root parent not supported")
@@ -784,7 +763,7 @@ func extendInternalNode(node *extentInternalNode, added *extents, fs *FileSystem
 	// Check if the internal node is at capacity
 	if len(node.children) > int(node.max) {
 		// Split the internal node if it's at capacity
-		newInternalNodes, err := splitInternalNode(node, node.children[childIndex], fs, parent)
+		newInternalNodes, err := splitInternalNode(node, node.children[childIndex], fs)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -796,7 +775,7 @@ func extendInternalNode(node *extentInternalNode, added *extents, fs *FileSystem
 			for _, n := range newInternalNodes {
 				newNodesAsBlockFinder = append(newNodesAsBlockFinder, n)
 			}
-			newRoot := createInternalNode(newNodesAsBlockFinder, nil, fs)
+			newRoot := createInternalNode(newNodesAsBlockFinder)
 			return newRoot, metaBlocks, nil
 		}
 
@@ -868,7 +847,7 @@ func splitInternalNodeChildren(node *extentInternalNode, fs *FileSystem) ([]*ext
 	return []*extentInternalNode{firstInternal, secondInternal}, 2, nil
 }
 
-func splitInternalNode(node *extentInternalNode, newChild *extentChildPtr, fs *FileSystem, parent *extentInternalNode) ([]*extentInternalNode, error) {
+func splitInternalNode(node *extentInternalNode, newChild *extentChildPtr, fs *FileSystem) ([]*extentInternalNode, error) {
 	// Combine existing children with the new child
 	allChildren := node.children
 	allChildren = append(allChildren, newChild)
