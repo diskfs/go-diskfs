@@ -1,8 +1,15 @@
 package ext4
 
 import (
+	"bytes"
+	"crypto/rand"
 	"encoding/binary"
+	"io"
+	"os"
+	"os/exec"
 	"testing"
+
+	"github.com/diskfs/go-diskfs/backend/file"
 )
 
 // TestExtentNodeHeaderToBytes tests serialization of the extent node header
@@ -543,12 +550,10 @@ func TestGetDiskBlockFromNode(t *testing.T) {
 	}
 }
 
-// TestCreateRootExtentTree tests creation of a new root extent tree
+// TestCreateRootExtentTree tests creation of a new root extent tree.
+// Full extendExtentTree coverage lives in TestExtendExtentTreeSplitRegression,
+// which exercises the on-disk split paths.
 func TestCreateRootExtentTree(t *testing.T) {
-	// We can't test extendExtentTree directly without a full filesystem,
-	// but we can test createRootExtentTree which doesn't need disk I/O
-	// if the extents fit in 4 entries.
-
 	t.Run("fits in root", func(t *testing.T) {
 		exts := &extents{
 			{fileBlock: 0, startingBlock: 100, count: 5},
@@ -735,5 +740,222 @@ func TestChildPtrMatchesNode(t *testing.T) {
 	}
 	if childPtrMatchesNode(nonMatchingPtr, leaf) {
 		t.Errorf("expected non-matching ptr to not match leaf node")
+	}
+}
+
+// setupWritableExtentFS creates a fresh ext4 filesystem on a sparse temp
+// image and returns it along with the image path (for e2fsck).
+// Sizes >= 512 MiB get auto-detected 4 KiB blocks, which is what the
+// split paths in extent.go are sized for.
+func setupWritableExtentFS(t *testing.T, size int64) (fs *FileSystem, imagePath string) {
+	t.Helper()
+	outfile, f := testCreateEmptyFile(t, size)
+	t.Cleanup(func() { _ = f.Close() })
+	fs, err := Create(file.New(f, false), size, 0, 512, &Params{})
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+	return fs, outfile
+}
+
+// extendTreeWithBlock allocates a single filesystem block and grafts it
+// onto tree as a new one-block extent at the given fileBlock offset.
+// This drives extendExtentTree through every split path without the
+// overhead of an actual File.Write.
+func extendTreeWithBlock(t *testing.T, fs *FileSystem, tree extentBlockFinder, fileBlock uint32) extentBlockFinder {
+	t.Helper()
+	alloc, err := fs.allocateExtents(uint64(fs.superblock.blockSize), nil)
+	if err != nil {
+		t.Fatalf("allocateExtents at fileBlock %d failed: %v", fileBlock, err)
+	}
+	if alloc == nil || len(*alloc) == 0 {
+		t.Fatalf("allocateExtents returned no extents at fileBlock %d", fileBlock)
+	}
+	added := extents{{
+		fileBlock:     fileBlock,
+		startingBlock: (*alloc)[0].startingBlock,
+		count:         1,
+	}}
+	updated, _, err := extendExtentTree(tree, &added, fs, nil)
+	if err != nil {
+		t.Fatalf("extendExtentTree at fileBlock %d failed: %v", fileBlock, err)
+	}
+	return updated
+}
+
+// walkAndLoadChildren recurses through an extent tree, loading each
+// internal child from disk via loadChildNode. This confirms that every
+// node returned by a split was actually allocated a real disk block and
+// the bytes there round-trip back through parseExtents.
+func walkAndLoadChildren(t *testing.T, fs *FileSystem, node extentBlockFinder) {
+	t.Helper()
+	internal, ok := node.(*extentInternalNode)
+	if !ok {
+		return
+	}
+	for _, child := range internal.children {
+		if child.diskBlock == 0 {
+			t.Errorf("child at fileBlock %d has zero diskBlock", child.fileBlock)
+			continue
+		}
+		loaded, err := loadChildNode(child, fs)
+		if err != nil {
+			t.Fatalf("loadChildNode at diskBlock %d: %v", child.diskBlock, err)
+		}
+		walkAndLoadChildren(t, fs, loaded)
+	}
+}
+
+// TestExtendExtentTreeSplitRegression exercises the split paths in
+// extent.go that previously failed for large files. With 4 KiB blocks
+// each non-root leaf holds up to (4096-12)/12 = 340 extents and the
+// inode-root internal node is capped at 4 children.
+func TestExtendExtentTreeSplitRegression(t *testing.T) {
+	// 350 single-block extents force one non-root leaf split (at the
+	// 341st add). Pre-fix this failed with
+	// "block number not found for node" because splitLeafNode did not
+	// allocate disk blocks for the new leaves.
+	t.Run("nonRootLeafSplit", func(t *testing.T) {
+		fs, _ := setupWritableExtentFS(t, 600*MB)
+		var tree extentBlockFinder
+		const n = 350
+		for i := uint32(0); i < n; i++ {
+			tree = extendTreeWithBlock(t, fs, tree, i)
+		}
+		if tree == nil {
+			t.Fatalf("expected non-nil tree after %d extends", n)
+		}
+		if got := tree.getDepth(); got < 1 {
+			t.Fatalf("expected tree depth >= 1 after split, got %d", got)
+		}
+		all, err := tree.blocks(fs)
+		if err != nil {
+			t.Fatalf("tree.blocks failed: %v", err)
+		}
+		if len(all) != n {
+			t.Fatalf("expected %d extents in tree, got %d", n, len(all))
+		}
+		for i, ext := range all {
+			if ext.fileBlock != uint32(i) {
+				t.Fatalf("extent[%d].fileBlock = %d, want %d", i, ext.fileBlock, i)
+			}
+			if ext.count != 1 {
+				t.Fatalf("extent[%d].count = %d, want 1", i, ext.count)
+			}
+		}
+		walkAndLoadChildren(t, fs, tree)
+	})
+
+	// 900 single-block extents trigger four leaf splits, pushing the
+	// inode-root internal node to 5 children (max is 4). Pre-fix this
+	// panicked while serializing the over-capacity root; the fix adds
+	// splitInternalNodeChildren and produces a depth-2 root.
+	t.Run("inodeRootInternalOverflow", func(t *testing.T) {
+		fs, _ := setupWritableExtentFS(t, 600*MB)
+		var tree extentBlockFinder
+		const n = 900
+		for i := uint32(0); i < n; i++ {
+			tree = extendTreeWithBlock(t, fs, tree, i)
+		}
+		root, ok := tree.(*extentInternalNode)
+		if !ok {
+			t.Fatalf("expected root *extentInternalNode after %d extends, got %T", n, tree)
+		}
+		if len(root.children) > int(root.max) {
+			t.Fatalf("inode root over capacity: %d children, max %d", len(root.children), root.max)
+		}
+		if root.depth != 2 {
+			t.Fatalf("expected root depth 2 after inode-root split, got %d", root.depth)
+		}
+		// Pre-fix this slice index past max would panic; assert it now succeeds.
+		_ = root.toBytes()
+
+		all, err := tree.blocks(fs)
+		if err != nil {
+			t.Fatalf("tree.blocks failed: %v", err)
+		}
+		if len(all) != n {
+			t.Fatalf("expected %d extents in tree, got %d", n, len(all))
+		}
+		walkAndLoadChildren(t, fs, tree)
+	})
+}
+
+// TestExtendExtentTreeLargeFile reproduces the original OCI flatten
+// failure: writing a large binary in small chunks fragments allocations
+// across hundreds of extents and forces the extent tree to grow through
+// every split path. Pre-fix this returned
+// "could not convert extents into tree: block number not found for node".
+func TestExtendExtentTreeLargeFile(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping large file regression in short mode")
+	}
+	const (
+		fsSize    = 500 * MB
+		fileSize  = 80 * 1024 * 1024
+		chunkSize = 32 * 1024
+	)
+	outfile, f := testCreateEmptyFile(t, fsSize)
+	defer f.Close()
+
+	fs, err := Create(file.New(f, false), fsSize, 0, 512, &Params{})
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+
+	data := make([]byte, fileSize)
+	if _, err := rand.Read(data); err != nil {
+		t.Fatalf("rand.Read failed: %v", err)
+	}
+
+	ext4File, err := fs.OpenFile("/node.bin", os.O_CREATE|os.O_RDWR)
+	if err != nil {
+		t.Fatalf("OpenFile failed: %v", err)
+	}
+	for offset := 0; offset < fileSize; offset += chunkSize {
+		end := offset + chunkSize
+		if end > fileSize {
+			end = fileSize
+		}
+		nWritten, err := ext4File.Write(data[offset:end])
+		if err != nil {
+			t.Fatalf("Write at offset %d failed: %v", offset, err)
+		}
+		if nWritten != end-offset {
+			t.Fatalf("short write at offset %d: got %d want %d", offset, nWritten, end-offset)
+		}
+	}
+
+	if _, err := ext4File.Seek(0, io.SeekStart); err != nil {
+		t.Fatalf("Seek failed: %v", err)
+	}
+	readBuf := make([]byte, fileSize)
+	total := 0
+	for total < fileSize {
+		nRead, err := ext4File.Read(readBuf[total:])
+		if nRead > 0 {
+			total += nRead
+		}
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatalf("Read at offset %d failed: %v", total, err)
+		}
+	}
+	if total != fileSize {
+		t.Fatalf("read %d bytes, want %d", total, fileSize)
+	}
+	if !bytes.Equal(data, readBuf) {
+		t.Errorf("payload mismatch after large file round trip")
+	}
+
+	if err := f.Sync(); err != nil {
+		t.Fatalf("Sync failed: %v", err)
+	}
+	cmd := exec.Command("e2fsck", "-f", "-n", outfile)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Errorf("e2fsck failed: %v\n%s", err, string(out))
 	}
 }
