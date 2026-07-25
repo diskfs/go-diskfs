@@ -500,7 +500,12 @@ func (fs *FileSystem) ReadDir(p string) ([]iofs.DirEntry, error) {
 	}
 	ret := make([]iofs.DirEntry, 0, len(entries))
 	for _, e := range entries {
-		if e.isVolumeLabel || e.filenameShort == "" || e.filenameShort == ".." || e.filenameShort == "." {
+		// An entry with neither name is padding rather than a file. One that has
+		// only a long name is listed under it: earlier releases wrote a blank 8.3
+		// name for any file whose name began with a dot, and those filesystems
+		// still have to be readable.
+		if e.isVolumeLabel || (e.filenameShort == "" && e.filenameLong == "") ||
+			e.filenameShort == ".." || e.filenameShort == "." {
 			continue
 		}
 		ret = append(ret, e)

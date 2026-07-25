@@ -194,6 +194,59 @@ func TestCreateEntryNoCollisionWhenStemFits(t *testing.T) {
 	}
 }
 
+// TestCreateEntryDotLeadingName checks the 8.3 names generated for names that
+// begin with a dot. A name with no further dot has no stem at all and takes one
+// derived from the rest of the name, matching what mtools and the Linux kernel
+// generate. A name with a later dot keeps its stem, so it needs no numeric tail;
+// mtools adds one there regardless, which is a difference in policy rather than
+// a name any FAT implementation would reject.
+func TestCreateEntryDotLeadingName(t *testing.T) {
+	tests := []struct {
+		name      string
+		shortName string
+		extension string
+	}{
+		{".boot_repository", "BOOT_R~1", ""},
+		{".DS_Store", "DS_STO~1", ""},
+		{".a", "A~1", ""},
+		{".abc", "ABC~1", ""},
+		{".config.txt", "CONFIG", "TXT"},
+		{".tar.gz", "TAR", "GZ"},
+	}
+	for _, tt := range tests {
+		d := &Directory{}
+		e, err := d.createEntry(tt.name, 2, false)
+		if err != nil {
+			t.Fatalf("createEntry %s: %v", tt.name, err)
+		}
+		if e.filenameShort != tt.shortName || e.fileExtension != tt.extension {
+			t.Errorf("createEntry(%q): short name = %q.%q, want %q.%q",
+				tt.name, e.filenameShort, e.fileExtension, tt.shortName, tt.extension)
+		}
+		if e.filenameLong != tt.name {
+			t.Errorf("createEntry(%q): long name = %q", tt.name, e.filenameLong)
+		}
+	}
+}
+
+func TestCreateEntryDotLeadingNameCollision(t *testing.T) {
+	d := &Directory{}
+	first, err := d.createEntry(".boot_repository", 2, false)
+	if err != nil {
+		t.Fatalf("createEntry first: %v", err)
+	}
+	second, err := d.createEntry(".boot_repository2", 3, false)
+	if err != nil {
+		t.Fatalf("createEntry second: %v", err)
+	}
+	if first.filenameShort != "BOOT_R~1" {
+		t.Errorf("first entry: short name = %q, want BOOT_R~1", first.filenameShort)
+	}
+	if second.filenameShort != "BOOT_R~2" {
+		t.Errorf("second entry: short name = %q, want BOOT_R~2", second.filenameShort)
+	}
+}
+
 // ── removeEntry ───────────────────────────────────────────────────────────────
 
 func TestRemoveEntryByLongName(t *testing.T) {

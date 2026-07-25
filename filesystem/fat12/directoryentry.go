@@ -489,6 +489,18 @@ func convertLfnSfn(name string) (shortName, extension string, isLFN, isTruncated
 		isLFN = true
 	}
 
+	// A name that begins with a dot has no 8.3 stem of its own, since everything
+	// before the dot is empty. Other implementations derive the stem from the
+	// rest of the name and give it a numeric tail, so .boot_repository becomes
+	// BOOT_R~1 and .config.txt becomes CONFIG~1.TXT.
+	if shortName == "" {
+		if stem, ext := splitDotLeadingName(name); stem != "" {
+			shortName, extension = stem, ext
+			isLFN = true
+			isTruncated = true
+		}
+	}
+
 	// convert shortName to 8 chars
 	if len(shortName) > 8 {
 		isLFN = true
@@ -496,6 +508,33 @@ func convertLfnSfn(name string) (shortName, extension string, isLFN, isTruncated
 		shortName = shortName[:6] + "~" + "1"
 	}
 	return shortName, extension, isLFN, isTruncated
+}
+
+// splitDotLeadingName derives an 8.3 stem and extension for a name whose leading
+// dot leaves it without a stem. The returned stem carries the "~1" numeric tail
+// that createEntry then resolves against the other entries in the directory.
+func splitDotLeadingName(name string) (stem, extension string) {
+	rest := strings.TrimLeft(name, ".")
+	if rest == "" {
+		return "", ""
+	}
+	rawStem := rest
+	if lastDot := strings.LastIndex(rest, "."); lastDot > 0 {
+		rawStem = rest[:lastDot]
+		rawExtension := rest[lastDot+1:]
+		if len(rawExtension) > 3 {
+			rawExtension = rawExtension[0:3]
+		}
+		extension = uCaseValid(rawExtension)
+	}
+	stem = uCaseValid(rawStem)
+	if stem == "" {
+		return "", ""
+	}
+	if len(stem) > 6 {
+		stem = stem[:6]
+	}
+	return stem + "~1", extension
 }
 
 // converts a string into upper-case with only valid characters

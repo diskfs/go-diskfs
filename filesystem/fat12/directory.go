@@ -2,6 +2,7 @@ package fat12
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/diskfs/go-diskfs/util/timestamp"
 )
@@ -102,13 +103,11 @@ func uniqueShortName(stem, ext string, entries []*directoryEntry) string {
 func (d *Directory) createEntry(name string, cluster uint32, dir bool) (*directoryEntry, error) {
 	shortName, extension, isLFN, isTruncated := convertLfnSfn(name)
 
-	// When the stem was longer than 8 characters, convertLfnSfn emits "~1" as
-	// the numeric tail unconditionally.  We must find the lowest tail value
-	// that does not clash with any existing entry in this directory.
+	// convertLfnSfn emits "~1" as the numeric tail unconditionally.  We must find
+	// the lowest tail value that does not clash with any existing entry in this
+	// directory.
 	if isTruncated {
-		// The base stem is the first 6 characters of the short name returned
-		// by convertLfnSfn (which is always stem[:6]+"~1" when truncated).
-		stem := shortName[:6]
+		stem, _, _ := strings.Cut(shortName, "~")
 		shortName = uniqueShortName(stem, extension, d.entries)
 		isLFN = true
 	}
