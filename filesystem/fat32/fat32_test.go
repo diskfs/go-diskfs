@@ -25,6 +25,7 @@ import (
 	"github.com/diskfs/go-diskfs/backend/file"
 	"github.com/diskfs/go-diskfs/disk"
 	"github.com/diskfs/go-diskfs/filesystem"
+	"github.com/diskfs/go-diskfs/filesystem/fat12"
 	"github.com/diskfs/go-diskfs/filesystem/fat32"
 	"github.com/diskfs/go-diskfs/filesystem/internal/testutil"
 	"github.com/diskfs/go-diskfs/testhelper"
@@ -1659,6 +1660,99 @@ func Test_Rename(t *testing.T) {
 
 			test.post(t, fs)
 		})
+	}
+}
+
+// TestFat32EmptyFileHasNoClusters checks that a zero-length file owns no
+// clusters, whether it was created empty or truncated back to zero. fsck.vfat
+// treats a size-0 entry that still points at a cluster chain as an error.
+func TestFat32EmptyFileHasNoClusters(t *testing.T) {
+	tmpImgPath := filepath.Join(t.TempDir(), "fat32_empty")
+	d, err := diskfs.Create(tmpImgPath, 32*1024*1024, diskfs.SectorSizeDefault)
+	if err != nil {
+		t.Fatalf("error creating disk: %v", err)
+	}
+	defer d.Close()
+	fs, err := d.CreateFilesystem(disk.FilesystemSpec{Partition: 0, FSType: filesystem.TypeFat32})
+	if err != nil {
+		t.Fatalf("error creating filesystem: %v", err)
+	}
+
+	chainOf := func(name string) []uint32 {
+		t.Helper()
+		f, err := fs.OpenFile(name, os.O_RDONLY)
+		if err != nil {
+			t.Fatalf("could not open %s: %v", name, err)
+		}
+		defer f.Close()
+		fl, ok := f.(*fat12.File)
+		if !ok {
+			t.Fatalf("%s: unexpected file type %T", name, f)
+		}
+		chain, err := fl.GetClusterChain()
+		if err != nil {
+			t.Fatalf("could not get cluster chain for %s: %v", name, err)
+		}
+		info, err := f.Stat()
+		if err != nil {
+			t.Fatalf("could not stat %s: %v", name, err)
+		}
+		if info.Size() != 0 {
+			t.Errorf("%s: size = %d, want 0", name, info.Size())
+		}
+		return chain
+	}
+
+	created, err := fs.OpenFile("/CREATED.TXT", os.O_CREATE|os.O_RDWR)
+	if err != nil {
+		t.Fatalf("could not create file: %v", err)
+	}
+	if err := created.Close(); err != nil {
+		t.Fatalf("could not close created file: %v", err)
+	}
+	if chain := chainOf("/CREATED.TXT"); len(chain) != 0 {
+		t.Errorf("file created empty holds clusters %v, want none", chain)
+	}
+
+	written, err := fs.OpenFile("/TRUNCED.TXT", os.O_CREATE|os.O_RDWR)
+	if err != nil {
+		t.Fatalf("could not create file to truncate: %v", err)
+	}
+	if _, err := written.Write([]byte("some content")); err != nil {
+		t.Fatalf("could not write file to truncate: %v", err)
+	}
+	if err := written.Close(); err != nil {
+		t.Fatalf("could not close file to truncate: %v", err)
+	}
+	truncated, err := fs.OpenFile("/TRUNCED.TXT", os.O_TRUNC|os.O_RDWR)
+	if err != nil {
+		t.Fatalf("could not truncate file: %v", err)
+	}
+	if err := truncated.Close(); err != nil {
+		t.Fatalf("could not close truncated file: %v", err)
+	}
+	if chain := chainOf("/TRUNCED.TXT"); len(chain) != 0 {
+		t.Errorf("file truncated to zero holds clusters %v, want none", chain)
+	}
+
+	// Writing to it again has to give it a chain of its own.
+	rewritten, err := fs.OpenFile("/TRUNCED.TXT", os.O_RDWR)
+	if err != nil {
+		t.Fatalf("could not reopen truncated file: %v", err)
+	}
+	content := []byte("content again")
+	if _, err := rewritten.Write(content); err != nil {
+		t.Fatalf("could not rewrite truncated file: %v", err)
+	}
+	if err := rewritten.Close(); err != nil {
+		t.Fatalf("could not close rewritten file: %v", err)
+	}
+	readBack, err := fs.ReadFile("/TRUNCED.TXT")
+	if err != nil {
+		t.Fatalf("could not read rewritten file: %v", err)
+	}
+	if !bytes.Equal(readBack, content) {
+		t.Errorf("rewritten file = %q, want %q", readBack, content)
 	}
 }
 

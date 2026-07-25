@@ -43,6 +43,12 @@ func (fl *File) GetClusterChain() ([]uint32, error) {
 		return nil, os.ErrClosed
 	}
 
+	// A file with no content has no clusters: its directory entry records a start
+	// cluster of 0, which is an empty chain rather than a broken one.
+	if fl.fileSize == 0 && fl.clusterLocation == 0 {
+		return []uint32{}, nil
+	}
+
 	fs := fl.filesystem
 	clusters, err := fs.getClusterList(fl.clusterLocation)
 	if err != nil {
@@ -112,16 +118,18 @@ func (fl *File) Read(b []byte) (int, error) {
 	size := int(fl.fileSize) - int(fl.offset)
 	maxRead := size
 	file := fs.backend
+
+	// if there is nothing left to read, just return EOF. This has to come before
+	// the cluster lookup: an empty file may have no cluster chain to look up.
+	if size <= 0 {
+		return totalRead, io.EOF
+	}
+
 	clusters, err := fs.getClusterList(fl.clusterLocation)
 	if err != nil {
 		return totalRead, fmt.Errorf("unable to get list of clusters for file: %v", err)
 	}
 	clusterIndex := 0
-
-	// if there is nothing left to read, just return EOF
-	if size <= 0 {
-		return totalRead, io.EOF
-	}
 
 	// we stop when we hit the lesser of
 	//   1- len(b)
@@ -203,6 +211,11 @@ func (fl *File) Write(p []byte) (int, error) {
 	clusters, err := fs.allocateSpace(uint64(newSize), fl.clusterLocation)
 	if err != nil {
 		return 0x00, fmt.Errorf("unable to allocate clusters for file: %v", err)
+	}
+	// A file that arrived with no clusters, as other implementations record an
+	// empty file, has to adopt the chain that was just allocated for it.
+	if fl.clusterLocation == 0 && len(clusters) > 0 {
+		fl.clusterLocation = clusters[0]
 	}
 
 	// update the directory entry size for the file
