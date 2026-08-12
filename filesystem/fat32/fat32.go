@@ -75,38 +75,25 @@ func (fs *FileSystem) SetLabel(volumeLabel string) error {
 
 // ── Create ────────────────────────────────────────────────────────────────────
 
-// Create creates a FAT32 filesystem on the given backend.
-func Create(b backend.Storage, size, start, blocksize int64, volumeLabel string, reproducible bool) (*FileSystem, error) {
-	// Check writability first so a readonly backend surfaces the plain
-	// backend error rather than a layout/size validation error.
-	if _, err := b.Writable(); err != nil {
-		return nil, err
-	}
-	if blocksize != int64(SectorSize512) && blocksize != int64(SectorSize4096) && blocksize > 0 {
-		return nil, fmt.Errorf("blocksize for FAT32 must be either 512 bytes, 4096 bytes, or 0; not %d", blocksize)
-	}
-	if blocksize == 0 {
-		blocksize = int64(SectorSize512)
-	}
-	if size > Fat32MaxSize {
-		return nil, fmt.Errorf("requested size is larger than maximum allowed FAT32, requested %d, maximum %d", size, Fat32MaxSize)
-	}
-	// Reserved area: boot sector at 0, FSInfo at 1, their backups at 6 and 7;
-	// rounded up to 32 so the first FAT begins on a 16 KiB boundary at 512 bps.
-	const reservedSectors = uint16(32)
-	if size < int64(reservedSectors)*blocksize {
-		return nil, fmt.Errorf("requested size is smaller than minimum allowed FAT32, requested %d minimum %d", size, int64(reservedSectors)*blocksize)
-	}
+// Reserved area: boot sector at 0, FSInfo at 1, their backups at 6 and 7;
+// rounded up to 32 so the first FAT begins on a 16 KiB boundary at 512 bps.
+const reservedSectors = uint16(32)
 
-	var volid uint32
-	if !reproducible {
-		now := time.Now()
-		volid = uint32(now.Unix()<<20 | (now.UnixNano() / 1000000))
-	}
+// fsLayout is the geometry of a FAT32 filesystem of a given size: how the
+// sectors are divided between the two FAT copies and the data area.
+type fsLayout struct {
+	totalSectors      uint32
+	sectorsPerCluster uint8
+	sectorsPerFat     uint16
+	dataSectors       int64
+	clusterCount      uint32
+}
 
-	fsisPrimarySector := uint16(1)
-	backupBootSector := uint16(6)
-
+// layout computes the geometry of a FAT32 filesystem of size bytes with the
+// given sector size, following the sizing rules of dosfstools' mkfs.fat. A
+// size too small to hold a filesystem yields a zero or negative dataSectors
+// and a zero clusterCount; the caller rejects those.
+func layout(size, blocksize int64) fsLayout {
 	// Cluster size in bytes by volume size. Matches the table used by
 	// dosfstools' mkfs.fat (and Microsoft's format command):
 	var clusterBytes int64
@@ -131,22 +118,70 @@ func Create(b backend.Storage, size, start, blocksize int64, volumeLabel string,
 	totalSectors := uint32(size / blocksize)
 	// Closed-form equivalent of the dosfstools mkfs.fat sectors-per-FAT search:
 	// smallest X such that (reserved + 2X + clusters*SPC) == totalSectors and
-	// X * (bytesPerSector/4) >= clusters + 2.
+	// X * (bytesPerSector/4) >= clusters + 2. Eliminating clusters gives
+	// X >= (4*(totalSectors-reserved) + 8*SPC) / (bytesPerSector*SPC + 8); the
+	// 8*SPC term pays for FAT entries 0 and 1, which describe no cluster.
 	fatEntryDenom := uint32(blocksize)*uint32(sectorsPerCluster) + 8
-	sectorsPerFat := uint16((4*(totalSectors-uint32(reservedSectors)) + fatEntryDenom - 1) / fatEntryDenom)
+	fatEntryNumer := 4*(totalSectors-uint32(reservedSectors)) + 8*uint32(sectorsPerCluster)
+	sectorsPerFat := uint16((fatEntryNumer + fatEntryDenom - 1) / fatEntryDenom)
+
+	dataSectors := int64(totalSectors) - int64(reservedSectors) - 2*int64(sectorsPerFat)
+	var clusterCount uint32
+	if dataSectors > 0 {
+		clusterCount = uint32(dataSectors / int64(sectorsPerCluster))
+	}
+
+	return fsLayout{
+		totalSectors:      totalSectors,
+		sectorsPerCluster: sectorsPerCluster,
+		sectorsPerFat:     sectorsPerFat,
+		dataSectors:       dataSectors,
+		clusterCount:      clusterCount,
+	}
+}
+
+// Create creates a FAT32 filesystem on the given backend.
+func Create(b backend.Storage, size, start, blocksize int64, volumeLabel string, reproducible bool) (*FileSystem, error) {
+	// Check writability first so a readonly backend surfaces the plain
+	// backend error rather than a layout/size validation error.
+	if _, err := b.Writable(); err != nil {
+		return nil, err
+	}
+	if blocksize != int64(SectorSize512) && blocksize != int64(SectorSize4096) && blocksize > 0 {
+		return nil, fmt.Errorf("blocksize for FAT32 must be either 512 bytes, 4096 bytes, or 0; not %d", blocksize)
+	}
+	if blocksize == 0 {
+		blocksize = int64(SectorSize512)
+	}
+	if size > Fat32MaxSize {
+		return nil, fmt.Errorf("requested size is larger than maximum allowed FAT32, requested %d, maximum %d", size, Fat32MaxSize)
+	}
+	if size < int64(reservedSectors)*blocksize {
+		return nil, fmt.Errorf("requested size is smaller than minimum allowed FAT32, requested %d minimum %d", size, int64(reservedSectors)*blocksize)
+	}
+
+	var volid uint32
+	if !reproducible {
+		now := time.Now()
+		volid = uint32(now.Unix()<<20 | (now.UnixNano() / 1000000))
+	}
+
+	fsisPrimarySector := uint16(1)
+	backupBootSector := uint16(6)
+
+	l := layout(size, blocksize)
+	totalSectors, sectorsPerCluster, sectorsPerFat := l.totalSectors, l.sectorsPerCluster, l.sectorsPerFat
 
 	// The layout must yield at least one cluster and leave at least 32 KiB
 	// of data area beyond the reserved sectors and FATs (matches mkfs.fat checks).
-	dataSectors := int64(totalSectors) - int64(reservedSectors) - 2*int64(sectorsPerFat)
-	if dataSectors <= 0 {
+	if l.dataSectors <= 0 {
 		return nil, fmt.Errorf("requested size %d leaves no room for data after %d reserved sectors and 2x%d-sector FATs", size, reservedSectors, sectorsPerFat)
 	}
-	clusterCount := uint32(dataSectors / int64(sectorsPerCluster))
-	if clusterCount == 0 {
+	if l.clusterCount == 0 {
 		return nil, fmt.Errorf("requested size %d yields zero data clusters", size)
 	}
-	if dataSectors*blocksize < 32*KB {
-		return nil, fmt.Errorf("requested size %d leaves only %d bytes of data area; >= 32 KiB required", size, dataSectors*blocksize)
+	if l.dataSectors*blocksize < 32*KB {
+		return nil, fmt.Errorf("requested size %d leaves only %d bytes of data area; >= 32 KiB required", size, l.dataSectors*blocksize)
 	}
 	mediaType := uint8(MediaFixedDisk)
 
