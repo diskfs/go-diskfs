@@ -84,7 +84,7 @@ const reservedSectors = uint16(32)
 type fsLayout struct {
 	totalSectors      uint32
 	sectorsPerCluster uint8
-	sectorsPerFat     uint16
+	sectorsPerFat     uint32
 	dataSectors       int64
 	clusterCount      uint32
 }
@@ -121,9 +121,9 @@ func layout(size, blocksize int64) fsLayout {
 	// X * (bytesPerSector/4) >= clusters + 2. Eliminating clusters gives
 	// X >= (4*(totalSectors-reserved) + 8*SPC) / (bytesPerSector*SPC + 8); the
 	// 8*SPC term pays for FAT entries 0 and 1, which describe no cluster.
-	fatEntryDenom := uint32(blocksize)*uint32(sectorsPerCluster) + 8
-	fatEntryNumer := 4*(totalSectors-uint32(reservedSectors)) + 8*uint32(sectorsPerCluster)
-	sectorsPerFat := uint16((fatEntryNumer + fatEntryDenom - 1) / fatEntryDenom)
+	fatEntryDenom := uint64(blocksize)*uint64(sectorsPerCluster) + 8
+	fatEntryNumer := 4*(uint64(totalSectors)-uint64(reservedSectors)) + 8*uint64(sectorsPerCluster)
+	sectorsPerFat := uint32((fatEntryNumer + fatEntryDenom - 1) / fatEntryDenom)
 
 	dataSectors := int64(totalSectors) - int64(reservedSectors) - 2*int64(sectorsPerFat)
 	var clusterCount uint32
@@ -219,7 +219,7 @@ func Create(b backend.Storage, size, start, blocksize int64, volumeLabel string,
 		mirrorFlags:           0,
 		reservedFlags:         0,
 		driveNumber:           128,
-		sectorsPerFat:         uint32(sectorsPerFat),
+		sectorsPerFat:         sectorsPerFat,
 	}
 
 	fsis := FSInformationSector{
@@ -229,7 +229,7 @@ func Create(b backend.Storage, size, start, blocksize int64, volumeLabel string,
 
 	eocMarker := uint32(0x0fffffff)
 	fatPrimaryStart := uint64(reservedSectors) * uint64(blocksize)
-	fatSize := uint32(sectorsPerFat) * uint32(blocksize)
+	fatSize := sectorsPerFat * uint32(blocksize)
 	fatSecondaryStart := fatPrimaryStart + uint64(fatSize)
 	maxCluster := fatSize / 4
 	rootDirCluster := uint32(2)
