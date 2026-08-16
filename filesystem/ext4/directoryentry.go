@@ -48,7 +48,11 @@ func directoryEntryFromBytes(b []byte) (*directoryEntry, error) {
 	//nolint:gocritic // keep this here for future reference
 	// length := binary.LittleEndian.Uint16(b[0x4:0x6])
 	nameLength := b[0x6]
-	name := b[0x8 : 0x8+nameLength]
+	nameEnd := 0x8 + int(nameLength)
+	if nameEnd > len(b) {
+		return nil, fmt.Errorf("directory entry name length %d exceeds record length %d", nameLength, len(b))
+	}
+	name := b[0x8:nameEnd]
 	de := directoryEntry{
 		inode:    binary.LittleEndian.Uint32(b[0x0:0x4]),
 		fileType: directoryFileType(b[0x7]),
@@ -133,14 +137,22 @@ func parseDirEntriesLinear(b []byte, withChecksums bool, blocksize, inodeNumber,
 	entries := make([]*directoryEntry, 0, 4)
 	count := 0
 	for i := 0; i < len(b); count++ {
+		remaining := len(b) - i
+		if remaining < minDirEntryLength {
+			return nil, fmt.Errorf("directory entry %d has a truncated header: %d bytes remain", count, remaining)
+		}
+
 		// read the length of the entry
-		length := binary.LittleEndian.Uint16(b[i+0x4 : i+0x6])
-		de, err := directoryEntryFromBytes(b[i : i+int(length)])
+		length := int(binary.LittleEndian.Uint16(b[i+0x4 : i+0x6]))
+		if length < minDirEntryLength || length > remaining {
+			return nil, fmt.Errorf("directory entry %d has invalid record length %d with %d bytes remaining", count, length, remaining)
+		}
+		de, err := directoryEntryFromBytes(b[i : i+length])
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse directory entry %d: %v", count, err)
 		}
 		entries = append(entries, de)
-		i += int(length)
+		i += length
 	}
 	return entries, nil
 }
