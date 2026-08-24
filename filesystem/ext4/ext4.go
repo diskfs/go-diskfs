@@ -407,7 +407,7 @@ func Create(b backend.Storage, size, start, sectorsize int64, p *Params) (*FileS
 	// bitmap. Linux 6.1 computes s_itb_per_group with floor division and
 	// ext4lazyinit's used-block count with ceil; when inodes_per_group is not
 	// divisible by inodes_per_block those differ and group-0 init fails.
-	inodeSize := int64(DefaultInodeSize)
+	inodeSize := DefaultInodeSize
 	inodesPerBlock := int64(blocksize) / inodeSize
 	align := inodesPerBlock
 	if align < 8 {
