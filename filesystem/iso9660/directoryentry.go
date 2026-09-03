@@ -597,7 +597,7 @@ func (de *directoryEntry) Info() (os.FileInfo, error) {
 
 // Type returns the type of the directory entry
 func (de *directoryEntry) Type() os.FileMode {
-	return de.Mode()
+	return de.Mode().Type()
 }
 
 // utilities

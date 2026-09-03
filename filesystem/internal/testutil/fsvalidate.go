@@ -32,6 +32,11 @@ func TestFSTree(t *testing.T, fs iofs.ReadDirFS) {
 				t.Fatalf("entry name %q in %q is not a base name", name, path)
 			}
 
+			// iofs.DirEntry.Type returns only the type bits, not the permissions
+			if typ := e.Type(); typ != typ.Type() {
+				t.Fatalf("entry %q in %q: Type() = %v, want only type bits %v", name, path, typ, typ.Type())
+			}
+
 			var child string
 			if path == "." {
 				child = name
