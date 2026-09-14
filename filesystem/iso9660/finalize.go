@@ -677,6 +677,9 @@ func (fsm *FileSystem) Finalize(options FinalizeOptions) error {
 			if err != nil {
 				return fmt.Errorf("error finding parent for boot catalog %s: %v", catname, err)
 			}
+			if parent == nil {
+				return fmt.Errorf("unable to find parent directory for boot catalog %s", catname)
+			}
 			parent.addChild(catEntry)
 		}
 		for _, e := range options.ElTorito.Entries {
@@ -684,6 +687,9 @@ func (fsm *FileSystem) Finalize(options FinalizeOptions) error {
 			parent, err = root.findEntry(path.Dir(e.BootFile))
 			if err != nil {
 				return fmt.Errorf("error finding parent for boot image file %s: %v", e.BootFile, err)
+			}
+			if parent == nil {
+				return fmt.Errorf("unable to find parent directory for boot image file %s", e.BootFile)
 			}
 			// did we ask to hide any image files?
 			if e.HideBootFile {

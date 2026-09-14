@@ -1067,3 +1067,45 @@ func mapKeys(m map[string]os.FileInfo) []string {
 	}
 	return keys
 }
+
+func TestFinalizeElToritoMissingParent(t *testing.T) {
+	tests := []struct {
+		name        string
+		bootCatalog string
+		bootFile    string
+	}{
+		{"boot catalog parent missing", "/NOPE/BOOT.CAT", "/BOOT1.IMG"},
+		{"boot image parent missing", "/BOOT.CAT", "/NOPE/BOOT1.IMG"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f, err := os.CreateTemp("", "iso_finalize_missing_parent")
+			if err != nil {
+				t.Fatalf("failed to create tmpfile: %v", err)
+			}
+			defer os.Remove(f.Name())
+
+			fs, err := iso9660.Create(file.New(f, false), 0, 0, 2048, "")
+			if err != nil {
+				t.Fatalf("failed to iso9660.Create: %v", err)
+			}
+			isofile, err := fs.OpenFile("/BOOT1.IMG", os.O_CREATE|os.O_RDWR)
+			if err != nil {
+				t.Fatalf("failed to iso9660.OpenFile: %v", err)
+			}
+			if _, err = isofile.Write(make([]byte, 2048)); err != nil {
+				t.Fatalf("failed to write boot image: %v", err)
+			}
+
+			err = fs.Finalize(iso9660.FinalizeOptions{ElTorito: &iso9660.ElTorito{
+				BootCatalog: tt.bootCatalog,
+				Entries: []*iso9660.ElToritoEntry{
+					{Platform: iso9660.BIOS, Emulation: iso9660.NoEmulation, BootFile: tt.bootFile, SystemType: mbr.Fat32LBA},
+				},
+			}})
+			if err == nil {
+				t.Fatal("expected an error when the parent directory does not exist, got nil")
+			}
+		})
+	}
+}
