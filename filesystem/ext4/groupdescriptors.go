@@ -261,7 +261,9 @@ func (gd *groupDescriptor) toBytes(checksumType gdtChecksumType, hashSeed uint32
 		copy(b[0x3a:0x3c], inodeBitmapChecksum[2:4])
 	}
 
-	checksum := groupDescriptorChecksum(b[0x0:0x40], hashSeed, gd.number, checksumType)
+	// b is exactly gd.size bytes long; slicing a fixed 0x40 here panics on a
+	// filesystem without the 64bit feature, where the descriptors are 32 bytes
+	checksum := groupDescriptorChecksum(b, hashSeed, gd.number, checksumType)
 	binary.LittleEndian.PutUint16(b[0x1e:0x20], checksum)
 
 	return b
