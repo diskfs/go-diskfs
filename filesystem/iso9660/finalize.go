@@ -38,6 +38,9 @@ type FinalizeOptions struct {
 	VolumeIdentifier string
 	// PublisherIdentifier custom publisher identifier written to the PVD
 	PublisherIdentifier string
+	// Normalize writes owner 0:0, mode 0555 for directories and 0444 for
+	// files, so the Rock Ridge entries do not depend on the host.
+	Normalize bool
 }
 
 // finalizeFileInfo is a file info useful for finalization
@@ -577,6 +580,20 @@ func (fsm *FileSystem) Finalize(options FinalizeOptions) error {
 	fileList, dirList, err := walkTree(fsm.Workspace())
 	if err != nil {
 		return fmt.Errorf("error walking tree: %v", err)
+	}
+	if options.Normalize {
+		all := append([]*finalizeFileInfo{}, fileList...)
+		for _, d := range dirList {
+			all = append(all, d)
+		}
+		for _, e := range all {
+			e.uid, e.gid, e.nlink = 0, 0, 1
+			e.mode = e.mode&^os.ModePerm | 0o444
+			if e.isDir {
+				e.nlink = 2
+				e.mode = e.mode&^os.ModePerm | 0o555
+			}
+		}
 	}
 
 	// starting point
