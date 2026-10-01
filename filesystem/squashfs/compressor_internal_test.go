@@ -217,3 +217,35 @@ func TestCompressionLzo(t *testing.T) {
 	testDecompress(t, &c, compressed, "")
 	testCompress(t, &c, "LZO compression not yet supported")
 }
+
+func TestCompressorZstdLevel(t *testing.T) {
+	for _, tt := range []struct {
+		level   uint32
+		options []byte
+	}{
+		{0, []byte{3, 0, 0, 0}}, // the encoder's default level
+		{19, []byte{19, 0, 0, 0}},
+	} {
+		c := CompressorZstd{Level: tt.level}
+		if b := c.optionsBytes(); !bytes.Equal(b, tt.options) {
+			t.Errorf("level %d: options %v, expected %v", tt.level, b, tt.options)
+		}
+	}
+
+	in := bytes.Repeat([]byte("squashfs zstd level "), 4096)
+	fast, err := (&CompressorZstd{Level: 1}).compress(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	best, err := (&CompressorZstd{Level: 19}).compress(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Equal(fast, best) {
+		t.Errorf("levels 1 and 19 compressed to the same bytes")
+	}
+	out, err := (&CompressorZstd{}).decompress(best)
+	if err != nil || !bytes.Equal(out, in) {
+		t.Errorf("round trip failed: %v", err)
+	}
+}
