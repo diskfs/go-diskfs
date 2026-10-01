@@ -119,8 +119,12 @@ func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 	if options.Compression != nil {
 		b = options.Compression.optionsBytes()
 		if len(b) > 0 {
-			_, _ = f.WriteAt(b, location)
-			location += int64(len(b))
+			// an uncompressed metadata block, as the kernel and unsquashfs read it
+			written, err := writeMetadataBlock(b, f, nil, location)
+			if err != nil {
+				return fmt.Errorf("error writing compressor options: %v", err)
+			}
+			location += int64(written)
 		}
 	}
 
@@ -359,6 +363,7 @@ func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 			noFragments:           options.NoFragments,
 			noXattrs:              !options.Xattrs,
 			exportable:            !options.NonExportable,
+			compressorOptions:     len(b) > 0,
 		},
 	}
 
