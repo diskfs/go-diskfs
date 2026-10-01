@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/diskfs/go-diskfs/backend"
+	"github.com/diskfs/go-diskfs/util/timestamp"
 	"github.com/diskfs/go-diskfs/version"
 	"github.com/djherbis/times"
 )
@@ -578,6 +579,15 @@ func (fsm *FileSystem) Finalize(options FinalizeOptions) error {
 	if err != nil {
 		return fmt.Errorf("error walking tree: %v", err)
 	}
+	if os.Getenv("SOURCE_DATE_EPOCH") != "" {
+		t := timestamp.GetTime()
+		for _, e := range fileList {
+			e.modTime, e.accessTime, e.changeTime = t, t, t
+		}
+		for _, e := range dirList {
+			e.modTime, e.accessTime, e.changeTime = t, t, t
+		}
+	}
 
 	// starting point
 	root := dirList["."]
@@ -654,7 +664,7 @@ func (fsm *FileSystem) Finalize(options FinalizeOptions) error {
 		shortname, extension := calculateShortnameExtension(path.Base(catname))
 		// break down the catalog basename from the parent dir
 		catSize := int64(len(bootcat))
-		now := time.Now()
+		now := timestamp.GetTime()
 		catEntry = &finalizeFileInfo{
 			content:    bootcat,
 			size:       catSize,
@@ -972,7 +982,7 @@ func (fsm *FileSystem) Finalize(options FinalizeOptions) error {
 	totalSize := location
 	location = dataStartSector
 	// create and write the primary volume descriptor, supplementary and boot, and volume descriptor set terminator
-	now := time.Now()
+	now := timestamp.GetTime()
 	rootDE, err := root.toDirectoryEntry(fsm, true, false)
 	if err != nil {
 		return fmt.Errorf("could not convert root entry for primary volume descriptor to dirEntry: %v", err)
