@@ -59,6 +59,13 @@ type FinalizeOptions struct {
 	FileUID *uint32
 	// FileGID set all files to be owned by the GID provided, default is to leave as in filesystem
 	FileGID *uint32
+	// Perms sets the permission bits per path, as in the tree with "." for
+	// the root, for hosts that cannot store them.
+	Perms map[string]os.FileMode
+	// FileXattrs sets the extended attributes per path, as in the tree with
+	// "." for the root, for hosts that cannot store them. They replace the
+	// ones read with Xattrs.
+	FileXattrs map[string]map[string]string
 }
 
 // Finalize finalize a read-only filesystem by writing it out to a read-only format
@@ -109,6 +116,14 @@ func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 	fileList, err := walkTree(fs.Workspace(), options.Xattrs)
 	if err != nil {
 		return fmt.Errorf("error walking tree: %v", err)
+	}
+	for _, e := range fileList {
+		if perm, ok := options.Perms[e.path]; ok {
+			e.mode = e.mode&^os.ModePerm | perm&os.ModePerm
+		}
+		if x, ok := options.FileXattrs[e.path]; ok {
+			e.xattrs = x
+		}
 	}
 
 	// location holds where we are writing in our file
