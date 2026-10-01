@@ -252,3 +252,41 @@ func TestOpenDirectoryRockRidge(t *testing.T) {
 		t.Fatal("expected entries in rock ridge foo directory")
 	}
 }
+
+func TestBackslashIsNotASeparator(t *testing.T) {
+	f, err := os.Open(ISO9660File)
+	if err != nil {
+		t.Fatalf("Failed to read iso9660 testfile: %v", err)
+	}
+	defer f.Close()
+
+	fsys, err := Read(file.New(f, true), 0, 0, 2048)
+	if err != nil {
+		t.Fatalf("iso read: %s", err)
+	}
+
+	// io/fs treats a backslash as an ordinary name character, so none of these
+	// name an entry on this image.
+	for _, p := range []string{`DEEP\A/B`, `DEEP\A`, `DEEP\A\B`} {
+		if !fs.ValidPath(p) {
+			t.Fatalf("fs.ValidPath(%q) is false; the test no longer covers what it means to", p)
+		}
+		if _, err := fsys.Open(p); err == nil {
+			t.Errorf("Open(%q) succeeded; want an error", p)
+		}
+		if _, err := fsys.Stat(p); err == nil {
+			t.Errorf("Stat(%q) succeeded; want an error", p)
+		}
+	}
+	if _, err := fsys.ReadDir(`DEEP\A`); err == nil {
+		t.Errorf("ReadDir(%q) succeeded; want an error", `DEEP\A`)
+	}
+
+	// the slash-separated forms still resolve
+	if _, err := fsys.Open("DEEP/A/B"); err != nil {
+		t.Errorf("Open(%q): %v", "DEEP/A/B", err)
+	}
+	if _, err := fsys.ReadDir("DEEP/A"); err != nil {
+		t.Errorf("ReadDir(%q): %v", "DEEP/A", err)
+	}
+}
