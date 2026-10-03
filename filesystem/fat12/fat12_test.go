@@ -627,3 +627,121 @@ func contains(ss []string, s string) bool {
 	}
 	return false
 }
+
+// TestFat12LossyShortNames creates files whose long names convert lossily to
+// 8.3 and checks that none replaces another and that short names stay unique.
+func TestFat12LossyShortNames(t *testing.T) {
+	tests := []struct {
+		name  string
+		files []string
+	}{
+		{"space then plain", []string{"a b", "ab"}},
+		{"plain then space", []string{"ab", "a b"}},
+		{"truncated extension", []string{"foo.conf", "foo.cons"}},
+		{"kernel versions", []string{"6.1.0-25-amd64", "6.1.0-26-amd64"}},
+		{"upper and lower with space", []string{"A B", "AB", "a b.txt", "ab.txt"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			imgPath, fs := createFAT12(t, "LOSSY")
+			if err := fs.Mkdir("/dir"); err != nil {
+				t.Fatalf("Mkdir: %v", err)
+			}
+			for _, dir := range []string{"/", "/dir/"} {
+				for _, n := range tt.files {
+					writeFile(t, fs, dir+n, []byte("content of "+dir+n))
+				}
+			}
+			fs2 := reopenFAT12(t, imgPath)
+			for _, dir := range []string{"/", "/dir/"} {
+				for _, n := range tt.files {
+					f, err := fs2.OpenFile(dir+n, os.O_RDONLY)
+					if err != nil {
+						t.Fatalf("OpenFile(%q): %v", dir+n, err)
+					}
+					got, _ := io.ReadAll(f)
+					f.Close()
+					if want := "content of " + dir + n; string(got) != want {
+						t.Errorf("%s: content = %q, want %q", dir+n, got, want)
+					}
+				}
+				entries, err := fs2.ReadDir(readDirArg(dir))
+				if err != nil {
+					t.Fatalf("ReadDir(%q): %v", dir, err)
+				}
+				shorts := map[string]bool{}
+				files := 0
+				for _, e := range entries {
+					if e.IsDir() {
+						continue
+					}
+					files++
+					info, err := e.Info()
+					if err != nil {
+						t.Fatalf("Info: %v", err)
+					}
+					fi, ok := info.(fat12.FileInfo)
+					if !ok {
+						t.Fatalf("Info returned %T, want fat12.FileInfo", info)
+					}
+					short := strings.ToUpper(fi.ShortName())
+					if shorts[short] {
+						t.Errorf("%s: short name %q used twice", dir, short)
+					}
+					shorts[short] = true
+				}
+				if files != len(tt.files) {
+					t.Errorf("%s: %d files, want %d", dir, files, len(tt.files))
+				}
+			}
+		})
+	}
+}
+
+// TestFat12CreateDirLossyName checks that a directory is not mistaken for another
+// whose long name differs but whose short name is the same.
+func TestFat12CreateDirLossyName(t *testing.T) {
+	_, fs := createFAT12(t, "LOSSYDIR")
+	for _, d := range []string{"/a b", "/ab"} {
+		if err := fs.Mkdir(d); err != nil {
+			t.Fatalf("Mkdir(%q): %v", d, err)
+		}
+	}
+	writeFile(t, fs, "/a b/one", []byte("1"))
+	writeFile(t, fs, "/ab/two", []byte("2"))
+	for _, d := range []string{"/a b", "/ab"} {
+		entries, err := fs.ReadDir(readDirArg(d))
+		if err != nil || len(entries) != 1 {
+			t.Errorf("ReadDir(%q) = %d entries, %v; want 1", d, len(entries), err)
+		}
+	}
+}
+
+// TestFat12ReopenSameLongName checks that creating a file whose long name matches
+// an existing one still opens that file.
+func TestFat12ReopenSameLongName(t *testing.T) {
+	_, fs := createFAT12(t, "SAMENAME")
+	writeFile(t, fs, "/a b", []byte("first"))
+	f, err := fs.OpenFile("/A B", os.O_CREATE|os.O_RDWR)
+	if err != nil {
+		t.Fatalf("OpenFile: %v", err)
+	}
+	got, _ := io.ReadAll(f)
+	f.Close()
+	if string(got) != "first" {
+		t.Errorf("content = %q, want first", got)
+	}
+	entries, _ := fs.ReadDir(".")
+	if len(entries) != 1 {
+		t.Errorf("%d entries, want 1", len(entries))
+	}
+}
+
+// readDirArg turns "/" or "/dir/" into the form ReadDir accepts.
+func readDirArg(dir string) string {
+	dir = strings.Trim(dir, "/")
+	if dir == "" {
+		return "."
+	}
+	return dir
+}
