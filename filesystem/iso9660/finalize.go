@@ -38,6 +38,10 @@ type FinalizeOptions struct {
 	VolumeIdentifier string
 	// PublisherIdentifier custom publisher identifier written to the PVD
 	PublisherIdentifier string
+	// Normalize writes owner 0:0 and modes as xorrisofs -r does: read for
+	// all, no write, execute for all if any execute bit is set, no setuid,
+	// setgid or sticky bit. Directories get nlink 2, files 1.
+	Normalize bool
 }
 
 // finalizeFileInfo is a file info useful for finalization
@@ -577,6 +581,23 @@ func (fsm *FileSystem) Finalize(options FinalizeOptions) error {
 	fileList, dirList, err := walkTree(fsm.Workspace())
 	if err != nil {
 		return fmt.Errorf("error walking tree: %v", err)
+	}
+	if options.Normalize {
+		all := append([]*finalizeFileInfo{}, fileList...)
+		for _, d := range dirList {
+			all = append(all, d)
+		}
+		for _, e := range all {
+			e.uid, e.gid, e.nlink = 0, 0, 1
+			if e.isDir {
+				e.nlink = 2
+			}
+			perm := os.FileMode(0o444)
+			if e.mode&0o111 != 0 {
+				perm |= 0o111
+			}
+			e.mode = e.mode&^(os.ModePerm|os.ModeSetuid|os.ModeSetgid|os.ModeSticky) | perm
+		}
 	}
 
 	// starting point

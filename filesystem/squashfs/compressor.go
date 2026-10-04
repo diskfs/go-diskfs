@@ -305,12 +305,16 @@ func (c *CompressorLz4) flavour() compression {
 
 // CompressorZstd zstd compression
 type CompressorZstd struct {
-	level uint32
+	// Level is the zstd level, 1 to 22. 0 keeps the encoder's default,
+	// which corresponds to level 3.
+	Level uint32
 }
 
 const (
 	zstdMinLevel uint32 = 1
 	zstdMaxLevel uint32 = 22
+	// zstdDefaultLevel is the level zstd.SpeedDefault corresponds to
+	zstdDefaultLevel uint32 = 3
 )
 
 func (c *CompressorZstd) loadOptions(b []byte) error {
@@ -322,12 +326,16 @@ func (c *CompressorZstd) loadOptions(b []byte) error {
 	if level < zstdMinLevel || level > zstdMaxLevel {
 		return fmt.Errorf("zstd compression level requested %d, must be at least %d and not more thann %d", level, zstdMinLevel, zstdMaxLevel)
 	}
-	c.level = level
+	c.Level = level
 	return nil
 }
 func (c *CompressorZstd) optionsBytes() []byte {
 	b := make([]byte, 4)
-	binary.LittleEndian.PutUint32(b[0:4], c.level)
+	level := c.Level
+	if level == 0 {
+		level = zstdDefaultLevel
+	}
+	binary.LittleEndian.PutUint32(b[0:4], level)
 	return b
 }
 func (c *CompressorZstd) flavour() compression {
@@ -335,7 +343,11 @@ func (c *CompressorZstd) flavour() compression {
 }
 func (c *CompressorZstd) compress(in []byte) ([]byte, error) {
 	var b bytes.Buffer
-	z, err := zstd.NewWriter(&b)
+	var opts []zstd.EOption
+	if c.Level != 0 {
+		opts = append(opts, zstd.WithEncoderLevel(zstd.EncoderLevelFromZstd(int(c.Level))))
+	}
+	z, err := zstd.NewWriter(&b, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create zstd compressor: %w", err)
 	}
