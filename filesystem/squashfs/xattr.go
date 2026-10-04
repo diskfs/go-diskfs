@@ -85,7 +85,7 @@ func (x *xAttrTable) find(pos int) (map[string]string, error) {
 		xattrs[key] = val
 
 		// increment the position pointer
-		ptr += valStart + valSize
+		ptr = valStart + valSize
 	}
 	return xattrs, nil
 }
