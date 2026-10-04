@@ -3,13 +3,14 @@ package iso9660_test
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/diskfs/go-diskfs/backend/file"
 	"github.com/diskfs/go-diskfs/filesystem/iso9660"
 )
 
-// Normalize writes the same Rock Ridge owner and modes on every host.
+// Normalize writes Rock Ridge owner and modes as xorrisofs -r does.
 func TestFinalizeNormalize(t *testing.T) {
 	f, err := os.CreateTemp(t.TempDir(), "iso_normalize_test")
 	if err != nil {
@@ -26,6 +27,10 @@ func TestFinalizeNormalize(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(fs.Workspace(), "dir", "file"), []byte("a\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	//nolint:gosec // the test needs an executable file
+	if err := os.WriteFile(filepath.Join(fs.Workspace(), "dir", "run"), []byte("a\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
 	if err := fs.Finalize(iso9660.FinalizeOptions{RockRidge: true, Normalize: true}); err != nil {
 		t.Fatalf("unexpected error fs.Finalize(): %v", err)
 	}
@@ -34,14 +39,23 @@ func TestFinalizeNormalize(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error reading the tmpfile as iso9660: %v", err)
 	}
-	for _, tt := range []struct {
+	tests := []struct {
 		path  string
 		mode  os.FileMode
 		nlink uint32
 	}{
 		{"dir", os.ModeDir | 0o555, 2},
 		{"dir/file", 0o444, 1},
-	} {
+	}
+	// Windows does not store execute bits.
+	if runtime.GOOS != "windows" {
+		tests = append(tests, struct {
+			path  string
+			mode  os.FileMode
+			nlink uint32
+		}{"dir/run", 0o555, 1})
+	}
+	for _, tt := range tests {
 		fi, err := fs.Stat(tt.path)
 		if err != nil {
 			t.Fatalf("error stat %s: %v", tt.path, err)

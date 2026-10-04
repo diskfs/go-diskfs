@@ -38,8 +38,9 @@ type FinalizeOptions struct {
 	VolumeIdentifier string
 	// PublisherIdentifier custom publisher identifier written to the PVD
 	PublisherIdentifier string
-	// Normalize writes owner 0:0, mode 0555 for directories and 0444 for
-	// files, so the Rock Ridge entries do not depend on the host.
+	// Normalize writes owner 0:0 and modes as xorrisofs -r does: read for
+	// all, no write, execute for all if any execute bit is set, no setuid,
+	// setgid or sticky bit. Directories get nlink 2, files 1.
 	Normalize bool
 }
 
@@ -588,11 +589,14 @@ func (fsm *FileSystem) Finalize(options FinalizeOptions) error {
 		}
 		for _, e := range all {
 			e.uid, e.gid, e.nlink = 0, 0, 1
-			e.mode = e.mode&^os.ModePerm | 0o444
 			if e.isDir {
 				e.nlink = 2
-				e.mode = e.mode&^os.ModePerm | 0o555
 			}
+			perm := os.FileMode(0o444)
+			if e.mode&0o111 != 0 {
+				perm |= 0o111
+			}
+			e.mode = e.mode&^(os.ModePerm|os.ModeSetuid|os.ModeSetgid|os.ModeSticky) | perm
 		}
 	}
 
