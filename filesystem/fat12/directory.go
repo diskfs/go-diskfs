@@ -99,18 +99,62 @@ func uniqueShortName(stem, ext string, entries []*directoryEntry) string {
 	return stem[:6] + "~1"
 }
 
-// createEntry creates an entry in the given directory and returns a handle to it.
-func (d *Directory) createEntry(name string, cluster uint32, dir bool) (*directoryEntry, error) {
+// shortNameFor derives the 8.3 name for a new entry called name. entries are
+// the entries already in the directory, whose short names must not be reused.
+//
+// A name that converts to 8.3 without losing anything but case keeps its plain
+// short name as long as that is free. Any other name gets a numeric tail, as
+// does one whose plain short name is already taken: a conversion that drops or
+// replaces characters, or truncates the extension, can give the same result for
+// different names ("a b" and "ab", "foo.conf" and "foo.cons").
+func shortNameFor(name string, entries []*directoryEntry) (shortName, extension string, isLFN bool) {
 	shortName, extension, isLFN, isTruncated := convertLfnSfn(name)
 
-	// convertLfnSfn emits "~1" as the numeric tail unconditionally.  We must find
-	// the lowest tail value that does not clash with any existing entry in this
-	// directory.
+	stem := shortName
 	if isTruncated {
-		stem, _, _ := strings.Cut(shortName, "~")
-		shortName = uniqueShortName(stem, extension, d.entries)
-		isLFN = true
+		// convertLfnSfn emits "~1" as the numeric tail unconditionally.
+		stem = strings.TrimSuffix(shortName, "~1")
 	}
+	// The stem of a name with a leading dot is taken from the rest of the name,
+	// which is the plain conversion for such names. A clash is still resolved
+	// below.
+	lossy := isTruncated || !isLosslessShortName(strings.TrimLeft(name, "."), shortName, extension)
+	if !lossy && !shortNameTaken(shortName, extension, entries) {
+		return shortName, extension, isLFN
+	}
+	if stem == "" {
+		// Nothing usable to build a stem from.
+		return shortName, extension, isLFN
+	}
+	return uniqueShortName(stem, extension, entries), extension, true
+}
+
+// isLosslessShortName reports whether shortName.extension is name with at most
+// its case changed.
+func isLosslessShortName(name, shortName, extension string) bool {
+	short := shortName
+	if extension != "" {
+		short += "." + extension
+	}
+	return strings.EqualFold(name, short)
+}
+
+// shortNameTaken reports whether any of entries already uses the given short name.
+func shortNameTaken(shortName, extension string, entries []*directoryEntry) bool {
+	for _, e := range entries {
+		if e.isVolumeLabel {
+			continue
+		}
+		if strings.EqualFold(e.filenameShort, shortName) && strings.EqualFold(e.fileExtension, extension) {
+			return true
+		}
+	}
+	return false
+}
+
+// createEntry creates an entry in the given directory and returns a handle to it.
+func (d *Directory) createEntry(name string, cluster uint32, dir bool) (*directoryEntry, error) {
+	shortName, extension, isLFN := shortNameFor(name, d.entries)
 
 	lfn := ""
 	if isLFN {
@@ -164,19 +208,16 @@ func (d *Directory) removeEntry(name string) error {
 // from the conflict set, since it is being replaced.
 func (d *Directory) renameEntry(oldFileName, newFileName string) error {
 	// Build the short name for the new filename before we start mutating entries.
-	newShort, newExt, newIsLFN, newIsTruncated := convertLfnSfn(newFileName)
-	if newIsTruncated {
-		// Exclude the entry being renamed from the conflict scan: after the
-		// rename completes its current short name slot will be vacated.
-		var filtered []*directoryEntry
-		for _, e := range d.entries {
-			if !e.nameMatches(oldFileName) {
-				filtered = append(filtered, e)
-			}
+	// Exclude the entry being renamed, and any entry about to be replaced, from
+	// the conflict scan: after the rename completes their short name slots are
+	// vacated.
+	var others []*directoryEntry
+	for _, e := range d.entries {
+		if !e.nameMatches(oldFileName) && !e.nameMatches(newFileName) {
+			others = append(others, e)
 		}
-		newShort = uniqueShortName(newShort[:6], newExt, filtered)
-		newIsLFN = true
 	}
+	newShort, newExt, newIsLFN := shortNameFor(newFileName, others)
 	newLFN := ""
 	if newIsLFN {
 		newLFN = newFileName

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/diskfs/go-diskfs/backend"
@@ -112,6 +113,11 @@ func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 	if os.Getenv("SOURCE_DATE_EPOCH") != "" {
 		for _, e := range fileList {
 			e.modTime = timestamp.GetTime()
+		}
+	}
+	if !options.Xattrs {
+		for _, e := range fileList {
+			e.xattrs = nil
 		}
 	}
 
@@ -362,7 +368,7 @@ func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 			uncompressedFragments: options.NoCompressFragments,
 			uncompressedXattrs:    options.NoCompressXattrs,
 			noFragments:           options.NoFragments,
-			noXattrs:              !options.Xattrs,
+			noXattrs:              len(xattrs) == 0,
 			exportable:            !options.NonExportable,
 		},
 	}
@@ -486,7 +492,7 @@ func walkTree(workspace string) ([]*finalizeFileInfo, error) {
 			if strings.HasPrefix(name, appleXattrProvenance) {
 				continue
 			}
-			val, err := xattr.Get(fp, name)
+			val, err := xattr.Get(actualPath, name)
 			if err != nil && !os.IsNotExist(err) {
 				return fmt.Errorf("unable to get xattr %s for %s: %v", name, fp, err)
 			}
@@ -974,114 +980,83 @@ func writeIDTable(idtable map[uint32]uint16, f backend.WritableFile, compressor 
 
 // writeXattrs write the xattrs and its lookup table at the given location.
 func writeXattrs(xattrs []map[string]string, f backend.WritableFile, compressor Compressor, location int64) (xattrsWritten int, finalLocation uint64, err error) {
+	// Key/value pairs are one metadata stream starting at kvStart. Each id
+	// entry holds a reference (block start relative to kvStart << 16 | offset
+	// in the uncompressed block), the pair count and the size. The id table
+	// header holds kvStart, the id count and the locations of the id table's
+	// metadata blocks.
 	var (
 		maxSize     = int(metadataBlockSize)
-		offset      int
+		kvStart     = location
 		lookupTable []byte
 		buf         []byte
 	)
+	flush := func(b []byte) error {
+		written, err := writeMetadataBlock(b, f, compressor, location)
+		if err != nil {
+			return err
+		}
+		xattrsWritten += written
+		location += int64(written)
+		return nil
+	}
 
-	// each entry in the xattrs slice is a unique key-value map. It may be referenced by one or more inodes.
-	// first convert them to key-value written pairs, and save where they are
 	for _, m := range xattrs {
-		// process one xattr key-value map
+		keys := make([]string, 0, len(m))
+		for k := range m {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
 		var single []byte
-		for k, v := range m {
-			// convert it to the proper type
-			// the entry
+		for _, k := range keys {
 			prefix, name, err := xAttrKeyConvert(k)
 			if err != nil {
 				return xattrsWritten, 0, err
 			}
 			b := make([]byte, 4)
 			binary.LittleEndian.PutUint16(b[0:2], prefix)
-			binary.LittleEndian.PutUint16(b[2:4], uint16(len(k)))
-			b = append(b, []byte(name)...)
+			binary.LittleEndian.PutUint16(b[2:4], uint16(len(name)))
 			single = append(single, b...)
-
+			single = append(single, name...)
 			b = make([]byte, 4)
-			binary.LittleEndian.PutUint32(b[0:4], uint32(len(v)))
-			b = append(b, []byte(v)...)
+			binary.LittleEndian.PutUint32(b[0:4], uint32(len(m[k])))
 			single = append(single, b...)
+			single = append(single, m[k]...)
 		}
-		// add the index
 		b := make([]byte, 16)
-		// bits 16:48 (uint32) hold the block position
-		binary.LittleEndian.PutUint32(b[2:6], uint32(xattrsWritten))
-		// bits 48:64 (uint16) hold the offset in the uncompressed block
-		binary.LittleEndian.PutUint16(b[6:8], uint16(offset))
-		// bytes 8:12 (uint32) hold the number of pairs
+		binary.LittleEndian.PutUint64(b[0:8], uint64(location-kvStart)<<16|uint64(len(buf)))
 		binary.LittleEndian.PutUint32(b[8:12], uint32(len(m)))
-		// bytes 12:16 (uint32) hold the size of the entire map for this inode
 		binary.LittleEndian.PutUint32(b[12:16], uint32(len(single)))
-
-		// add the lookupTable bytes
 		lookupTable = append(lookupTable, b...)
-		// add the actual metadata bytes
+
 		buf = append(buf, single...)
-		// the offset is moved forward
-		offset += len(single)
-		if len(buf) > maxSize {
-			written, err := writeMetadataBlock(buf[:maxSize], f, compressor, location)
-			if err != nil {
+		for len(buf) >= maxSize {
+			if err := flush(buf[:maxSize]); err != nil {
 				return xattrsWritten, 0, err
 			}
-			// count all we have written
-			xattrsWritten += written
 			buf = buf[maxSize:]
-			offset -= maxSize
-			location += int64(written)
 		}
 	}
-	// if there is anything left at the end
 	if len(buf) > 0 {
-		written, err := writeMetadataBlock(buf, f, compressor, location)
-		if err != nil {
+		if err := flush(buf); err != nil {
 			return xattrsWritten, 0, err
 		}
-		// count all we have written
-		xattrsWritten += written
-		location += int64(written)
 	}
 
-	// hold the id table lookup
 	var indexEntries []uint64
+	for i := 0; i < len(lookupTable); i += maxSize {
+		indexEntries = append(indexEntries, uint64(location))
+		if err := flush(lookupTable[i:min(i+maxSize, len(lookupTable))]); err != nil {
+			return xattrsWritten, 0, err
+		}
+	}
 
-	// write the lookupTable - this too is stored as metadata blocks
-	var i int
-	for i = 0; i < len(lookupTable); i += maxSize {
-		written, err := writeMetadataBlock(lookupTable[i*maxSize:i*maxSize+maxSize], f, compressor, location)
-		if err != nil {
-			return xattrsWritten, 0, err
-		}
-		indexEntries = append(indexEntries, uint64(location))
-		// count all we have written
-		xattrsWritten += written
-		location += int64(written)
-	}
-	// was there any left?
-	remainder := len(lookupTable) % maxSize
-	if remainder > 0 {
-		written, err := writeMetadataBlock(lookupTable[remainder:], f, compressor, location)
-		if err != nil {
-			return xattrsWritten, 0, err
-		}
-		indexEntries = append(indexEntries, uint64(location))
-		// count all we have written
-		xattrsWritten += written
-		location += int64(written)
-	}
-	// finally, we need the ID table
-	b := make([]byte, 16+8*len(indexEntries))
-	binary.LittleEndian.PutUint64(b[0:8], uint64(location))
-	binary.LittleEndian.PutUint32(b[8:12], uint32(len(lookupTable)))
+	b := make([]byte, 16, 16+8*len(indexEntries))
+	binary.LittleEndian.PutUint64(b[0:8], uint64(kvStart))
+	binary.LittleEndian.PutUint32(b[8:12], uint32(len(xattrs)))
 	for _, e := range indexEntries {
-		b2 := make([]byte, 8)
-		binary.LittleEndian.PutUint64(b2, e)
-		b = append(b, b2...)
+		b = binary.LittleEndian.AppendUint64(b, e)
 	}
-
-	// just write it out
 	written, err := f.WriteAt(b, location)
 	if err != nil {
 		return xattrsWritten, 0, fmt.Errorf("error writing xattrs id index: %v", err)
