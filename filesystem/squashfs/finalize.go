@@ -106,9 +106,14 @@ func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 	// build out file and directory tree
 	// this returns a slice of *finalizeFileInfo, each of which represents a directory
 	// or file
-	fileList, err := walkTree(fs.Workspace(), options.Xattrs)
+	fileList, err := walkTree(fs.Workspace())
 	if err != nil {
 		return fmt.Errorf("error walking tree: %v", err)
+	}
+	if !options.Xattrs {
+		for _, e := range fileList {
+			e.xattrs = nil
+		}
 	}
 
 	// location holds where we are writing in our file
@@ -434,7 +439,7 @@ func finalizeFragment(buf []byte, to backend.WritableFile, toOffset int64, c Com
 // differently on disk (file data and fragments vs directory table), and
 // because the inode data is different.
 // The first entry in the return always will be the root
-func walkTree(workspace string, withXattrs bool) ([]*finalizeFileInfo, error) {
+func walkTree(workspace string) ([]*finalizeFileInfo, error) {
 	dirMap := make(map[string]*finalizeFileInfo)
 	fileList := make([]*finalizeFileInfo, 0)
 	var entry *finalizeFileInfo
@@ -473,12 +478,9 @@ func walkTree(workspace string, withXattrs bool) ([]*finalizeFileInfo, error) {
 		default:
 			fType = fileRegular
 		}
-		var xattrNames []string
-		if withXattrs {
-			xattrNames, err = xattr.List(actualPath)
-			if err != nil {
-				return fmt.Errorf("unable to list xattrs for %s: %v", fp, err)
-			}
+		xattrNames, err := xattr.List(actualPath)
+		if err != nil {
+			return fmt.Errorf("unable to list xattrs for %s: %v", fp, err)
 		}
 		xattrs := map[string]string{}
 		for _, name := range xattrNames {
