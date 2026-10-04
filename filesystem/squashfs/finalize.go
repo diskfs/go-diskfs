@@ -10,9 +10,9 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/diskfs/go-diskfs/backend"
+	"github.com/diskfs/go-diskfs/util/timestamp"
 	"github.com/pkg/xattr"
 )
 
@@ -109,6 +109,11 @@ func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 	fileList, err := walkTree(fs.Workspace())
 	if err != nil {
 		return fmt.Errorf("error walking tree: %v", err)
+	}
+	if os.Getenv("SOURCE_DATE_EPOCH") != "" {
+		for _, e := range fileList {
+			e.modTime = timestamp.GetTime()
+		}
 	}
 	if !options.Xattrs {
 		for _, e := range fileList {
@@ -346,7 +351,7 @@ func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 		inodes:              uint32(len(fileList)),
 		xattrTableStart:     xAttrsLocation,
 		fragmentCount:       uint32(len(fragmentBlocks)),
-		modTime:             time.Now(),
+		modTime:             timestamp.GetTime(),
 		size:                uint64(location),
 		versionMajor:        4,
 		versionMinor:        0,
