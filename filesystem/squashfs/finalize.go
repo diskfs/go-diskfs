@@ -63,8 +63,8 @@ type FinalizeOptions struct {
 	// the root, for hosts that cannot store them.
 	Perms map[string]os.FileMode
 	// FileXattrs sets the extended attributes per path, as in the tree with
-	// "." for the root, for hosts that cannot store them. They replace the
-	// ones read with Xattrs.
+	// "." for the root, for hosts that cannot store them. Applied only with
+	// Xattrs, they replace the ones read from the workspace.
 	FileXattrs map[string]map[string]string
 }
 
@@ -123,13 +123,12 @@ func (fs *FileSystem) Finalize(options FinalizeOptions) error {
 		}
 	}
 	for _, e := range fileList {
-		if !options.Xattrs {
-			e.xattrs = nil
-		}
 		if perm, ok := options.Perms[e.path]; ok {
 			e.mode = e.mode&^os.ModePerm | perm&os.ModePerm
 		}
-		if x, ok := options.FileXattrs[e.path]; ok {
+		if !options.Xattrs {
+			e.xattrs = nil
+		} else if x, ok := options.FileXattrs[e.path]; ok {
 			e.xattrs = x
 		}
 	}

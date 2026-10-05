@@ -88,11 +88,22 @@ func TestFinalizeXattrs(t *testing.T) {
 	})
 }
 
+// FileXattrs are not written without Xattrs.
+func TestFinalizeFileXattrsWithoutXattrs(t *testing.T) {
+	f := finalizeWithXattrs(t, nil, squashfs.FinalizeOptions{
+		FileXattrs: map[string]map[string]string{"a": {"user.abc": "def"}},
+	})
+	if got := readXattrs(t, f); len(got) != 0 {
+		t.Errorf("xattrs %v, expected none", got)
+	}
+}
+
 // Perms and FileXattrs set modes and xattrs per path, without the host
 // storing them.
 func TestFinalizePermsAndFileXattrs(t *testing.T) {
 	label := "system_u:object_r:system_state_t:s0"
 	f := finalizeWithXattrs(t, nil, squashfs.FinalizeOptions{
+		Xattrs:     true,
 		Perms:      map[string]os.FileMode{"a": 0o755},
 		FileXattrs: map[string]map[string]string{"a": {"security.selinux": label}},
 	})
