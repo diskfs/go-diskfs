@@ -87,3 +87,39 @@ func TestFinalizeXattrs(t *testing.T) {
 		}
 	})
 }
+
+// FileXattrs are not written without Xattrs.
+func TestFinalizeFileXattrsWithoutXattrs(t *testing.T) {
+	f := finalizeWithXattrs(t, nil, squashfs.FinalizeOptions{
+		FileXattrs: map[string]map[string]string{"a": {"user.abc": "def"}},
+	})
+	if got := readXattrs(t, f); len(got) != 0 {
+		t.Errorf("xattrs %v, expected none", got)
+	}
+}
+
+// Perms and FileXattrs set modes and xattrs per path, without the host
+// storing them.
+func TestFinalizePermsAndFileXattrs(t *testing.T) {
+	label := "system_u:object_r:system_state_t:s0"
+	f := finalizeWithXattrs(t, nil, squashfs.FinalizeOptions{
+		Xattrs:     true,
+		Perms:      map[string]os.FileMode{"a": 0o755},
+		FileXattrs: map[string]map[string]string{"a": {"security.selinux": label}},
+	})
+	fs, err := squashfs.Read(file.New(f, true), 0, 0, 4096)
+	if err != nil {
+		t.Fatalf("error reading the tmpfile as squashfs: %v", err)
+	}
+	fi, err := fs.Stat("a")
+	if err != nil {
+		t.Fatalf("error stat a: %v", err)
+	}
+	if fi.Mode() != 0o755 {
+		t.Errorf("mode %v, expected %v", fi.Mode(), os.FileMode(0o755))
+	}
+	// the reader returns names without their namespace prefix
+	if got := readXattrs(t, f); !squashfs.CompareEqualMapStringString(got, map[string]string{"selinux": label}) {
+		t.Errorf("xattrs %v, expected selinux=%s", got, label)
+	}
+}
