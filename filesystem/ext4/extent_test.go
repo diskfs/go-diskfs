@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"crypto/rand"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"testing"
 
 	"github.com/diskfs/go-diskfs/backend/file"
+	"github.com/go-test/deep"
 )
 
 // TestExtentNodeHeaderToBytes tests serialization of the extent node header
@@ -879,6 +881,135 @@ func TestExtendExtentTreeSplitRegression(t *testing.T) {
 		}
 		walkAndLoadChildren(t, fs, tree)
 	})
+}
+
+// TestExtentInternalNodeOverflow builds a nearly full tree directly so a
+// single append exercises the same split as tens of thousands of small writes.
+func TestExtentInternalNodeOverflow(t *testing.T) {
+	for _, tc := range []struct {
+		rootChildren int
+		depth        uint16
+	}{{1, 1}, {4, 1}, {1, 2}, {4, 2}} {
+		t.Run(fmt.Sprintf("rootChildren%d/nonRootDepth%d", tc.rootChildren, tc.depth), func(t *testing.T) {
+			fs, _ := setupWritableExtentFS(t, 600*MB)
+			var want extents
+			var fileBlock uint32
+			allocateNode := func(node extentBlockFinder) uint64 {
+				t.Helper()
+				allocated, err := fs.allocateExtents(uint64(fs.superblock.blockSize), nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				block := (*allocated)[0].startingBlock
+				if err := writeNodeToBlock(node, fs, block); err != nil {
+					t.Fatal(err)
+				}
+				return block
+			}
+			pointer := func(node extentBlockFinder, start uint32) *extentChildPtr {
+				return &extentChildPtr{fileBlock: start, count: fileBlock - start, diskBlock: getDiskBlockFromNode(node)}
+			}
+			// Only nodes on the rightmost path are full. Earlier siblings need
+			// just one child, keeping the fixture small even at greater depths.
+			var build func(depth uint16, full bool) extentBlockFinder
+			build = func(depth uint16, full bool) extentBlockFinder {
+				nEntries := 1
+				if full {
+					nEntries = 340
+				}
+				if depth == 0 {
+					leaf := &extentLeafNode{extentNodeHeader: extentNodeHeader{entries: uint16(nEntries), max: 340, blockSize: 4096}}
+					for i := 0; i < nEntries; i++ {
+						allocated, err := fs.allocateExtents(8*uint64(fs.superblock.blockSize), nil)
+						if err != nil {
+							t.Fatal(err)
+						}
+						ext := (*allocated)[0]
+						ext.fileBlock = fileBlock
+						fileBlock += uint32(ext.count)
+						leaf.extents = append(leaf.extents, ext)
+						want = append(want, ext)
+					}
+					leaf.diskBlock = allocateNode(leaf)
+					return leaf
+				}
+				node := &extentInternalNode{extentNodeHeader: extentNodeHeader{depth: depth, entries: uint16(nEntries), max: 340, blockSize: 4096}}
+				for i := 0; i < nEntries; i++ {
+					start := fileBlock
+					child := build(depth-1, full && i == nEntries-1)
+					node.children = append(node.children, pointer(child, start))
+				}
+				node.diskBlock = allocateNode(node)
+				return node
+			}
+			root := &extentInternalNode{extentNodeHeader: extentNodeHeader{depth: tc.depth + 1, max: 4, blockSize: 4096}}
+			for i := 0; i < tc.rootChildren; i++ {
+				start := fileBlock
+				child := build(tc.depth, i == tc.rootChildren-1)
+				root.children = append(root.children, pointer(child, start))
+			}
+			root.entries = uint16(len(root.children))
+			var tree extentBlockFinder = root
+			for appendIndex := 0; appendIndex < 2; appendIndex++ {
+				allocated, err := fs.allocateExtents(8*uint64(fs.superblock.blockSize), nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				added := *allocated
+				added[0].fileBlock = fileBlock
+				fileBlock += uint32(added[0].count)
+				want = append(want, added...)
+				freeBefore := fs.superblock.freeBlocks
+				updated, meta, err := extendExtentTree(tree, &added, fs, nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				wantMeta := uint64(0)
+				if appendIndex == 0 {
+					wantMeta = 1 + uint64(tc.depth) // one sibling per split; reuse old blocks
+					if tc.rootChildren == 4 {
+						wantMeta += 2
+					}
+				}
+				if meta != wantMeta || freeBefore-fs.superblock.freeBlocks != wantMeta {
+					t.Fatalf("metadata allocation: reported %d, allocated %d, want %d", meta, freeBefore-fs.superblock.freeBlocks, wantMeta)
+				}
+				wantDepth := tc.depth + 1
+				if tc.rootChildren == 4 {
+					wantDepth++
+				}
+				if updated.getDepth() != wantDepth {
+					t.Fatalf("depth %d, want %d", updated.getDepth(), wantDepth)
+				}
+				// Reload the inode-root representation as well as every on-disk node.
+				tree, err = parseExtents(updated.toBytes(), 4096, 0, fileBlock)
+				if err != nil {
+					t.Fatal(err)
+				}
+				got, err := tree.blocks(fs)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if diff := deep.Equal(got, want); diff != nil {
+					t.Fatal(diff)
+				}
+				blocks, err := tree.findBlocks(uint64(fileBlock-16), 16, fs)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var wantBlocks []uint64
+				for _, ext := range want[len(want)-2:] {
+					for b := uint64(0); b < uint64(ext.count); b++ {
+						wantBlocks = append(wantBlocks, ext.startingBlock+b)
+					}
+				}
+				if diff := deep.Equal(blocks, wantBlocks); diff != nil {
+					t.Fatal(diff)
+				}
+				walkAndLoadChildren(t, fs, tree)
+			}
+		})
+	}
 }
 
 // TestExtentInternalNodeFindBlocksAcrossChildren guards the last-child span
