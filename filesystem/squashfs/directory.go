@@ -31,8 +31,8 @@ type directoryEntryRaw struct {
 }
 
 func (d *directoryEntryRaw) toBytes(inodeIndex uint32) []byte {
-	b := make([]byte, 8)
 	nameBytes := []byte(d.name)
+	b := make([]byte, 8, 8+len(nameBytes))
 	binary.LittleEndian.PutUint16(b[0:2], d.offset)
 	binary.LittleEndian.PutUint16(b[2:4], uint16(d.inodeNumber-inodeIndex))
 	binary.LittleEndian.PutUint16(b[4:6], uint16(d.inodeType))

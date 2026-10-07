@@ -233,6 +233,7 @@ func clearStartCluster(t *testing.T, imgPath, shortName string) {
 	}
 	binary.LittleEndian.PutUint16(entry[20:22], 0) // high word of first cluster
 	binary.LittleEndian.PutUint16(entry[26:28], 0) // low word of first cluster
+	//nolint:gosec // G703: Path traversal via taint analysis, but in this test, do not care
 	if err := os.WriteFile(imgPath, raw, 0o600); err != nil {
 		t.Fatalf("write image: %v", err)
 	}

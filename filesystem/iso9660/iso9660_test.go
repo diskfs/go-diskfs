@@ -613,6 +613,7 @@ func TestIso9660Finalize(t *testing.T) {
 				}
 
 				// Open the source file for reading
+				//nolint:gosec // G122, in test, do not care
 				in, errorOpeningFile := os.Open(path)
 				if errorOpeningFile != nil {
 					return errorOpeningFile

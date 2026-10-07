@@ -611,7 +611,7 @@ func writeMetadataBlock(buf []byte, to backend.WritableFile, c Compressor, locat
 	if !isCompressed {
 		size |= 1 << 15
 	}
-	header := make([]byte, 2)
+	header := make([]byte, 2, 2+len(buf))
 	binary.LittleEndian.PutUint16(header, size)
 	buf = append(header, buf...)
 	if _, err := to.WriteAt(buf, location); err != nil {
@@ -1357,7 +1357,7 @@ func hashStringMap(m map[string]string) string {
 	// just join all of the key-value pairs with =, and separate with ;, so you get
 	//  key1=value1;key2=value2;...
 	// it isn't perfect, but it doesn't have to be
-	pairs := make([]string, 0)
+	pairs := make([]string, 0, len(m))
 	for k, v := range m {
 		pairs = append(pairs, fmt.Sprintf("%s=%s", k, v))
 	}
@@ -1385,7 +1385,7 @@ type blockPosition struct {
 func createDirectories(e *finalizeFileInfo) []*finalizeFileInfo {
 	var (
 		dirs    = make([]*finalizeFileInfo, 0)
-		entries = make([]*directoryEntryRaw, 0)
+		entries = make([]*directoryEntryRaw, 0, len(e.children))
 	)
 	// go through each entry, and create a directory structure for it
 	// we will cycle through each directory, creating an entry for it

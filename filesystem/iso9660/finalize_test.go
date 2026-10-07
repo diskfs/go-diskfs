@@ -299,7 +299,7 @@ func TestFinalize9660(t *testing.T) {
 			delete(expected, e.Name())
 		}
 		if len(expected) > 0 {
-			keys := make([]string, 0)
+			keys := make([]string, 0, len(expected))
 			for k := range expected {
 				keys = append(keys, k)
 			}
@@ -531,7 +531,7 @@ func TestFinalizeRockRidge(t *testing.T) {
 			delete(expected, e.Name())
 		}
 		if len(expected) > 0 {
-			keys := make([]string, 0)
+			keys := make([]string, 0, len(expected))
 			for k := range expected {
 				keys = append(keys, k)
 			}

@@ -239,6 +239,7 @@ func TestReadBlock(t *testing.T) {
 	location := int64(10000)
 	smallLocation := int64(2000)
 	size := uint32(20)
+	//nolint:prealloc // just a test, do not care
 	data := []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}
 	testFile := &testhelper.FileImpl{
 		Reader: func(b []byte, offset int64) (int, error) {

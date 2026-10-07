@@ -223,10 +223,9 @@ func (fi *finalizeFileInfo) toDirectoryEntry(fsm *FileSystem, isSelf, isParent b
 		// add appropriate PX, TF, SL, NM extensions
 		for _, e := range fsm.suspExtensions {
 			var (
-				ext []directoryEntrySystemUseExtension
 				err error
 			)
-			ext, err = e.GetFileExtensions(fi, isSelf, isParent)
+			ext, err := e.GetFileExtensions(fi, isSelf, isParent)
 			if err != nil {
 				return nil, fmt.Errorf("error getting extensions for %s at path %s: %v", e.ID(), fi.path, err)
 			}
@@ -1160,7 +1159,7 @@ func createPathTable(fi []*finalizeFileInfo) *pathTable {
 	})
 	indexMap := make(map[*finalizeFileInfo]int)
 	// now that it is sorted, create the ordered path table entries
-	entries := make([]*pathTableEntry, 0)
+	entries := make([]*pathTableEntry, 0, len(fis))
 	for i, e := range fis {
 		name := e.Name()
 		nameSize := len(name)
