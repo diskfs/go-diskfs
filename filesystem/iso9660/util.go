@@ -16,8 +16,12 @@ const (
 )
 
 func universalizePath(p string) string {
-	// globalize the separator
-	return strings.ReplaceAll(p, `\`, "/")
+	// a leading backslash means the caller gave a Windows-style absolute path, so
+	// globalize the separator; otherwise io/fs rules apply and `\` is a name character
+	if strings.HasPrefix(p, `\`) {
+		return strings.ReplaceAll(p, `\`, "/")
+	}
+	return p
 }
 func splitPath(p string) []string {
 	ps := universalizePath(p)
