@@ -749,6 +749,8 @@ func TestChildPtrMatchesNode(t *testing.T) {
 // image and returns it along with the image path (for e2fsck).
 // Sizes >= 512 MiB get auto-detected 4 KiB blocks, which is what the
 // split paths in extent.go are sized for.
+//
+//nolint:unparam // we know it always gets size=600MB but want to keep it clean
 func setupWritableExtentFS(t *testing.T, size int64) (fs *FileSystem, imagePath string) {
 	t.Helper()
 	outfile, f := testCreateEmptyFile(t, size)

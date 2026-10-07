@@ -42,7 +42,7 @@ func blockGroupFromBytes(b []byte, blockSize, groupNumber int) (*blockGroup, err
 
 // toBytes returns bitmaps ready to be written to disk
 //
-//nolint:unused // will be used in the future, not yet
+//nolint:unused,unparam // will be used in the future, not yet
 func (bg *blockGroup) toBytes() ([]byte, error) {
 	b := make([]byte, 0, 2*bg.blockSize)
 	inodeBitmapBytes := bg.inodeBitmap.ToBytes()

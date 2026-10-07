@@ -233,7 +233,7 @@ func get9660DirectoryEntries(f *FileSystem) (entries []*directoryEntry, contents
 		if recordSize == 0x00 {
 			read += (blocksize - read%blocksize)
 		}
-		b2 := make([][]byte, 0)
+		b2 := make([][]byte, 0, 1)
 		b2 = append(b2, allBytes[read:read+recordSize])
 		b = append(b, b2)
 		read += recordSize
@@ -538,7 +538,7 @@ func getRockRidgeDirectoryEntries(f *FileSystem, includeRelocated bool) (entries
 		if recordSize == 0x00 {
 			read += (blocksize - read%blocksize)
 		}
-		b2 := make([][]byte, 0)
+		b2 := make([][]byte, 0, 1)
 		b2 = append(b2, allBytes[read:read+recordSize])
 		b = append(b, b2)
 		read += recordSize

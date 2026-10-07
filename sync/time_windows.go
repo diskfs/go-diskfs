@@ -14,6 +14,10 @@ func getAccessTime(info fs.FileInfo) time.Time {
 		// return zero time
 		return time.Time{}
 	}
-	stat := sys.(*syscall.Win32FileAttributeData)
+	stat, ok := sys.(*syscall.Win32FileAttributeData)
+	if !ok {
+		// return zero time if type assertion fails
+		return time.Time{}
+	}
 	return time.Unix(0, stat.LastAccessTime.Nanoseconds())
 }

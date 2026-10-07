@@ -79,11 +79,12 @@ func (d directoryEntrySystemUseExtensionRaw) Data() []byte {
 	return d.data
 }
 func (d directoryEntrySystemUseExtensionRaw) Bytes() []byte {
-	ret := make([]byte, 4)
+	data := d.Data()
+	ret := make([]byte, 4, 4+len(data))
 	copy(ret[0:2], d.Signature())
 	ret[2] = d.length
 	ret[3] = d.Version()
-	ret = append(ret, d.Data()...)
+	ret = append(ret, data...)
 	return ret
 }
 func (d directoryEntrySystemUseExtensionRaw) Continuable() bool {
@@ -134,11 +135,12 @@ func (d directoryEntrySystemUseExtensionSharingProtocolIndicator) Data() []byte 
 	return ret
 }
 func (d directoryEntrySystemUseExtensionSharingProtocolIndicator) Bytes() []byte {
-	ret := make([]byte, 4)
+	data := d.Data()
+	ret := make([]byte, 4, 4+len(data))
 	copy(ret[0:2], suspExtensionSharingProtocolIndicator)
 	ret[2] = uint8(d.Length())
 	ret[3] = d.Version()
-	ret = append(ret, d.Data()...)
+	ret = append(ret, data...)
 	return ret
 }
 func (d directoryEntrySystemUseExtensionSharingProtocolIndicator) SkipBytes() uint8 {
@@ -196,11 +198,12 @@ func (d directoryEntrySystemUseExtensionPadding) Data() []byte {
 	return ret
 }
 func (d directoryEntrySystemUseExtensionPadding) Bytes() []byte {
-	ret := make([]byte, 4)
+	data := d.Data()
+	ret := make([]byte, 4, 4+len(data))
 	copy(ret[0:2], suspExtensionPaddingField)
 	ret[2] = d.length
 	ret[3] = d.Version()
-	ret = append(ret, d.Data()...)
+	ret = append(ret, data...)
 	return ret
 }
 func (d directoryEntrySystemUseExtensionPadding) Continuable() bool {
@@ -305,11 +308,12 @@ func (d directoryEntrySystemUseContinuation) Data() []byte {
 	return b
 }
 func (d directoryEntrySystemUseContinuation) Bytes() []byte {
-	ret := make([]byte, 4)
+	data := d.Data()
+	ret := make([]byte, 4, 4+len(data))
 	copy(ret[0:2], suspExtensionContinuationArea)
 	ret[2] = uint8(d.Length())
 	ret[3] = d.Version()
-	ret = append(ret, d.Data()...)
+	ret = append(ret, data...)
 	return ret
 }
 func (d directoryEntrySystemUseContinuation) Location() uint32 {
@@ -373,11 +377,12 @@ func (d directoryEntrySystemUseExtensionSelector) Data() []byte {
 	return []byte{d.sequence}
 }
 func (d directoryEntrySystemUseExtensionSelector) Bytes() []byte {
-	ret := make([]byte, 4)
+	data := d.Data()
+	ret := make([]byte, 4, 4+len(data))
 	copy(ret[0:2], suspExtensionExtensionsSelector)
 	ret[2] = uint8(d.Length())
 	ret[3] = d.Version()
-	ret = append(ret, d.Data()...)
+	ret = append(ret, data...)
 	return ret
 }
 func (d directoryEntrySystemUseExtensionSelector) Sequence() uint8 {
@@ -431,7 +436,7 @@ func (d directoryEntrySystemUseExtensionReference) Version() uint8 {
 	return 1
 }
 func (d directoryEntrySystemUseExtensionReference) Data() []byte {
-	ret := make([]byte, 4)
+	ret := make([]byte, 4, 4+len(d.id)+len(d.descriptor)+len(d.source))
 	ret[0] = uint8(len(d.id))
 	ret[1] = uint8(len(d.descriptor))
 	ret[2] = uint8(len(d.source))
@@ -442,11 +447,12 @@ func (d directoryEntrySystemUseExtensionReference) Data() []byte {
 	return ret
 }
 func (d directoryEntrySystemUseExtensionReference) Bytes() []byte {
-	ret := make([]byte, 4)
+	data := d.Data()
+	ret := make([]byte, 4, 4+len(data))
 	copy(ret[0:2], suspExtensionExtensionsReference)
 	ret[2] = uint8(d.Length())
 	ret[3] = d.Version()
-	ret = append(ret, d.Data()...)
+	ret = append(ret, data...)
 	return ret
 }
 func (d directoryEntrySystemUseExtensionReference) ExtensionVersion() uint8 {

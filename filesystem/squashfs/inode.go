@@ -550,7 +550,7 @@ type basicSymlink struct {
 }
 
 func (i basicSymlink) toBytes() []byte {
-	b := make([]byte, 8)
+	b := make([]byte, 8, 8+len(i.target))
 	binary.LittleEndian.PutUint32(b[0:4], i.links)
 	binary.LittleEndian.PutUint32(b[4:8], uint32(len(i.target)))
 	b = append(b, []byte(i.target)...)
@@ -601,7 +601,7 @@ type extendedSymlink struct {
 }
 
 func (i extendedSymlink) toBytes() []byte {
-	b := make([]byte, 8)
+	b := make([]byte, 8, 8+len(i.target)+4)
 	binary.LittleEndian.PutUint32(b[0:4], i.links)
 	binary.LittleEndian.PutUint32(b[4:8], uint32(len(i.target)))
 	b = append(b, []byte(i.target)...)

@@ -25,6 +25,7 @@ func TestElToritoGenerateCatalog(t *testing.T) {
 	//
 	// we are NOT testing the conversions here as we do them elsewhere
 
+	//nolint:prealloc // testing, we do not care
 	e := make([]byte, 0)
 	veBytes, err := et.validationEntry()
 	if err != nil {

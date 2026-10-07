@@ -224,6 +224,7 @@ func TestFat32Write4k(t *testing.T) {
 		t.Fatalf("reading original 4k image failed: %v", err)
 	}
 
+	//nolint:gosec // G703 Path traversal via taint analysis, in test, do not care
 	if err := os.WriteFile(testFile, originalData, 0o600); err != nil {
 		t.Fatalf("creating test file copy failed: %v", err)
 	}

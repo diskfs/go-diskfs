@@ -52,7 +52,6 @@ func parseMetadata(b []byte, c Compressor) (block *metadatablock, err error) {
 }
 
 func (m *metadatablock) toBytes(c Compressor) ([]byte, error) {
-	b := make([]byte, 2)
 	var (
 		header uint16
 		data   = m.data
@@ -66,6 +65,7 @@ func (m *metadatablock) toBytes(c Compressor) ([]byte, error) {
 			return nil, fmt.Errorf("compression error: %v", err)
 		}
 	}
+	b := make([]byte, 2, 2+len(data))
 	header |= uint16(len(data))
 	binary.LittleEndian.PutUint16(b[:2], header)
 	b = append(b, data...)
