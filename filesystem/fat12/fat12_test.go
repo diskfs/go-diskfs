@@ -281,6 +281,63 @@ func TestFat12WriteReadLargeFile(t *testing.T) {
 	}
 }
 
+func TestFat12ReadStopsAtEndOfFile(t *testing.T) {
+	// A read that starts inside a cluster must stop at the end of the file,
+	// not at the end of the cluster: the bytes after the file in its last
+	// cluster are not part of it.
+	content := []byte("Hello, FAT12!")
+	_, fs := createFAT12(t, "EOFTEST")
+	writeFile(t, fs, "/hello.txt", content)
+
+	f, err := fs.OpenFile("/hello.txt", os.O_RDONLY)
+	if err != nil {
+		t.Fatalf("OpenFile for read: %v", err)
+	}
+	defer f.Close()
+	if _, err := f.Seek(1, io.SeekStart); err != nil {
+		t.Fatalf("Seek: %v", err)
+	}
+	buf := make([]byte, 4096)
+	n, err := f.Read(buf)
+	if err != nil && err != io.EOF {
+		t.Fatalf("Read: %v", err)
+	}
+	if n != len(content)-1 {
+		t.Errorf("Read from offset 1 returned %d bytes, want the %d left in the file", n, len(content)-1)
+	} else if !bytes.Equal(buf[:n], content[1:]) {
+		t.Errorf("Read from offset 1 returned %q, want %q", buf[:n], content[1:])
+	}
+}
+
+func TestFat12ReadAllReturnsExactSize(t *testing.T) {
+	// io.ReadAll grows its buffer in steps that do not line up with clusters,
+	// so for some sizes its last read starts inside the file's last cluster.
+	// Every size across a few clusters must read back as exactly what was
+	// written.
+	_, fs := createFAT12(t, "SIZES")
+	if err := fs.Mkdir("/sizes"); err != nil {
+		t.Fatalf("Mkdir: %v", err)
+	}
+	for size := 1; size <= 2*512+1; size++ {
+		name := fmt.Sprintf("/sizes/S%04d.BIN", size)
+		content := bytes.Repeat([]byte{'x'}, size)
+		writeFile(t, fs, name, content)
+
+		f, err := fs.OpenFile(name, os.O_RDONLY)
+		if err != nil {
+			t.Fatalf("size %d: OpenFile for read: %v", size, err)
+		}
+		got, err := io.ReadAll(f)
+		f.Close()
+		if err != nil {
+			t.Fatalf("size %d: ReadAll: %v", size, err)
+		}
+		if len(got) != size {
+			t.Errorf("size %d: ReadAll returned %d bytes", size, len(got))
+		}
+	}
+}
+
 func TestFat12WriteReadSubdirFile(t *testing.T) {
 	content := []byte("in a subdir")
 	imgPath, fs := createFAT12(t, "SUBDIR")

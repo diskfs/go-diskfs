@@ -147,8 +147,10 @@ func (fl *File) Read(b []byte) (int, error) {
 		if remainder != 0 {
 			offset := int64(start) + int64(lastCluster-2)*int64(bytesPerCluster) + remainder
 			toRead := int64(bytesPerCluster) - remainder
-			if toRead > int64(len(b)) {
-				toRead = int64(len(b))
+			// maxRead is already the lesser of len(b) and what is left of the
+			// file, so the rest of this cluster past the file's end is not read
+			if toRead > int64(maxRead) {
+				toRead = int64(maxRead)
 			}
 			_, _ = file.ReadAt(b[0:toRead], offset+fs.start)
 			totalRead += int(toRead)
