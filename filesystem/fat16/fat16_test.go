@@ -2,6 +2,7 @@ package fat16_test
 
 import (
 	"bytes"
+	"encoding/binary"
 	"io"
 	iofs "io/fs"
 	"os"
@@ -539,5 +540,19 @@ func TestFat16ManyFiles(t *testing.T) {
 		if len(entries) != nFilesPerDir {
 			t.Errorf("dir %s: got %d entries, want %d", dir, len(entries), nFilesPerDir)
 		}
+	}
+}
+
+// TestFat16CreateLeavesClusterTwoFree: FAT16 keeps its root directory in a
+// fixed region, so cluster 2 holds data like any other and starts out free.
+func TestFat16CreateLeavesClusterTwoFree(t *testing.T) {
+	imgPath, _ := createFAT16(t, "TEST")
+	image, err := os.ReadFile(imgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fatStart := int(binary.LittleEndian.Uint16(image[14:])) * int(binary.LittleEndian.Uint16(image[11:]))
+	if got := binary.LittleEndian.Uint16(image[fatStart+4:]); got != 0 {
+		t.Errorf("cluster 2 holds %#x after Create, want 0", got)
 	}
 }

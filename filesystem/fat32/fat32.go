@@ -300,11 +300,7 @@ func Create(b backend.Storage, size, start, blocksize int64, volumeLabel string,
 
 // ReadOption changes how ReadWithOptions loads a FAT32 filesystem. Without
 // options it behaves exactly like Read.
-type ReadOption func(*readOptions)
-
-type readOptions struct {
-	lazyFAT bool
-}
+type ReadOption = fat12.ReadOption
 
 // WithLazyFAT reads each FAT entry from the backend when it is needed, instead
 // of loading both copies of the table into memory and comparing them. Reading
@@ -313,13 +309,15 @@ type readOptions struct {
 // as it is on the backend at that moment, so a file another writer added after
 // the filesystem was read is found.
 //
-// The filesystem is read-only: ReadWithOptions refuses a backend that is open
-// for writing.
-func WithLazyFAT() ReadOption {
-	return func(o *readOptions) {
-		o.lazyFAT = true
-	}
-}
+// On a writable backend, each change to the table is written to both copies of
+// the FAT as it is made. Nothing coordinates two writers, so nothing else may
+// write the filesystem at the same time.
+func WithLazyFAT() ReadOption { return fat12.WithLazyFAT() }
+
+// WithFATCheck compares the two copies of the FAT once the filesystem is read,
+// as Read always does, a chunk at a time and without parsing them, and refuses
+// the filesystem if they differ.
+func WithFATCheck() ReadOption { return fat12.WithFATCheck() }
 
 // Read reads a FAT32 filesystem from the backend.
 func Read(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) {
@@ -329,14 +327,9 @@ func Read(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) 
 // ReadWithOptions reads a FAT32 filesystem from the backend, with the given
 // options applied.
 func ReadWithOptions(b backend.Storage, size, start, blocksize int64, opts ...ReadOption) (*FileSystem, error) {
-	var o readOptions
+	var o fat12.ReadOptions
 	for _, opt := range opts {
 		opt(&o)
-	}
-	if o.lazyFAT {
-		if _, err := b.Writable(); err == nil {
-			return nil, errors.New("a lazily read FAT is read-only, so the backend must be opened read-only")
-		}
 	}
 
 	if blocksize != 0 && blocksize != int64(SectorSize512) && blocksize != int64(SectorSize4096) {
@@ -383,8 +376,8 @@ func ReadWithOptions(b backend.Storage, size, start, blocksize int64, opts ...Re
 	}
 
 	var fat fat12.FATTable
-	if o.lazyFAT {
-		lazy, err := newLazyTable(b, int64(fatPrimaryStart)+start, fatSize)
+	if o.LazyFAT {
+		lazy, err := fat12.NewLazyTable(b, int64(fatPrimaryStart)+start, fatSize, format32)
 		if err != nil {
 			return nil, err
 		}
@@ -417,6 +410,11 @@ func ReadWithOptions(b backend.Storage, size, start, blocksize int64, opts ...Re
 	base.WriteBootSectorFn = fs.writeBootSector
 	base.AfterWriteFAT = fs.writeFsis
 
+	if o.CheckFAT {
+		if err := fs.CheckFAT(); err != nil {
+			return nil, err
+		}
+	}
 	return fs, nil
 }
 

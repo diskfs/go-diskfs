@@ -134,8 +134,6 @@ func Create(b backend.Storage, size, start, blocksize int64, volumeLabel string,
 
 	fatID := uint32(0xFF00) | uint32(mediaType)
 	tbl := newFat16Table(fatID, fatSize)
-	// Mark root cluster (cluster 2) as EOC.
-	tbl.SetCluster(2, tbl.EOCMarker())
 
 	base := fat12.NewFileSystem(b, bpb, tbl,
 		dataStart, bytesPerCluster, size, start,
@@ -168,10 +166,33 @@ func Create(b backend.Storage, size, start, blocksize int64, volumeLabel string,
 	return fs, nil
 }
 
+// ReadOption changes how ReadWithOptions reads a FAT16 filesystem. Without
+// options it reads exactly as Read does.
+type ReadOption = fat12.ReadOption
+
+// WithLazyFAT reads each FAT entry from the backend when it is needed, instead
+// of loading the table into memory. See fat12.WithLazyFAT.
+func WithLazyFAT() ReadOption { return fat12.WithLazyFAT() }
+
+// WithFATCheck compares the two copies of the FAT once the filesystem is read,
+// and refuses the filesystem if they differ.
+func WithFATCheck() ReadOption { return fat12.WithFATCheck() }
+
 // Read reads a FAT16 filesystem from the backend.
 // Returns an error if the image is not a valid FAT16 filesystem so that
 // disk.GetFilesystem() can fall through to the next candidate.
 func Read(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) {
+	return ReadWithOptions(b, size, start, blocksize)
+}
+
+// ReadWithOptions reads a FAT16 filesystem from the backend, with the given
+// options applied.
+func ReadWithOptions(b backend.Storage, size, start, blocksize int64, opts ...ReadOption) (*FileSystem, error) {
+	var o fat12.ReadOptions
+	for _, opt := range opts {
+		opt(&o)
+	}
+
 	if blocksize != 0 && blocksize != int64(fat12.SectorSize512) {
 		return nil, fmt.Errorf("blocksize for FAT16 must be 0 or 512, not %d", blocksize)
 	}
@@ -219,16 +240,29 @@ func Read(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) 
 	bytesPerCluster := int(sectorsPerCluster) * int(bytesPerSector)
 
 	fatID := uint32(0xFF00) | uint32(dos20.MediaType)
-	tbl := newFat16Table(fatID, fatSize)
-	fatBytes := make([]byte, fatSize)
-	if _, err := b.ReadAt(fatBytes, int64(fatPrimaryStart)+start); err != nil {
-		return nil, fmt.Errorf("could not read FAT: %w", err)
+	var tbl fat12.FATTable
+	if o.LazyFAT {
+		if tbl, err = fat12.NewLazyTable(b, int64(fatPrimaryStart)+start, fatSize, format16); err != nil {
+			return nil, err
+		}
+	} else {
+		full := newFat16Table(fatID, fatSize)
+		fatBytes := make([]byte, fatSize)
+		if _, err := b.ReadAt(fatBytes, int64(fatPrimaryStart)+start); err != nil {
+			return nil, fmt.Errorf("could not read FAT: %w", err)
+		}
+		full.FromBytes(fatBytes)
+		tbl = full
 	}
-	tbl.FromBytes(fatBytes)
 
 	base := fat12.NewFileSystem(b, bpb, tbl,
 		dataStart, bytesPerCluster, size, start,
 		int64(rootDirOff), int(rootDirEntries),
 		uint64(fatPrimaryStart), uint64(fatSecondaryStart))
+	if o.CheckFAT {
+		if err := base.CheckFAT(); err != nil {
+			return nil, err
+		}
+	}
 	return &FileSystem{FileSystem: base}, nil
 }

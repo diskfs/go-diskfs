@@ -7,6 +7,17 @@ import (
 	"github.com/diskfs/go-diskfs/filesystem/fat12"
 )
 
+// format16 is how FAT16 stores its entries.
+var format16 = fat12.EntryFormat{
+	Bits:      16,
+	FATID:     func(head []byte) uint32 { return uint32(binary.LittleEndian.Uint16(head[0:2])) },
+	EOCMarker: func([]byte) uint32 { return 0xFFFF },
+	IsEOC:     isEOC,
+}
+
+// isEOC reports whether val ends a FAT16 cluster chain.
+func isEOC(val uint32) bool { return val >= 0xFFF8 && val <= 0xFFFF }
+
 // fat16Table implements fat12.FATTable with 16-bit FAT entries.
 type fat16Table struct {
 	fatID    uint32
@@ -33,7 +44,7 @@ var _ fat12.FATTable = (*fat16Table)(nil)
 
 func (t *fat16Table) ClusterValue(n uint32) uint32 { return t.clusters[n] }
 func (t *fat16Table) SetCluster(n, val uint32)     { t.clusters[n] = val }
-func (t *fat16Table) IsEOC(val uint32) bool        { return val >= 0xFFF8 && val <= 0xFFFF }
+func (t *fat16Table) IsEOC(val uint32) bool        { return isEOC(val) }
 func (t *fat16Table) EOCMarker() uint32            { return t.eoc }
 func (t *fat16Table) UnusedMarker() uint32         { return 0x0000 }
 func (t *fat16Table) MaxCluster() uint32           { return t.max }
