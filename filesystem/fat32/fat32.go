@@ -298,8 +298,47 @@ func Create(b backend.Storage, size, start, blocksize int64, volumeLabel string,
 
 // ── Read ──────────────────────────────────────────────────────────────────────
 
+// ReadOption changes how ReadWithOptions loads a FAT32 filesystem. Without
+// options it behaves exactly like Read.
+type ReadOption func(*readOptions)
+
+type readOptions struct {
+	lazyFAT bool
+}
+
+// WithLazyFAT reads each FAT entry from the backend when it is needed, instead
+// of loading both copies of the table into memory and comparing them. Reading
+// the filesystem then costs a few small reads rather than reading and parsing
+// the whole table twice, and every cluster chain is followed through the FAT
+// as it is on the backend at that moment, so a file another writer added after
+// the filesystem was read is found.
+//
+// The filesystem is read-only: ReadWithOptions refuses a backend that is open
+// for writing.
+func WithLazyFAT() ReadOption {
+	return func(o *readOptions) {
+		o.lazyFAT = true
+	}
+}
+
 // Read reads a FAT32 filesystem from the backend.
 func Read(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) {
+	return ReadWithOptions(b, size, start, blocksize)
+}
+
+// ReadWithOptions reads a FAT32 filesystem from the backend, with the given
+// options applied.
+func ReadWithOptions(b backend.Storage, size, start, blocksize int64, opts ...ReadOption) (*FileSystem, error) {
+	var o readOptions
+	for _, opt := range opts {
+		opt(&o)
+	}
+	if o.lazyFAT {
+		if _, err := b.Writable(); err == nil {
+			return nil, errors.New("a lazily read FAT is read-only, so the backend must be opened read-only")
+		}
+	}
+
 	if blocksize != 0 && blocksize != int64(SectorSize512) && blocksize != int64(SectorSize4096) {
 		return nil, fmt.Errorf("blocksize for FAT32 must be 0, 512, or 4096 bytes, not %d", blocksize)
 	}
@@ -343,16 +382,26 @@ func Read(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) 
 		return nil, fmt.Errorf("error reading FileSystem Information Sector: %w", err)
 	}
 
-	partitionTableBytes := make([]byte, fatSize)
-	_, _ = b.ReadAt(partitionTableBytes, int64(fatPrimaryStart)+start)
-	fat := tableFromBytes(partitionTableBytes)
+	var fat fat12.FATTable
+	if o.lazyFAT {
+		lazy, err := newLazyTable(b, int64(fatPrimaryStart)+start, fatSize)
+		if err != nil {
+			return nil, err
+		}
+		fat = lazy
+	} else {
+		partitionTableBytes := make([]byte, fatSize)
+		_, _ = b.ReadAt(partitionTableBytes, int64(fatPrimaryStart)+start)
+		fat1 := tableFromBytes(partitionTableBytes)
 
-	_, _ = b.ReadAt(partitionTableBytes, int64(fatSecondaryStart)+start)
-	fat2 := tableFromBytes(partitionTableBytes)
-	if !fat.equal(fat2) {
-		return nil, errors.New("fat tables did not match")
+		_, _ = b.ReadAt(partitionTableBytes, int64(fatSecondaryStart)+start)
+		fat2 := tableFromBytes(partitionTableBytes)
+		if !fat1.equal(fat2) {
+			return nil, errors.New("fat tables did not match")
+		}
+		fat = fat1
 	}
-	dataStart := uint32(fatSecondaryStart) + fat.size
+	dataStart := uint32(fatSecondaryStart) + fatSize
 	bytesPerCluster := int(sectorsPerCluster) * int(bytesPerSector)
 
 	base := fat12.NewFileSystem(b, nil, fat,
