@@ -78,7 +78,9 @@ func parseSuperblock(b []byte, imageSize int64) (*superblock, error) {
 		ishareXattrPrefixID: b[105],
 		buildTime:           binary.LittleEndian.Uint32(b[108:112]),
 		rootNID8:            binary.LittleEndian.Uint64(b[112:120]),
-		metaboxNID:          binary.LittleEndian.Uint64(b[128:136]),
+	}
+	if s.superblockSize() > 128 && len(b) >= 136 {
+		s.metaboxNID = binary.LittleEndian.Uint64(b[128:136])
 	}
 	copy(s.uuid[:], b[48:64])
 	copy(s.volumeName[:], b[64:80])
@@ -115,11 +117,14 @@ func parseSuperblock(b []byte, imageSize int64) (*superblock, error) {
 	if b[106] != 0 || b[107] != 0 {
 		return nil, fmt.Errorf("reserved superblock bytes 106-107 are nonzero")
 	}
-	if s.rootNID8 != 0 || s.metaboxNID != 0 ||
-		binary.LittleEndian.Uint64(b[120:128]) != 0 || binary.LittleEndian.Uint64(b[136:144]) != 0 {
+	reserved3 := uint64(0)
+	if s.superblockSize() > 136 && len(b) >= 144 {
+		reserved3 = binary.LittleEndian.Uint64(b[136:144])
+	}
+	if s.rootNID8 != 0 || s.metaboxNID != 0 || binary.LittleEndian.Uint64(b[120:128]) != 0 || reserved3 != 0 {
 		return nil, fmt.Errorf("48-bit and metabox layouts are not supported")
 	}
-	if s.blocks == 0 || s.metaBlockAddress == 0 || s.metaBlockAddress >= s.blocks {
+	if s.blocks == 0 || s.metaBlockAddress >= s.blocks {
 		return nil, fmt.Errorf("invalid metadata block address %d with %d blocks", s.metaBlockAddress, s.blocks)
 	}
 	if s.packedNID != 0 && s.packedNID>>63 != 0 {
@@ -153,5 +158,5 @@ func superblockChecksum(b []byte) uint32 {
 	}
 	checksummed := append([]byte(nil), b...)
 	binary.LittleEndian.PutUint32(checksummed[4:8], 0)
-	return crc32.Update(0xffffffff, crc32.MakeTable(crc32.Castagnoli), checksummed)
+	return ^crc32.Update(0, crc32.MakeTable(crc32.Castagnoli), checksummed)
 }
