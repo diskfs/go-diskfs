@@ -2,6 +2,7 @@ package fat32_test
 
 import (
 	"bytes"
+	"encoding/binary"
 	"io"
 	"os"
 	"path"
@@ -43,9 +44,15 @@ func writeFile(t *testing.T, fs *fat32.FileSystem, p string, content []byte) {
 			t.Fatalf("mkdir %s: %v", dir, err)
 		}
 	}
-	f, err := fs.OpenFile(p, os.O_CREATE|os.O_RDWR)
+	openAndWrite(t, fs, p, os.O_CREATE|os.O_RDWR, content)
+}
+
+// openAndWrite opens p with flag and writes content to it.
+func openAndWrite(t *testing.T, fs *fat32.FileSystem, p string, flag int, content []byte) {
+	t.Helper()
+	f, err := fs.OpenFile(p, flag)
 	if err != nil {
-		t.Fatalf("create %s: %v", p, err)
+		t.Fatalf("open %s: %v", p, err)
 	}
 	if _, err := f.Write(content); err != nil {
 		t.Fatalf("write %s: %v", p, err)
@@ -71,6 +78,26 @@ func lazyTestImage(t *testing.T) string {
 	}
 	for p, size := range lazyTestFiles {
 		writeFile(t, fs, p, lazyTestContent(p, size))
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return f.Name()
+}
+
+// copyImage copies the image file and returns the copy's path.
+func copyImage(t *testing.T, name string) string {
+	t.Helper()
+	content, err := os.ReadFile(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.CreateTemp(t.TempDir(), "lazy-fat-*.img")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Write(content); err != nil {
+		t.Fatal(err)
 	}
 	if err := f.Close(); err != nil {
 		t.Fatal(err)
@@ -200,13 +227,126 @@ func TestLazyFATFindsAFileWrittenAfterItWasRead(t *testing.T) {
 	}
 }
 
-// TestLazyFATRefusesAWritableBackend: the lazy table cannot be written, so it
-// is only built over a backend that cannot be written either.
-func TestLazyFATRefusesAWritableBackend(t *testing.T) {
-	name := lazyTestImage(t)
+// changeTree grows, truncates and removes files lazyTestImage wrote, then
+// writes a new file into the clusters that freed. It returns every file the
+// image then holds, with its content.
+func changeTree(t *testing.T, fs *fat32.FileSystem) map[string][]byte {
+	t.Helper()
+	const (
+		grown     = "/large.bin"
+		truncated = "/dir/other/medium.bin"
+		removed   = "/dir/sub/a-long-file-name-that-needs-lfn-entries-b.bin"
+		added     = "/dir/new/written-after-changes.bin"
+	)
+	files := map[string][]byte{}
+	for p, size := range lazyTestFiles {
+		files[p] = lazyTestContent(p, size)
+	}
 
-	_, err := fat32.ReadWithOptions(file.New(openImage(t, name, false), false), lazyTestImageSize, 0, 512, fat32.WithLazyFAT())
-	if err == nil {
-		t.Fatal("a lazy table was built over a writable backend")
+	appended := lazyTestContent(grown+"+", 50000)
+	openAndWrite(t, fs, grown, os.O_RDWR|os.O_APPEND, appended)
+	files[grown] = append(files[grown], appended...)
+
+	files[truncated] = lazyTestContent(truncated+"+", 3000)
+	openAndWrite(t, fs, truncated, os.O_RDWR|os.O_TRUNC, files[truncated])
+
+	if err := fs.Remove(removed); err != nil {
+		t.Fatalf("remove %s: %v", removed, err)
+	}
+	delete(files, removed)
+
+	files[added] = lazyTestContent(added, 70000)
+	writeFile(t, fs, added, files[added])
+
+	return files
+}
+
+// TestLazyFATWritesWhatTheFullTableWrites: the same changes made through the
+// full table and through the lazy table leave byte-identical images, and the
+// files read back as written.
+func TestLazyFATWritesWhatTheFullTableWrites(t *testing.T) {
+	t.Setenv("SOURCE_DATE_EPOCH", "1700000000")
+	fullName := lazyTestImage(t)
+	lazyName := copyImage(t, fullName)
+
+	full, err := fat32.Read(file.New(openImage(t, fullName, false), false), lazyTestImageSize, 0, 512)
+	if err != nil {
+		t.Fatalf("read with the full table: %v", err)
+	}
+	lazy, err := fat32.ReadWithOptions(file.New(openImage(t, lazyName, false), false), lazyTestImageSize, 0, 512, fat32.WithLazyFAT())
+	if err != nil {
+		t.Fatalf("read with a lazy table: %v", err)
+	}
+	changeTree(t, full)
+	want := changeTree(t, lazy)
+
+	fullImage, err := os.ReadFile(fullName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lazyImage, err := os.ReadFile(lazyName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range fullImage {
+		if fullImage[i] != lazyImage[i] {
+			t.Fatalf("images differ from byte %d", i)
+		}
+	}
+
+	written, err := fat32.Read(file.New(openImage(t, lazyName, true), true), lazyTestImageSize, 0, 512)
+	if err != nil {
+		t.Fatalf("read the image the lazy table wrote: %v", err)
+	}
+	got := map[string][]byte{}
+	readTree(t, written, ".", got)
+	if len(got) != len(want) {
+		t.Fatalf("image holds %d files, want %d", len(got), len(want))
+	}
+	for p, content := range want {
+		if !bytes.Equal(got[p], content) {
+			t.Errorf("%s: %d bytes, not the %d written", p, len(got[p]), len(content))
+		}
+	}
+}
+
+// TestLazyFATCheckRefusesDifferingCopies: eager reads compare the FAT copies by
+// default, while lazy reads skip that comparison.
+func TestLazyFATCheckRefusesDifferingCopies(t *testing.T) {
+	name := lazyTestImage(t)
+	read := func(opts ...fat32.ReadOption) error {
+		_, err := fat32.ReadWithOptions(file.New(openImage(t, name, true), true), lazyTestImageSize, 0, 512, opts...)
+		return err
+	}
+	if err := read(); err != nil {
+		t.Fatalf("eager read refused matching copies: %v", err)
+	}
+	if err := read(fat32.WithLazyFAT()); err != nil {
+		t.Fatalf("lazy read refused matching copies: %v", err)
+	}
+
+	f := openImage(t, name, false)
+	bs := make([]byte, 512)
+	if _, err := f.ReadAt(bs, 0); err != nil {
+		t.Fatal(err)
+	}
+	bytesPerSector := int64(binary.LittleEndian.Uint16(bs[11:]))
+	reservedSectors := int64(binary.LittleEndian.Uint16(bs[14:]))
+	sectorsPerFat := int64(binary.LittleEndian.Uint32(bs[36:]))
+	at := (reservedSectors+sectorsPerFat)*bytesPerSector + 20
+	b := make([]byte, 1)
+	if _, err := f.ReadAt(b, at); err != nil {
+		t.Fatal(err)
+	}
+	b[0] ^= 0xFF
+	if _, err := f.WriteAt(b, at); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := read(); err == nil {
+		t.Error("eager read accepted copies that differ")
+	}
+	if err := read(fat32.WithLazyFAT()); err != nil {
+		t.Errorf("lazy read refused copies that differ: %v", err)
 	}
 }

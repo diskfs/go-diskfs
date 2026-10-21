@@ -35,7 +35,37 @@ type FATTable interface {
 	Bytes() []byte
 }
 
+// ChangeTracker is implemented by a FATTable that knows which entries were set
+// since it was last written. WriteFat then writes only those, instead of the
+// whole table.
+type ChangeTracker interface {
+	// Changes encodes the entries set since the last ChangesWritten as runs of
+	// bytes of one copy of the FAT.
+	Changes() ([]FATRun, error)
+	// ChangesWritten forgets the entries Changes encoded, once every copy of
+	// the FAT holds them.
+	ChangesWritten()
+}
+
+// FreeClusterFinder is implemented by a FATTable that can find free clusters
+// without being asked for each entry in turn.
+type FreeClusterFinder interface {
+	// FreeClusters returns up to count free clusters, in ascending order from 2.
+	FreeClusters(count int) ([]uint32, error)
+}
+
 // ── fat12Table ────────────────────────────────────────────────────────────────
+
+// format12 is how FAT12 stores its entries.
+var format12 = EntryFormat{
+	Bits:      12,
+	FATID:     func(head []byte) uint32 { return uint32(head[0]) | 0x0F00 },
+	EOCMarker: func([]byte) uint32 { return 0x0FFF },
+	IsEOC:     isEOC12,
+}
+
+// isEOC12 reports whether val ends a FAT12 cluster chain.
+func isEOC12(val uint32) bool { return val >= 0xFF8 && val <= 0xFFF }
 
 // fat12Table implements FATTable for 12-bit FAT entries.
 type fat12Table struct {
@@ -63,7 +93,7 @@ func newFat12Table(fatID, sizeBytes uint32) *fat12Table {
 
 func (t *fat12Table) ClusterValue(n uint32) uint32 { return t.clusters[n] }
 func (t *fat12Table) SetCluster(n, val uint32)     { t.clusters[n] = val }
-func (t *fat12Table) IsEOC(val uint32) bool        { return val >= 0xFF8 && val <= 0xFFF }
+func (t *fat12Table) IsEOC(val uint32) bool        { return isEOC12(val) }
 func (t *fat12Table) EOCMarker() uint32            { return t.eoc }
 func (t *fat12Table) UnusedMarker() uint32         { return t.unused }
 func (t *fat12Table) MaxCluster() uint32           { return t.max }

@@ -2,6 +2,7 @@ package fat32
 
 import (
 	"encoding/binary"
+	"maps"
 	"slices"
 
 	"github.com/diskfs/go-diskfs/filesystem/fat12"
@@ -18,22 +19,55 @@ type table struct {
 	rootDirCluster uint32
 	size           uint32
 	maxCluster     uint32
+	// changed holds the entries set since the table was last written. It is
+	// nil for a table that has never been written, as Create builds, so that
+	// the first write writes all of it.
+	changed map[uint32]struct{}
 }
 
-// Verify the interface is satisfied at compile time.
-var _ fat12.FATTable = (*table)(nil)
+// Verify the interfaces are satisfied at compile time.
+var (
+	_ fat12.FATTable      = (*table)(nil)
+	_ fat12.ChangeTracker = (*table)(nil)
+)
 
 // ── fat12.FATTable interface ──────────────────────────────────────────────────
 
 func (t *table) ClusterValue(n uint32) uint32 { return t.clusters[n] }
-func (t *table) SetCluster(n, val uint32)     { t.clusters[n] = val }
-func (t *table) IsEOC(val uint32) bool        { return val&0xFFFFFF8 == 0xFFFFFF8 }
+func (t *table) IsEOC(val uint32) bool        { return isEOC(val) }
 func (t *table) EOCMarker() uint32            { return t.eocMarker }
 func (t *table) UnusedMarker() uint32         { return t.unusedMarker }
 func (t *table) MaxCluster() uint32           { return t.maxCluster }
 func (t *table) FATID() uint32                { return t.fatID }
 func (t *table) RootDirCluster() uint32       { return t.rootDirCluster }
 func (t *table) Size() uint32                 { return t.size }
+
+// SetCluster sets entry n and records it as changed.
+func (t *table) SetCluster(n, val uint32) {
+	t.clusters[n] = val
+	if t.changed != nil && n >= 2 && n < t.maxCluster {
+		t.changed[n] = struct{}{}
+	}
+}
+
+// Changes encodes the entries set since the table was last written, or all of
+// it if it has never been written.
+func (t *table) Changes() ([]fat12.FATRun, error) {
+	if t.changed == nil {
+		return []fat12.FATRun{{Bytes: t.Bytes()}}, nil
+	}
+	return format32.EncodeRuns(t.size, slices.Sorted(maps.Keys(t.changed)), t.stored)
+}
+
+// ChangesWritten forgets the entries Changes encoded, which are now on disk.
+func (t *table) ChangesWritten() {
+	t.changed = map[uint32]struct{}{}
+}
+
+// stored returns entry n as held in memory.
+func (t *table) stored(n uint32) (uint32, error) {
+	return t.clusters[n], nil
+}
 
 // FromBytes populates the table from raw FAT bytes read from disk.
 func (t *table) FromBytes(b []byte) {
@@ -88,6 +122,7 @@ func tableFromBytes(b []byte) *table {
 		clusters:       make([]uint32, maxCluster+1),
 		maxCluster:     maxCluster,
 		rootDirCluster: 2,
+		changed:        map[uint32]struct{}{},
 	}
 	t.FromBytes(b)
 	return t
