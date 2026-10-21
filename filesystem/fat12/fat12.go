@@ -271,10 +271,6 @@ type ReadOption func(*ReadOptions)
 type ReadOptions struct {
 	// LazyFAT reads each FAT entry from the backend when it is needed.
 	LazyFAT bool
-	// CheckFAT compares the two copies of the FAT once the filesystem is read.
-	// By default eager reads check the copies and lazy reads do not.
-	CheckFAT    bool
-	checkFATSet bool
 }
 
 // WithLazyFAT reads each FAT entry from the backend when it is needed, instead
@@ -283,9 +279,6 @@ type ReadOptions struct {
 // the backend at that moment, so a file another writer added after the
 // filesystem was read is found.
 //
-// Lazy reads skip comparing the two FAT copies by default. WithFATCheck can
-// request that one-time check without loading the table into memory.
-//
 // On a writable backend, each change to the table is written to both copies of
 // the FAT as it is made. Nothing coordinates two writers, so nothing else may
 // write the filesystem at the same time.
@@ -293,35 +286,6 @@ func WithLazyFAT() ReadOption {
 	return func(o *ReadOptions) {
 		o.LazyFAT = true
 	}
-}
-
-// WithFATCheck compares the two copies of the FAT once the filesystem is read,
-// as CheckFAT does, and refuses the filesystem if they differ. This overrides
-// the default for lazy reads; eager reads check the copies by default.
-func WithFATCheck() ReadOption {
-	return func(o *ReadOptions) {
-		o.CheckFAT = true
-		o.checkFATSet = true
-	}
-}
-
-// WithoutFATCheck skips comparing the two copies of the FAT when the
-// filesystem is read. Eager reads check the copies by default; this option
-// overrides that default. Lazy reads skip the check by default.
-func WithoutFATCheck() ReadOption {
-	return func(o *ReadOptions) {
-		o.CheckFAT = false
-		o.checkFATSet = true
-	}
-}
-
-// ShouldCheckFAT reports whether the FAT copies should be compared for these
-// options. The default is to check eager reads and skip the check for lazy reads.
-func (o ReadOptions) ShouldCheckFAT() bool {
-	if o.checkFATSet || o.CheckFAT {
-		return o.CheckFAT
-	}
-	return !o.LazyFAT
 }
 
 // Read reads a FAT12 filesystem from the backend.
@@ -407,7 +371,7 @@ func ReadWithOptions(b backend.Storage, size, start, blocksize int64, opts ...Re
 		dataStart, bytesPerCluster, size, start,
 		int64(rootDirOff), int(rootDirEntries),
 		uint64(fatPrimaryStart), uint64(fatSecondaryStart))
-	if o.ShouldCheckFAT() {
+	if !o.LazyFAT {
 		if err := fs.CheckFAT(); err != nil {
 			return nil, err
 		}

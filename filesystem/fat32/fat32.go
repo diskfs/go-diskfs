@@ -309,24 +309,10 @@ type ReadOption = fat12.ReadOption
 // as it is on the backend at that moment, so a file another writer added after
 // the filesystem was read is found.
 //
-// Lazy reads skip comparing the two FAT copies by default. WithFATCheck can
-// request that one-time check without loading the table into memory.
-//
 // On a writable backend, each change to the table is written to both copies of
 // the FAT as it is made. Nothing coordinates two writers, so nothing else may
 // write the filesystem at the same time.
 func WithLazyFAT() ReadOption { return fat12.WithLazyFAT() }
-
-// WithFATCheck compares the two copies of the FAT once the filesystem is read,
-// a chunk at a time and without parsing them, and refuses the filesystem if
-// they differ. This overrides the default for lazy reads; eager reads check the
-// copies by default.
-func WithFATCheck() ReadOption { return fat12.WithFATCheck() }
-
-// WithoutFATCheck skips comparing the two copies of the FAT when the
-// filesystem is read. Eager reads check the copies by default; this option
-// overrides that default. Lazy reads skip the check by default.
-func WithoutFATCheck() ReadOption { return fat12.WithoutFATCheck() }
 
 // Read reads a FAT32 filesystem from the backend.
 func Read(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) {
@@ -340,7 +326,6 @@ func ReadWithOptions(b backend.Storage, size, start, blocksize int64, opts ...Re
 	for _, opt := range opts {
 		opt(&o)
 	}
-	checkFAT := o.ShouldCheckFAT()
 
 	if blocksize != 0 && blocksize != int64(SectorSize512) && blocksize != int64(SectorSize4096) {
 		return nil, fmt.Errorf("blocksize for FAT32 must be 0, 512, or 4096 bytes, not %d", blocksize)
@@ -397,12 +382,10 @@ func ReadWithOptions(b backend.Storage, size, start, blocksize int64, opts ...Re
 		_, _ = b.ReadAt(partitionTableBytes, int64(fatPrimaryStart)+start)
 		fat1 := tableFromBytes(partitionTableBytes)
 
-		if checkFAT {
-			_, _ = b.ReadAt(partitionTableBytes, int64(fatSecondaryStart)+start)
-			fat2 := tableFromBytes(partitionTableBytes)
-			if !fat1.equal(fat2) {
-				return nil, errors.New("fat tables did not match")
-			}
+		_, _ = b.ReadAt(partitionTableBytes, int64(fatSecondaryStart)+start)
+		fat2 := tableFromBytes(partitionTableBytes)
+		if !fat1.equal(fat2) {
+			return nil, errors.New("fat tables did not match")
 		}
 		fat = fat1
 	}
@@ -422,11 +405,6 @@ func ReadWithOptions(b backend.Storage, size, start, blocksize int64, opts ...Re
 	base.WriteBootSectorFn = fs.writeBootSector
 	base.AfterWriteFAT = fs.writeFsis
 
-	if o.LazyFAT && checkFAT {
-		if err := fs.CheckFAT(); err != nil {
-			return nil, err
-		}
-	}
 	return fs, nil
 }
 

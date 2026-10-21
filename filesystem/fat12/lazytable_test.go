@@ -353,7 +353,7 @@ func TestLazyFATWritesWhatTheFullTableWrites(t *testing.T) {
 				}
 			}
 
-			written, err := kind.read(openLazyImage(t, lazyName, true), kind.size, fat12.WithFATCheck())
+			written, err := kind.read(openLazyImage(t, lazyName, true), kind.size)
 			if err != nil {
 				t.Fatalf("read the image the lazy table wrote: %v", err)
 			}
@@ -439,31 +439,25 @@ func TestLazyFATWritesWhatTheToolsAccept(t *testing.T) {
 	}
 }
 
-// TestFATCheckRefusesDifferingCopies: WithFATCheck accepts an image whose two
-// copies of the FAT match and refuses one where they differ, whichever table
-// reads it.
+// TestFATCheckRefusesDifferingCopies: eager reads refuse an image whose two
+// copies of the FAT differ, while lazy reads skip the comparison.
 func TestFATCheckRefusesDifferingCopies(t *testing.T) {
-	checks := map[string][]fat12.ReadOption{
-		"full table": {fat12.WithFATCheck()},
-		"lazy table": {fat12.WithLazyFAT(), fat12.WithFATCheck()},
-	}
 	for _, kind := range lazyKinds {
 		t.Run(kind.name, func(t *testing.T) {
 			name := lazyImage(t, kind)
-			for label, opts := range checks {
-				if _, err := kind.read(openLazyImage(t, name, true), kind.size, opts...); err != nil {
-					t.Errorf("%s refused matching copies: %v", label, err)
-				}
+			if _, err := kind.read(openLazyImage(t, name, true), kind.size); err != nil {
+				t.Fatalf("eager read refused matching copies: %v", err)
+			}
+			if _, err := kind.read(openLazyImage(t, name, true), kind.size, fat12.WithLazyFAT()); err != nil {
+				t.Fatalf("lazy read refused matching copies: %v", err)
 			}
 
 			corruptSecondaryFAT(t, name)
-			for label, opts := range checks {
-				if _, err := kind.read(openLazyImage(t, name, true), kind.size, opts...); err == nil {
-					t.Errorf("%s accepted copies that differ", label)
-				}
+			if _, err := kind.read(openLazyImage(t, name, true), kind.size); err == nil {
+				t.Error("eager read accepted copies that differ")
 			}
 			if _, err := kind.read(openLazyImage(t, name, true), kind.size, fat12.WithLazyFAT()); err != nil {
-				t.Errorf("without the check, the lazy table refused the image: %v", err)
+				t.Errorf("lazy read refused copies that differ: %v", err)
 			}
 		})
 	}

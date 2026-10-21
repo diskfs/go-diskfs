@@ -311,15 +311,18 @@ func TestLazyFATWritesWhatTheFullTableWrites(t *testing.T) {
 }
 
 // TestLazyFATCheckRefusesDifferingCopies: eager reads compare the FAT copies by
-// default, while lazy reads skip that comparison unless WithFATCheck asks for it.
+// default, while lazy reads skip that comparison.
 func TestLazyFATCheckRefusesDifferingCopies(t *testing.T) {
 	name := lazyTestImage(t)
 	read := func(opts ...fat32.ReadOption) error {
 		_, err := fat32.ReadWithOptions(file.New(openImage(t, name, true), true), lazyTestImageSize, 0, 512, opts...)
 		return err
 	}
-	if err := read(fat32.WithLazyFAT(), fat32.WithFATCheck()); err != nil {
-		t.Fatalf("matching copies refused: %v", err)
+	if err := read(); err != nil {
+		t.Fatalf("eager read refused matching copies: %v", err)
+	}
+	if err := read(fat32.WithLazyFAT()); err != nil {
+		t.Fatalf("lazy read refused matching copies: %v", err)
 	}
 
 	f := openImage(t, name, false)
@@ -340,13 +343,10 @@ func TestLazyFATCheckRefusesDifferingCopies(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := read(fat32.WithLazyFAT(), fat32.WithFATCheck()); err == nil {
-		t.Error("the lazy table with the check accepted copies that differ")
-	}
 	if err := read(); err == nil {
-		t.Error("Read accepted copies that differ")
+		t.Error("eager read accepted copies that differ")
 	}
 	if err := read(fat32.WithLazyFAT()); err != nil {
-		t.Errorf("without the check, the lazy table refused the image: %v", err)
+		t.Errorf("lazy read refused copies that differ: %v", err)
 	}
 }

@@ -118,7 +118,7 @@ Measured on a Raspberry Pi Zero W, with a 5 GiB FAT32 volume with 4 KiB clusters
 
 FAT12 and FAT16 tables are small, at most about 6 KiB and 128 KiB, so for them the lazy table matters for what it sees rather than for speed.
 
-Eager reads (`fat12.Read`, `fat16.Read` and `fat32.Read`) compare the two copies of the FAT and refuse a filesystem where they differ. Lazy reads skip that full comparison by default to keep opening fast. Pass `WithFATCheck()` with `WithLazyFAT()` to compare the copies once at read time without loading the table into memory. `WithoutFATCheck()` opts out of the comparison on an eager read. `CheckFAT()` compares the two copies on the backend at any time without loading them.
+Eager reads (`fat12.Read`, `fat16.Read` and `fat32.Read`) compare the two copies of the FAT and refuse a filesystem where they differ. Lazy reads skip that full comparison to keep opening fast. `CheckFAT()` compares the two copies on the backend at any time without loading them.
 
 ### Example
 
