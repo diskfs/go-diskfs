@@ -166,8 +166,8 @@ func Create(b backend.Storage, size, start, blocksize int64, volumeLabel string,
 	return fs, nil
 }
 
-// ReadOption changes how ReadWithOptions reads a FAT16 filesystem. Without
-// options it reads exactly as Read does.
+// ReadOption changes how ReadWithOptions reads a FAT16 filesystem. Eager reads
+// compare the two FAT copies by default; lazy reads skip that comparison.
 type ReadOption = fat12.ReadOption
 
 // WithLazyFAT reads each FAT entry from the backend when it is needed, instead
@@ -175,8 +175,14 @@ type ReadOption = fat12.ReadOption
 func WithLazyFAT() ReadOption { return fat12.WithLazyFAT() }
 
 // WithFATCheck compares the two copies of the FAT once the filesystem is read,
-// and refuses the filesystem if they differ.
+// and refuses the filesystem if they differ. This overrides the default for
+// lazy reads; eager reads check the copies by default.
 func WithFATCheck() ReadOption { return fat12.WithFATCheck() }
+
+// WithoutFATCheck skips comparing the two copies of the FAT when the
+// filesystem is read. Eager reads check the copies by default; this option
+// overrides that default. Lazy reads skip the check by default.
+func WithoutFATCheck() ReadOption { return fat12.WithoutFATCheck() }
 
 // Read reads a FAT16 filesystem from the backend.
 // Returns an error if the image is not a valid FAT16 filesystem so that
@@ -259,7 +265,7 @@ func ReadWithOptions(b backend.Storage, size, start, blocksize int64, opts ...Re
 		dataStart, bytesPerCluster, size, start,
 		int64(rootDirOff), int(rootDirEntries),
 		uint64(fatPrimaryStart), uint64(fatSecondaryStart))
-	if o.CheckFAT {
+	if o.ShouldCheckFAT() {
 		if err := base.CheckFAT(); err != nil {
 			return nil, err
 		}

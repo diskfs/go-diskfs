@@ -310,8 +310,8 @@ func TestLazyFATWritesWhatTheFullTableWrites(t *testing.T) {
 	}
 }
 
-// TestLazyFATCheckRefusesDifferingCopies: a lazy table skips the comparison of
-// the two copies of the FAT that Read makes, unless WithFATCheck asks for it.
+// TestLazyFATCheckRefusesDifferingCopies: eager reads compare the FAT copies by
+// default, while lazy reads skip that comparison unless WithFATCheck asks for it.
 func TestLazyFATCheckRefusesDifferingCopies(t *testing.T) {
 	name := lazyTestImage(t)
 	read := func(opts ...fat32.ReadOption) error {
