@@ -33,6 +33,7 @@ type inode struct {
 	blocks     uint64
 	rdev       uint32
 	dotOmitted bool
+	compressed *compressedInfo
 }
 
 func (i *inode) isDir() bool {
@@ -79,7 +80,7 @@ func (f *FileSystem) getInode(nid uint64) (*inode, error) {
 	i.mode = binary.LittleEndian.Uint16(b[4:6])
 	i.xattrSize = 0
 	if xattrCount != 0 {
-		i.xattrSize = 4 * int(xattrCount)
+		i.xattrSize = 12 + 4*(int(xattrCount)-1)
 	}
 
 	if version == 0 {
@@ -133,8 +134,13 @@ func (f *FileSystem) getInode(nid uint64) (*inode, error) {
 	if offset+int64(i.inodeSize+i.xattrSize) > f.size {
 		return nil, fmt.Errorf("inode %d inline metadata extends beyond the image", nid)
 	}
-	if layout == dataLayoutChunked || layout == dataLayoutCompressedFull || layout == dataLayoutCompressedCompact {
+	if layout == dataLayoutChunked {
 		return nil, fmt.Errorf("inode %d uses unsupported data layout %d", nid, layout)
+	}
+	if layout == dataLayoutCompressedFull || layout == dataLayoutCompressedCompact {
+		if err := f.initCompressed(i); err != nil {
+			return nil, err
+		}
 	}
 	return i, nil
 }

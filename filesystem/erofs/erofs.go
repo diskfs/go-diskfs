@@ -18,11 +18,12 @@ const defaultBlockSize int64 = 4096
 
 // FileSystem implements read-only access to EROFS images.
 type FileSystem struct {
-	superblock *superblock
-	backend    backend.Storage
-	size       int64
-	blocksize  int64
-	workspace  string
+	superblock   *superblock
+	backend      backend.Storage
+	size         int64
+	blocksize    int64
+	workspace    string
+	lzmaDictSize uint32
 }
 
 var _ filesystem.FileSystem = (*FileSystem)(nil)
@@ -73,6 +74,9 @@ func Read(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) 
 	}
 
 	result := &FileSystem{superblock: s, backend: b, size: size, blocksize: s.blockSize()}
+	if err := result.parseCompressionConfig(s); err != nil {
+		return nil, err
+	}
 	if _, err := result.getInode(uint64(s.rootNID)); err != nil {
 		return nil, fmt.Errorf("unable to read root inode: %w", err)
 	}
@@ -219,6 +223,81 @@ func (f *FileSystem) ReadFile(p string) ([]byte, error) {
 func (f *FileSystem) readInodeData(node *inode, b []byte, offset int64) (int, error) {
 	if len(b) == 0 {
 		return 0, nil
+	}
+	if node.dataLayout == dataLayoutCompressedFull || node.dataLayout == dataLayoutCompressedCompact {
+		read := 0
+		for read < len(b) {
+			currentOffset := offset + int64(read)
+			extent, err := f.mapCompressed(node, currentOffset, false)
+			if err != nil {
+				return read, err
+			}
+			available := extent.logicalStart + extent.logicalLength - currentOffset
+			if available <= 0 {
+				return read, fmt.Errorf("invalid compressed extent for inode %d", node.nid)
+			}
+			if available > int64(len(b)-read) {
+				available = int64(len(b) - read)
+			}
+			target := b[read : read+int(available)]
+			if extent.fragment {
+				if f.superblock.packedNID == 0 || f.superblock.packedNID == node.nid {
+					return read, fmt.Errorf("invalid packed inode for fragment of inode %d", node.nid)
+				}
+				packedNode, err := f.getInode(f.superblock.packedNID)
+				if err != nil {
+					return read, err
+				}
+				packedOffset := node.compressed.fragmentOffset + (currentOffset - extent.logicalStart)
+				if packedOffset < 0 || packedOffset+int64(len(target)) > packedNode.size {
+					return read, fmt.Errorf("fragment range is outside packed inode for inode %d", node.nid)
+				}
+				n, err := f.readInodeData(packedNode, target, packedOffset)
+				read += n
+				if err != nil {
+					return read, err
+				}
+				continue
+			}
+			encoded := make([]byte, extent.physicalLength)
+			if err := readAt(f.backend, encoded, extent.physicalStart); err != nil {
+				return read, fmt.Errorf("unable to read compressed data for inode %d: %w", node.nid, err)
+			}
+			start := currentOffset - extent.logicalStart
+			if extent.algorithm == compressionShifted {
+				if extent.logicalLength > extent.physicalLength || start+int64(len(target)) > extent.logicalLength {
+					return read, fmt.Errorf("invalid shifted extent for inode %d", node.nid)
+				}
+				copy(target, encoded[start:start+int64(len(target))])
+				read += len(target)
+				continue
+			}
+			if extent.algorithm == compressionInterlaced {
+				if extent.logicalLength > extent.physicalLength || start+int64(len(target)) > extent.logicalLength {
+					return read, fmt.Errorf("invalid interlaced extent for inode %d", node.nid)
+				}
+				skip := int((extent.logicalStart + start) % f.blockSize())
+				count := len(target)
+				right := int(f.blockSize()) - skip
+				if right > count {
+					right = count
+				}
+				copy(target, encoded[skip:skip+right])
+				copy(target[right:], encoded[:count-right])
+				read += count
+				continue
+			}
+			if extent.algorithm != compressionLZMA {
+				return read, fmt.Errorf("unsupported compression algorithm %d for inode %d", extent.algorithm, node.nid)
+			}
+			decoded, err := f.decompressLZMA(encoded, extent.logicalLength)
+			if err != nil {
+				return read, err
+			}
+			copy(target, decoded[start:start+int64(len(target))])
+			read += len(target)
+		}
+		return read, nil
 	}
 	if node.isDir() || node.mode&0xF000 == linuxModeRegular || node.isSymlink() {
 		nonInlineSize := node.size

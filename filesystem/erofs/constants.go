@@ -31,3 +31,36 @@ const (
 )
 
 const inodeFormatReservedMask uint16 = 0xffe0
+
+const (
+	zAdviseCompacted2B  uint16 = 1 << 0
+	zAdviseBigPcluster1 uint16 = 1 << 1
+	zAdviseBigPcluster2 uint16 = 1 << 2
+	zAdviseInlineData   uint16 = 1 << 3
+	zAdviseInterlaced   uint16 = 1 << 4
+	zAdviseFragment     uint16 = 1 << 5
+)
+
+const (
+	zClusterTypePlain uint8 = iota
+	zClusterTypeHead1
+	zClusterTypeNonHead
+	zClusterTypeHead2
+)
+
+const (
+	zD0ClusterCount uint16 = 1 << 11
+	zPartialRef     uint16 = 1 << 15
+)
+
+const (
+	compressionLZ4 uint8 = iota
+	compressionLZMA
+	compressionDeflate
+	compressionZstd
+)
+
+const (
+	compressionShifted    uint8 = 4
+	compressionInterlaced uint8 = 5
+)

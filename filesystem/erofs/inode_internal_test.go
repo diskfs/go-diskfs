@@ -12,7 +12,11 @@ func TestGetInodeErrors(t *testing.T) {
 	}{
 		{"reserved format", func(b []byte) { binary.LittleEndian.PutUint16(b[4128:], 1<<5) }},
 		{"invalid mode", func(b []byte) { binary.LittleEndian.PutUint16(b[4132:], 0) }},
-		{"compressed layout", func(b []byte) { binary.LittleEndian.PutUint16(b[4128:], uint16(dataLayoutCompressedCompact)<<1) }},
+		{"inline compressed tail", func(b []byte) {
+			binary.LittleEndian.PutUint16(b[4128:], uint16(dataLayoutCompressedCompact)<<1)
+			binary.LittleEndian.PutUint16(b[4162:], 1)
+			binary.LittleEndian.PutUint16(b[4164:], zAdviseInlineData)
+		}},
 		{"xattrs outside image", func(b []byte) { binary.LittleEndian.PutUint16(b[4130:], 10000) }},
 	}
 	for _, tt := range tests {
