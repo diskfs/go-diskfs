@@ -58,15 +58,15 @@ func TestParseDirectoryErrors(t *testing.T) {
 }
 
 func TestParseDirectoryNameOrder(t *testing.T) {
-	b := make([]byte, 24)
+	b := make([]byte, 28)
 	binary.LittleEndian.PutUint64(b[0:], 1)
-	binary.LittleEndian.PutUint16(b[8:], 12)
+	binary.LittleEndian.PutUint16(b[8:], 24)
 	b[10] = fileTypeRegular
 	binary.LittleEndian.PutUint64(b[12:], 2)
-	binary.LittleEndian.PutUint16(b[20:], 14)
+	binary.LittleEndian.PutUint16(b[20:], 26)
 	b[22] = fileTypeRegular
-	copy(b[14:], "b")
-	copy(b[16:], "a")
+	copy(b[24:], "b")
+	copy(b[26:], "a")
 	if _, err := parseDirectory(b); err == nil {
 		t.Fatal("parseDirectory() error = nil for unsorted names")
 	}

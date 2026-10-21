@@ -48,6 +48,11 @@ func parseDirectory(b []byte) ([]*directoryEntry, error) {
 		if entry[10] == 0 || entry[10] > fileTypeSymlink {
 			return nil, fmt.Errorf("directory entry %d has invalid file type %d", index, entry[10])
 		}
+		if index+1 == entryCount {
+			if nul := bytes.IndexByte(b[nameOffset:], 0); nul >= 0 {
+				nextNameOffset = nameOffset + nul
+			}
+		}
 		nameBytes := b[nameOffset:nextNameOffset]
 		if len(nameBytes) == 0 || len(nameBytes) > maxNameLength || bytes.IndexByte(nameBytes, 0) >= 0 {
 			return nil, fmt.Errorf("directory entry %d has invalid name length %d", index, len(nameBytes))
