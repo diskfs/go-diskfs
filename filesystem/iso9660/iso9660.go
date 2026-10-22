@@ -434,6 +434,10 @@ func (fsm *FileSystem) ReadDir(p string) ([]iofs.DirEntry, error) {
 		}
 		de = dirEntries
 	} else {
+		p = fsm.isoPath(p)
+		if err := validatePath(p); err != nil {
+			return nil, err
+		}
 		dirEntries, err := fsm.readDirectory(p)
 		if err != nil {
 			return nil, fmt.Errorf("error reading directory %s: %v", p, err)
@@ -462,6 +466,11 @@ func (fsm *FileSystem) Open(p string) (iofs.File, error) {
 	// workspace mode: os.Open handles both files and directories
 	if fsm.workspace != "" {
 		return os.Open(path.Join(fsm.workspace, p))
+	}
+
+	p = fsm.isoPath(p)
+	if err := validatePath(p); err != nil {
+		return nil, err
 	}
 
 	// root directory
@@ -509,6 +518,7 @@ func (fsm *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 	var err error
 
 	// get the path and filename
+	p = fsm.isoPath(p)
 	dir := path.Dir(p)
 	filename := path.Base(p)
 
@@ -598,6 +608,7 @@ func (fsm *FileSystem) Stat(name string) (iofs.FileInfo, error) {
 	if name == "." {
 		return rootDirInfo{fsm.rootDir}, nil
 	}
+	name = fsm.isoPath(name)
 	dir := path.Dir(name)
 	basename := path.Base(name)
 	des, err := fsm.ReadDir(dir)
@@ -750,6 +761,16 @@ func (fsm *FileSystem) Label() string {
 func (fsm *FileSystem) SetLabel(string) error {
 	return fmt.Errorf("ISO9660 filesystem is read-only")
 }
+
+// isoPath treats a backslash as a path separator, as readDirectory does. A workspace
+// is a directory on the host, so its paths are left to the host's rules.
+func (fsm *FileSystem) isoPath(p string) string {
+	if fsm.workspace != "" {
+		return p
+	}
+	return universalizePath(p)
+}
+
 func validatePath(name string) error {
 	if !iofs.ValidPath(name) {
 		return iofs.ErrInvalid
