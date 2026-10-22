@@ -1,6 +1,7 @@
 package iso9660
 
 import (
+	"errors"
 	"io/fs"
 	"os"
 	"testing"
@@ -250,5 +251,47 @@ func TestOpenDirectoryRockRidge(t *testing.T) {
 	}
 	if len(dirEntries) == 0 {
 		t.Fatal("expected entries in rock ridge foo directory")
+	}
+}
+
+func TestBackslashIsASeparator(t *testing.T) {
+	f, err := os.Open(ISO9660File)
+	if err != nil {
+		t.Fatalf("Failed to read iso9660 testfile: %v", err)
+	}
+	defer f.Close()
+
+	fsys, err := Read(file.New(f, true), 0, 0, 2048)
+	if err != nil {
+		t.Fatalf("iso read: %s", err)
+	}
+
+	// each form names the same entry as DEEP/A/B
+	want, err := fsys.Stat("DEEP/A/B")
+	if err != nil {
+		t.Fatalf("Stat(%q): %v", "DEEP/A/B", err)
+	}
+	for _, p := range []string{`DEEP\A\B`, `DEEP\A/B`, `DEEP/A\B`} {
+		got, err := fsys.Stat(p)
+		if err != nil {
+			t.Errorf("Stat(%q): %v", p, err)
+			continue
+		}
+		if got.Name() != want.Name() || got.Size() != want.Size() || got.IsDir() != want.IsDir() {
+			t.Errorf("Stat(%q) = %s, want %s", p, got.Name(), want.Name())
+		}
+		if _, err := fsys.Open(p); err != nil {
+			t.Errorf("Open(%q): %v", p, err)
+		}
+	}
+	if _, err := fsys.ReadDir(`DEEP\A`); err != nil {
+		t.Errorf("ReadDir(%q): %v", `DEEP\A`, err)
+	}
+
+	// a backslash ".." is not a valid path element, the same as with slashes
+	for _, p := range []string{`DEEP\..\DEEP\A\B`, `DEEP/../DEEP/A/B`} {
+		if _, err := fsys.Open(p); !errors.Is(err, fs.ErrInvalid) {
+			t.Errorf("Open(%q) error = %v, want %v", p, err, fs.ErrInvalid)
+		}
 	}
 }
