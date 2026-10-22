@@ -202,6 +202,14 @@ func parseSuperblock(b []byte) (*superblock, error) {
 	if expectedLog != blocklog {
 		return nil, fmt.Errorf("superblock block log mismatch, actual %d expected %d", blocklog, expectedLog)
 	}
+	// the block size comes from the image, which may be untrusted, so hold it to
+	// the same constraints as a caller-provided one. This matters because the log
+	// check above cannot catch a zero block size: uint16(math.Log2(0)) is 0, so a
+	// zero size with a zero log passes. A zero block size then divides by zero
+	// when the filesystem is set up.
+	if err := validateBlocksize(int64(blocksize)); err != nil {
+		return nil, fmt.Errorf("superblock block size invalid: %v", err)
+	}
 	flags, err := parseFlags(b[24:26])
 	if err != nil {
 		return nil, fmt.Errorf("error parsing flags bytes: %v", err)

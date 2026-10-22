@@ -118,6 +118,12 @@ func (fs *FileSystem) readMetadata(r io.ReaderAt, c Compressor, firstBlock int64
 	if err != nil {
 		return nil, err
 	}
+	// the offset into the uncompressed block comes from the image (e.g. the inode
+	// reference of a directory entry) and may point past the end of the block,
+	// which would panic when slicing
+	if int(byteOffset) > len(m) {
+		return nil, fmt.Errorf("metadata block at %d has %d bytes, cannot read at offset %d", firstBlock+int64(blockOffset), len(m), byteOffset)
+	}
 	b = append(b, m[byteOffset:]...)
 	// do we have any more to read?
 	for len(b) < size {
@@ -125,6 +131,12 @@ func (fs *FileSystem) readMetadata(r io.ReaderAt, c Compressor, firstBlock int64
 		m, read, err = fs.readMetaBlock(r, c, firstBlock+int64(blockOffset))
 		if err != nil {
 			return nil, err
+		}
+		// a block that yields no data cannot advance the read. Refuse it instead
+		// of looping forever over zero-size blocks, e.g. from a truncated
+		// metadata stream
+		if len(m) == 0 {
+			return nil, fmt.Errorf("metadata block at %d is empty, cannot read %d bytes of metadata", firstBlock+int64(blockOffset), size)
 		}
 		b = append(b, m...)
 	}
