@@ -11,6 +11,7 @@ import (
 
 	"github.com/diskfs/go-diskfs/backend"
 	"github.com/diskfs/go-diskfs/filesystem"
+	"github.com/diskfs/go-diskfs/filesystem/erofs"
 	"github.com/diskfs/go-diskfs/filesystem/ext4"
 	"github.com/diskfs/go-diskfs/filesystem/fat12"
 	"github.com/diskfs/go-diskfs/filesystem/fat16"
@@ -246,6 +247,12 @@ func (d *Disk) GetFilesystem(partIndex int) (filesystem.FileSystem, error) {
 	if err == nil {
 		return squashFS, nil
 	}
+	log.Debug("trying erofs")
+	erofsFS, err := erofs.Read(d.Backend, size, start, 0)
+	if err == nil {
+		return erofsFS, nil
+	}
+	log.Debugf("erofs failed: %v", err)
 	log.Debug("trying ext4")
 	ext4FS, err := ext4.Read(d.Backend, size, start, d.LogicalBlocksize)
 	if err == nil {
