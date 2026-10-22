@@ -9,6 +9,7 @@ import (
 	iofs "io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -134,6 +135,20 @@ func TestReadInlineFileSpanningTailBoundary(t *testing.T) {
 	}
 	if len(data) != 4097 || data[0] != 'a' || data[4095] != 'a' || data[4096] != 'z' {
 		t.Fatalf("ReadFile() length = %d, boundary = %q..%q", len(data), data[:1], data[4096:])
+	}
+}
+
+func TestReadRejectsChunkedLayout(t *testing.T) {
+	image := buildImage(false)
+	format := binary.LittleEndian.Uint16(image[4128:])
+	binary.LittleEndian.PutUint16(image[4128:], format&^0xe|uint16(dataLayoutChunked)<<1)
+
+	filesystem, err := Read(testBackend(t, image), int64(len(image)), 0, 0)
+	if err != nil {
+		t.Fatalf("Read() error = %v", err)
+	}
+	if _, err := filesystem.ReadFile("hello"); err == nil || !strings.Contains(err.Error(), "unsupported data layout 4") {
+		t.Fatalf("ReadFile() error = %v, want unsupported data layout 4", err)
 	}
 }
 

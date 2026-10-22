@@ -42,7 +42,13 @@ func TestParseSuperblockErrors(t *testing.T) {
 		{"extra devices", func(b []byte) { binary.LittleEndian.PutUint16(b[86:88], 1) }},
 		{"directory blocks", func(b []byte) { b[90] = 1 }},
 		{"xattr prefixes", func(b []byte) { b[91] = 1 }},
+		{"shared xattr prefixes", func(b []byte) { b[105] = 1 }},
 		{"reserved", func(b []byte) { b[106] = 1 }},
+		{"48-bit", func(b []byte) { binary.LittleEndian.PutUint64(b[112:120], 1) }},
+		{"metabox", func(b []byte) {
+			b[13] = 1
+			binary.LittleEndian.PutUint64(b[128:136], 1)
+		}},
 		{"root outside image", func(b []byte) { binary.LittleEndian.PutUint16(b[14:16], 1000) }},
 	}
 	for _, tt := range tests {
