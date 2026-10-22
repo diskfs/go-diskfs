@@ -1,6 +1,7 @@
 package erofs
 
 import (
+	"bytes"
 	"encoding/binary"
 	"io"
 	"os"
@@ -109,6 +110,25 @@ func TestReadInlineFilesystem(t *testing.T) {
 	}
 	if string(data) != "hello world" {
 		t.Fatalf("ReadFile() = %q", data)
+	}
+}
+
+func TestReadInlineFileSpanningTailBoundary(t *testing.T) {
+	image := buildImage(false)
+	setCompactInode(image, 4128, 1<<4|(uint16(dataLayoutFlatInline)<<1), linuxModeRegular, 4097, 3)
+	copy(image[12288:], bytes.Repeat([]byte("a"), 4096))
+	image[4160] = 'z'
+
+	filesystem, err := Read(testBackend(t, image), int64(len(image)), 0, 0)
+	if err != nil {
+		t.Fatalf("Read() error = %v", err)
+	}
+	data, err := filesystem.ReadFile("hello")
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	if len(data) != 4097 || data[0] != 'a' || data[4095] != 'a' || data[4096] != 'z' {
+		t.Fatalf("ReadFile() length = %d, boundary = %q..%q", len(data), data[:1], data[4096:])
 	}
 }
 

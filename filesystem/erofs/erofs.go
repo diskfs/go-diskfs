@@ -302,13 +302,18 @@ func (f *FileSystem) readInodeData(node *inode, b []byte, offset int64) (int, er
 		}
 		if offset < nonInlineSize {
 			location := int64(node.startBlock)*f.blockSize() + offset
-			if location < 0 || location+int64(len(b)) > f.size {
+			readLength := min(int64(len(b)), nonInlineSize-offset)
+			if location < 0 || location+readLength > f.size {
 				return 0, fmt.Errorf("inode %d data range is outside the image", node.nid)
 			}
-			if err := readAt(f.backend, b, location); err != nil {
+			if err := readAt(f.backend, b[:readLength], location); err != nil {
 				return 0, err
 			}
-			return len(b), nil
+			if readLength == int64(len(b)) {
+				return len(b), nil
+			}
+			b = b[readLength:]
+			offset += readLength
 		}
 		if node.dataLayout != dataLayoutFlatInline {
 			return 0, fmt.Errorf("inode %d data range is outside the image", node.nid)
