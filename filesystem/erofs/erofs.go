@@ -154,7 +154,14 @@ func (f *FileSystem) Open(p string) (iofs.File, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &directoryFile{filesystem: f, node: node, entries: entries}, nil
+		visibleEntries := make([]*directoryEntry, 0, len(entries))
+		for _, entry := range entries {
+			if entry.name == "." || entry.name == ".." {
+				continue
+			}
+			visibleEntries = append(visibleEntries, entry)
+		}
+		return &directoryFile{filesystem: f, node: node, name: path.Base(p), entries: visibleEntries}, nil
 	}
 	return &File{filesystem: f, node: node, name: path.Base(p)}, nil
 }

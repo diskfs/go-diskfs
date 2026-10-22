@@ -2,6 +2,7 @@ package erofs
 
 import (
 	"encoding/binary"
+	"strings"
 	"testing"
 )
 
@@ -69,5 +70,38 @@ func TestParseDirectoryNameOrder(t *testing.T) {
 	copy(b[26:], "a")
 	if _, err := parseDirectory(b); err == nil {
 		t.Fatal("parseDirectory() error = nil for unsorted names")
+	}
+}
+
+func TestParseDirectoryMaximumName(t *testing.T) {
+	b := make([]byte, direntSize+maxNameLength)
+	binary.LittleEndian.PutUint64(b[0:], 1)
+	binary.LittleEndian.PutUint16(b[8:], direntSize)
+	b[10] = fileTypeRegular
+	copy(b[direntSize:], strings.Repeat("a", maxNameLength))
+	entries, err := parseDirectory(b)
+	if err != nil {
+		t.Fatalf("parseDirectory() error = %v", err)
+	}
+	if len(entries) != 1 || len(entries[0].name) != maxNameLength {
+		t.Fatalf("parseDirectory() entries = %#v", entries)
+	}
+}
+
+func TestParseDirectoryPaddedFinalName(t *testing.T) {
+	b := make([]byte, 27)
+	binary.LittleEndian.PutUint64(b[0:], 1)
+	binary.LittleEndian.PutUint16(b[8:], 24)
+	b[10] = fileTypeRegular
+	binary.LittleEndian.PutUint64(b[12:], 2)
+	binary.LittleEndian.PutUint16(b[20:], 25)
+	b[22] = fileTypeRegular
+	copy(b[24:], "ab")
+	entries, err := parseDirectory(b)
+	if err != nil {
+		t.Fatalf("parseDirectory() error = %v", err)
+	}
+	if len(entries) != 2 || entries[0].name != "a" || entries[1].name != "b" {
+		t.Fatalf("parseDirectory() entries = %#v", entries)
 	}
 }

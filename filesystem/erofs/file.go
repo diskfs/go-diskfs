@@ -121,6 +121,7 @@ func (f *File) Stat() (fs.FileInfo, error) {
 type directoryFile struct {
 	filesystem *FileSystem
 	node       *inode
+	name       string
 	entries    []*directoryEntry
 	offset     int
 }
@@ -138,7 +139,7 @@ func (f *directoryFile) Stat() (fs.FileInfo, error) {
 	if f.filesystem == nil {
 		return nil, os.ErrClosed
 	}
-	return &fileInfo{name: ".", node: f.node}, nil
+	return &fileInfo{name: f.name, node: f.node}, nil
 }
 
 func (f *directoryFile) ReadDir(n int) ([]fs.DirEntry, error) {
@@ -146,10 +147,11 @@ func (f *directoryFile) ReadDir(n int) ([]fs.DirEntry, error) {
 		return nil, os.ErrClosed
 	}
 	if n <= 0 {
-		entries := make([]fs.DirEntry, 0, len(f.entries))
-		for _, entry := range f.entries {
+		entries := make([]fs.DirEntry, 0, len(f.entries)-f.offset)
+		for _, entry := range f.entries[f.offset:] {
 			entries = append(entries, &dirEntry{entry: entry, filesystem: f.filesystem})
 		}
+		f.offset = len(f.entries)
 		return entries, nil
 	}
 	if f.offset >= len(f.entries) {
