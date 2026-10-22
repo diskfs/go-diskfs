@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/binary"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,6 +18,7 @@ import (
 const (
 	uncompressedFixture = "uncompressed.erofs"
 	compressedFixture   = "compressed.erofs"
+	fullFixture         = "full.erofs"
 )
 
 func testPayload() []byte {
@@ -45,6 +48,15 @@ func readTestImage(t *testing.T, name string) *FileSystem {
 		t.Fatalf("Read() error = %v", err)
 	}
 	return filesystem
+}
+
+func readFixtureBytes(t *testing.T, name string) []byte {
+	t.Helper()
+	image, err := os.ReadFile(filepath.Join("testdata", name))
+	if err != nil {
+		t.Fatalf("os.ReadFile(%q) error = %v", name, err)
+	}
+	return image
 }
 
 func TestReadUncompressedFixture(t *testing.T) {
@@ -83,6 +95,152 @@ func TestReadCompressedFixture(t *testing.T) {
 	}
 	if !bytes.Equal(data, expected) {
 		t.Fatal("ReadFile(sub/data.bin) does not match the source payload")
+	}
+}
+
+func fullFixturePayload() []byte {
+	pattern := []byte("EROFS deterministic fixture payload\n")
+	payload := bytes.Repeat(pattern, 2622)
+	return append(payload, make([]byte, 96*1024-len(payload))...)
+}
+
+func updateSuperblockChecksum(image []byte) {
+	binary.LittleEndian.PutUint32(image[superOffset+4:superOffset+8], superblockChecksum(image[superOffset:4096]))
+}
+
+func TestReadFullCompressedFixture(t *testing.T) {
+	filesystem := readTestImage(t, fullFixture)
+	data, err := filesystem.ReadFile("data.bin")
+	if err != nil {
+		t.Fatalf("ReadFile(data.bin) error = %v", err)
+	}
+	if !bytes.Equal(data, fullFixturePayload()) {
+		t.Fatal("ReadFile(data.bin) does not match the source payload")
+	}
+}
+
+func compressedMetadata(t *testing.T, filesystem *FileSystem, path string) (node *inode, headerOffset int64) {
+	t.Helper()
+	node, err := filesystem.stat(path)
+	if err != nil {
+		t.Fatalf("stat(%q) error = %v", path, err)
+	}
+	inodeOffset := int64(filesystem.superblock.metaBlockAddress)*filesystem.blockSize() + int64(node.nid)*inodeSlotSize
+	headerOffset = roundUp64(inodeOffset+int64(node.inodeSize+node.xattrSize), 8)
+	return node, headerOffset
+}
+
+func TestCompressedFixtureCorruption(t *testing.T) {
+	filesystem := readTestImage(t, compressedFixture)
+	_, headerOffset := compressedMetadata(t, filesystem, "sub/data.bin")
+	indexOffset := headerOffset + 8
+
+	tests := []struct {
+		name     string
+		mutate   func([]byte)
+		expected string
+	}{
+		{
+			name: "invalid compact head type",
+			mutate: func(image []byte) {
+				binary.LittleEndian.PutUint16(image[indexOffset:], 0x3000)
+			},
+			expected: "unsupported compression algorithm 0",
+		},
+		{
+			name: "extent outside image",
+			mutate: func(image []byte) {
+				binary.LittleEndian.PutUint32(image[indexOffset+4:], math.MaxUint32)
+			},
+			expected: "outside the image",
+		},
+		{
+			name: "fragment outside packed inode",
+			mutate: func(image []byte) {
+				binary.LittleEndian.PutUint32(image[headerOffset:], math.MaxUint32)
+			},
+			expected: "outside packed inode",
+		},
+		{
+			name: "invalid packed inode",
+			mutate: func(image []byte) {
+				binary.LittleEndian.PutUint64(image[superOffset+96:], 999999)
+				updateSuperblockChecksum(image)
+			},
+			expected: "inode 999999 offset",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			image := readFixtureBytes(t, compressedFixture)
+			tt.mutate(image)
+			updateSuperblockChecksum(image)
+			corrupted, err := Read(testBackend(t, image), int64(len(image)), 0, 0)
+			if err != nil {
+				t.Fatalf("Read() error = %v", err)
+			}
+			_, err = corrupted.ReadFile("sub/data.bin")
+			if err == nil || !strings.Contains(err.Error(), tt.expected) {
+				t.Fatalf("ReadFile() error = %v, want containing %q", err, tt.expected)
+			}
+		})
+	}
+}
+
+func TestFullCompressedFixtureCorruption(t *testing.T) {
+	filesystem := readTestImage(t, fullFixture)
+	_, headerOffset := compressedMetadata(t, filesystem, "data.bin")
+	indexOffset := headerOffset + 16
+
+	tests := []struct {
+		name     string
+		mutate   func([]byte)
+		expected string
+	}{
+		{
+			name:     "unsupported algorithm",
+			mutate:   func(image []byte) { image[headerOffset+6] = compressionLZ4 },
+			expected: "unsupported compression algorithm 0",
+		},
+		{
+			name: "invalid full head type",
+			mutate: func(image []byte) {
+				binary.LittleEndian.PutUint16(image[indexOffset:], uint16(zClusterTypeHead2))
+			},
+			expected: "unsupported compression algorithm 0",
+		},
+		{
+			name: "extent outside image",
+			mutate: func(image []byte) {
+				binary.LittleEndian.PutUint32(image[indexOffset+4:], math.MaxUint32)
+			},
+			expected: "outside the image",
+		},
+		{
+			name: "malformed LZMA",
+			mutate: func(image []byte) {
+				physicalStart := int64(binary.LittleEndian.Uint32(image[indexOffset+4:])) * filesystem.blockSize()
+				for offset := physicalStart; offset < physicalStart+filesystem.blockSize(); offset++ {
+					image[offset] ^= 0xff
+				}
+			},
+			expected: "unable to initialize LZMA decoder",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			image := readFixtureBytes(t, fullFixture)
+			tt.mutate(image)
+			updateSuperblockChecksum(image)
+			corrupted, err := Read(testBackend(t, image), int64(len(image)), 0, 0)
+			if err != nil {
+				t.Fatalf("Read() error = %v", err)
+			}
+			_, err = corrupted.ReadFile("data.bin")
+			if err == nil || !strings.Contains(err.Error(), tt.expected) {
+				t.Fatalf("ReadFile() error = %v, want containing %q", err, tt.expected)
+			}
+		})
 	}
 }
 
