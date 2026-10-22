@@ -1,7 +1,6 @@
 package erofs
 
 import (
-	"encoding/binary"
 	"fmt"
 	"io"
 	iofs "io/fs"
@@ -51,23 +50,19 @@ func Read(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) 
 	if err := readAt(b, superblockBytes, superOffset); err != nil {
 		return nil, fmt.Errorf("unable to read EROFS superblock: %w", err)
 	}
-	preliminary := append([]byte(nil), superblockBytes...)
-	binary.LittleEndian.PutUint32(preliminary[8:12], binary.LittleEndian.Uint32(preliminary[8:12])&^featureCompatChecksum)
-	s, err := parseSuperblock(preliminary, size)
-	checksumEnabled := binary.LittleEndian.Uint32(superblockBytes[8:12])&featureCompatChecksum != 0
-	if err == nil && checksumEnabled {
-		checksumLength := int(s.blockSize())
-		if checksumLength > superOffset {
-			checksumLength -= superOffset
-		}
+	s, err := parseSuperblock(superblockBytes, size)
+	if err != nil {
+		return nil, err
+	}
+	if s.featureCompat&featureCompatChecksum != 0 {
+		checksumLength := superblockChecksumLength(s.blockSize())
 		checksumBytes := make([]byte, checksumLength)
 		if err := readAt(b, checksumBytes, superOffset); err != nil {
 			return nil, fmt.Errorf("unable to read EROFS checksum area: %w", err)
 		}
-		s, err = parseSuperblock(checksumBytes, size)
-	}
-	if err != nil {
-		return nil, err
+		if err := verifySuperblockChecksum(s, checksumBytes); err != nil {
+			return nil, err
+		}
 	}
 	if blocksize != 0 && blocksize != s.blockSize() {
 		return nil, fmt.Errorf("requested block size %d does not match superblock block size %d", blocksize, s.blockSize())

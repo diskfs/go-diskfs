@@ -112,6 +112,29 @@ func TestReadInlineFilesystem(t *testing.T) {
 	}
 }
 
+func TestReadVerifiesSuperblockChecksum(t *testing.T) {
+	image := buildImage(false)
+	binary.LittleEndian.PutUint32(image[superOffset+8:superOffset+12], featureCompatChecksum)
+	binary.LittleEndian.PutUint32(image[superOffset+4:superOffset+8], superblockChecksum(image[superOffset:4096]))
+
+	filesystem, err := Read(testBackend(t, image), int64(len(image)), 0, 0)
+	if err != nil {
+		t.Fatalf("Read() error = %v", err)
+	}
+	data, err := filesystem.ReadFile("hello")
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	if string(data) != "hello world" {
+		t.Fatalf("ReadFile() = %q", data)
+	}
+
+	image[1500] ^= 1
+	if _, err := Read(testBackend(t, image), int64(len(image)), 0, 0); err == nil {
+		t.Fatal("Read() error = nil after checksum-relevant corruption")
+	}
+}
+
 func TestReadPartitionOffset(t *testing.T) {
 	image := buildImage(false)
 	partitioned := append(make([]byte, 4096), image...)

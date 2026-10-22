@@ -137,19 +137,25 @@ func parseSuperblock(b []byte, imageSize int64) (*superblock, error) {
 	if s.blocks > uint32(imageSize/s.blockSize()) {
 		return nil, fmt.Errorf("filesystem has %d blocks but image only has %d", s.blocks, imageSize/s.blockSize())
 	}
-	if s.featureCompat&featureCompatChecksum != 0 {
-		checksumLength := int(s.blockSize())
-		if checksumLength > superOffset {
-			checksumLength -= superOffset
-		}
-		if len(b) < checksumLength {
-			return nil, fmt.Errorf("superblock is %d bytes, expected %d for checksum validation", len(b), checksumLength)
-		}
-		if actual := superblockChecksum(b[:checksumLength]); actual != s.checksum {
-			return nil, fmt.Errorf("invalid superblock checksum 0x%08x, want 0x%08x", s.checksum, actual)
-		}
-	}
 	return s, nil
+}
+
+func superblockChecksumLength(blockSize int64) int {
+	if blockSize > superOffset {
+		return int(blockSize - superOffset)
+	}
+	return int(blockSize)
+}
+
+func verifySuperblockChecksum(s *superblock, b []byte) error {
+	checksumLength := superblockChecksumLength(s.blockSize())
+	if len(b) < checksumLength {
+		return fmt.Errorf("superblock checksum area is %d bytes, expected %d", len(b), checksumLength)
+	}
+	if actual := superblockChecksum(b[:checksumLength]); actual != s.checksum {
+		return fmt.Errorf("invalid superblock checksum 0x%08x, want 0x%08x", s.checksum, actual)
+	}
+	return nil
 }
 
 func superblockChecksum(b []byte) uint32 {

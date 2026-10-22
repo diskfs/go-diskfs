@@ -57,15 +57,19 @@ func TestParseSuperblockErrors(t *testing.T) {
 }
 
 func TestSuperblockChecksum(t *testing.T) {
-	b := make([]byte, 4096)
+	b := make([]byte, 3072)
 	copy(b, validSuperblockBytes())
 	binary.LittleEndian.PutUint32(b[8:12], featureCompatChecksum)
 	binary.LittleEndian.PutUint32(b[4:8], superblockChecksum(b[:3072]))
-	if _, err := parseSuperblock(b, 8192); err != nil {
+	s, err := parseSuperblock(b, 8192)
+	if err != nil {
 		t.Fatalf("parseSuperblock() error = %v", err)
 	}
+	if err := verifySuperblockChecksum(s, b); err != nil {
+		t.Fatalf("verifySuperblockChecksum() error = %v", err)
+	}
 	b[100] ^= 1
-	if _, err := parseSuperblock(b, 8192); err == nil {
-		t.Fatal("parseSuperblock() succeeded after checksum-relevant corruption")
+	if err := verifySuperblockChecksum(s, b); err == nil {
+		t.Fatal("verifySuperblockChecksum() error = nil after corruption")
 	}
 }
