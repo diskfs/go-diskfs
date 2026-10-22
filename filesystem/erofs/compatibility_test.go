@@ -1,6 +1,7 @@
 package erofs
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/binary"
 	"os"
@@ -11,6 +12,79 @@ import (
 
 	"github.com/diskfs/go-diskfs/backend/file"
 )
+
+const (
+	uncompressedFixture = "uncompressed.erofs"
+	compressedFixture   = "compressed.erofs"
+)
+
+func testPayload() []byte {
+	payload := make([]byte, 96*1024)
+	seed := uint32(0x45524f46)
+	for offset := 0; offset < len(payload); offset += 4 {
+		seed = seed*1664525 + 1013904223
+		binary.LittleEndian.PutUint32(payload[offset:offset+4], seed)
+	}
+	return payload
+}
+
+func readTestImage(t *testing.T, name string) *FileSystem {
+	t.Helper()
+	path := filepath.Join("testdata", name)
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatalf("os.Open(%q) error = %v", path, err)
+	}
+	t.Cleanup(func() { _ = f.Close() })
+	info, err := f.Stat()
+	if err != nil {
+		t.Fatalf("f.Stat() error = %v", err)
+	}
+	filesystem, err := Read(file.New(f, true), info.Size(), 0, 0)
+	if err != nil {
+		t.Fatalf("Read() error = %v", err)
+	}
+	return filesystem
+}
+
+func TestReadUncompressedFixture(t *testing.T) {
+	filesystem := readTestImage(t, uncompressedFixture)
+	entries, err := filesystem.ReadDir(".")
+	if err != nil {
+		t.Fatalf("ReadDir() error = %v", err)
+	}
+	if len(entries) != 5 {
+		t.Fatalf("ReadDir() returned %d entries, want 5", len(entries))
+	}
+	if target, err := filesystem.ReadFile("link"); err != nil || string(target) != "hello.txt" {
+		t.Fatalf("ReadFile(link) = %q, %v; want hello.txt, <nil>", target, err)
+	}
+	data, err := filesystem.ReadFile("sub/data.bin")
+	if err != nil {
+		t.Fatalf("ReadFile(sub/data.bin) error = %v", err)
+	}
+	expected := testPayload()
+	expectedHash := sha256.Sum256(expected)
+	dataHash := sha256.Sum256(data)
+	if dataHash != expectedHash {
+		t.Fatalf("ReadFile(sub/data.bin) SHA-256 = %x, want %x", dataHash, expectedHash)
+	}
+}
+
+func TestReadCompressedFixture(t *testing.T) {
+	filesystem := readTestImage(t, compressedFixture)
+	data, err := filesystem.ReadFile("sub/data.bin")
+	if err != nil {
+		t.Fatalf("ReadFile(sub/data.bin) error = %v", err)
+	}
+	expected := testPayload()
+	if len(data) != len(expected) {
+		t.Fatalf("ReadFile(sub/data.bin) length = %d, want %d", len(data), len(expected))
+	}
+	if !bytes.Equal(data, expected) {
+		t.Fatal("ReadFile(sub/data.bin) does not match the source payload")
+	}
+}
 
 func TestReadMkfsErofsImage(t *testing.T) {
 	mkfs, err := exec.LookPath("mkfs.erofs")
