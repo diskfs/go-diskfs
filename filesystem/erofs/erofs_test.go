@@ -497,6 +497,35 @@ func TestSpecialFileMetadataAndHardLinks(t *testing.T) {
 			t.Fatalf("Stat(%q) mode = %v, want %v", name, info.Mode(), mode)
 		}
 	}
+	rootInfo, err := filesystem.Stat(".")
+	if err != nil {
+		t.Fatalf("Stat(.) error = %v", err)
+	}
+	if !rootInfo.IsDir() || !rootInfo.Mode().IsDir() {
+		t.Fatal("Stat(.) is not classified as a directory")
+	}
+	for _, name := range []string{"block", "char", "fifo", "hardlink", "socket", "symlink"} {
+		info, err := filesystem.Stat(name)
+		if err != nil {
+			t.Fatalf("Stat(%q) error = %v", name, err)
+		}
+		if info.IsDir() || info.Mode().IsDir() {
+			t.Fatalf("Stat(%q) is classified as a directory", name)
+		}
+		file, err := filesystem.Open(name)
+		if err != nil {
+			t.Fatalf("Open(%q) error = %v", name, err)
+		}
+		if _, ok := file.(*directoryFile); ok {
+			t.Fatalf("Open(%q) returned a directory handle", name)
+		}
+		if err := file.Close(); err != nil {
+			t.Fatalf("Close(%q) error = %v", name, err)
+		}
+		if _, err := filesystem.ReadDir(name); err == nil {
+			t.Fatalf("ReadDir(%q) error = nil, want non-directory error", name)
+		}
+	}
 	blockInfo, err := filesystem.Stat("block")
 	if err != nil {
 		t.Fatalf("Stat(block) error = %v", err)

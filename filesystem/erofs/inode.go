@@ -37,11 +37,11 @@ type inode struct {
 }
 
 func (i *inode) isDir() bool {
-	return i.mode&linuxModeDir == linuxModeDir
+	return i.mode&0xF000 == linuxModeDir
 }
 
 func (i *inode) isSymlink() bool {
-	return i.mode&linuxModeSymlink == linuxModeSymlink
+	return i.mode&0xF000 == linuxModeSymlink
 }
 
 func (f *FileSystem) getInode(nid uint64) (*inode, error) {
