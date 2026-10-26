@@ -105,3 +105,17 @@ func TestParseDirectoryPaddedFinalName(t *testing.T) {
 		t.Fatalf("parseDirectory() entries = %#v", entries)
 	}
 }
+
+func TestParseDirectoryNextNameOffsetOutsideBlock(t *testing.T) {
+	b := make([]byte, 26)
+	binary.LittleEndian.PutUint64(b[0:], 1)
+	binary.LittleEndian.PutUint16(b[8:], 24)
+	b[10] = fileTypeRegular
+	binary.LittleEndian.PutUint64(b[12:], 2)
+	binary.LittleEndian.PutUint16(b[20:], 65535)
+	b[22] = fileTypeRegular
+	copy(b[24:], "a")
+	if _, err := parseDirectory(b); err == nil {
+		t.Fatal("parseDirectory() error = nil for next name offset outside block")
+	}
+}

@@ -39,6 +39,9 @@ func parseDirectory(b []byte) ([]*directoryEntry, error) {
 		if index+1 < entryCount {
 			nextNameOffset = int(binary.LittleEndian.Uint16(b[offset+direntSize+8 : offset+direntSize+10]))
 		}
+		if nextNameOffset > len(b) {
+			return nil, fmt.Errorf("directory entry %d has invalid next name offset %d", index+1, nextNameOffset)
+		}
 		if nameOffset < firstNameOffset || nameOffset >= len(b) || nameOffset >= nextNameOffset {
 			return nil, fmt.Errorf("directory entry %d has invalid name offset %d", index, nameOffset)
 		}
