@@ -2,6 +2,7 @@ package fat12_test
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	iofs "io/fs"
@@ -9,6 +10,7 @@ import (
 	"path"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/diskfs/go-diskfs/backend/file"
 	"github.com/diskfs/go-diskfs/filesystem"
@@ -801,4 +803,65 @@ func readDirArg(dir string) string {
 		return "."
 	}
 	return dir
+}
+
+// ── Backslash separators ──────────────────────────────────────────────────────
+
+func TestFat12BackslashIsASeparator(t *testing.T) {
+	_, fs := createFAT12(t, "BSTEST")
+	ffs, ok := fs.(*fat12.FileSystem)
+	if !ok {
+		t.Fatalf("filesystem is %T, want *fat12.FileSystem", fs)
+	}
+	if err := fs.Mkdir("DEEP/A"); err != nil {
+		t.Fatalf("Mkdir: %v", err)
+	}
+	writeFile(t, fs, "DEEP/A/B", []byte("deep"))
+
+	// each form names the same entry as DEEP/A/B
+	for _, p := range []string{`DEEP\A\B`, `DEEP\A/B`, `DEEP/A\B`} {
+		if info, err := fs.Stat(p); err != nil || info.Size() != 4 {
+			t.Errorf("Stat(%q) = %v, %v", p, info, err)
+		}
+		if _, err := fs.Open(p); err != nil {
+			t.Errorf("Open(%q): %v", p, err)
+		}
+		if err := fs.Chtimes(p, time.Time{}, time.Time{}, time.Time{}); err != nil {
+			t.Errorf("Chtimes(%q): %v", p, err)
+		}
+		if err := ffs.SetArchiveBit(p, true); err != nil {
+			t.Errorf("SetArchiveBit(%q): %v", p, err)
+		}
+		if _, err := ffs.GetArchiveBit(p); err != nil {
+			t.Errorf("GetArchiveBit(%q): %v", p, err)
+		}
+	}
+	if _, err := fs.ReadDir(`DEEP\..\DEEP`); !errors.Is(err, iofs.ErrInvalid) {
+		t.Errorf("ReadDir(%q) error = %v, want %v", `DEEP\..\DEEP`, err, iofs.ErrInvalid)
+	}
+
+	// a new file goes into DEEP/A, not into the root under a name holding '\'
+	writeFile(t, fs, `DEEP\A\NEW`, []byte("new"))
+	if err := fs.Rename(`DEEP\A\NEW`, `DEEP\A\RN`); err != nil {
+		t.Fatalf("Rename: %v", err)
+	}
+	if _, err := fs.Stat("DEEP/A/RN"); err != nil {
+		t.Errorf("Stat after Rename: %v", err)
+	}
+	if err := fs.Remove(`DEEP\A\B`); err != nil {
+		t.Errorf("Remove: %v", err)
+	}
+	var names []string
+	for _, d := range []string{".", "DEEP/A"} {
+		entries, err := fs.ReadDir(d)
+		if err != nil {
+			t.Fatalf("ReadDir(%q): %v", d, err)
+		}
+		for _, e := range entries {
+			names = append(names, d+":"+e.Name())
+		}
+	}
+	if want := []string{".:DEEP", "DEEP/A:RN"}; fmt.Sprint(names) != fmt.Sprint(want) {
+		t.Errorf("entries = %q, want %q", names, want)
+	}
 }
