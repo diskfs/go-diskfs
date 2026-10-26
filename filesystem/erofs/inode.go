@@ -90,9 +90,7 @@ func (f *FileSystem) getInode(nid uint64) (*inode, error) {
 		i.uid = uint32(binary.LittleEndian.Uint16(b[24:26]))
 		i.gid = uint32(binary.LittleEndian.Uint16(b[26:28]))
 		nb := binary.LittleEndian.Uint16(b[6:8])
-		if i.isDir() {
-			i.nlink = uint32(nb)
-		} else if format&(1<<4) != 0 {
+		if !i.isDir() && format&(1<<4) != 0 {
 			i.nlink = 1
 		} else {
 			i.nlink = uint32(nb)

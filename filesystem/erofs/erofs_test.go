@@ -8,7 +8,9 @@ import (
 	"io"
 	iofs "io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -116,6 +118,55 @@ func TestReadInlineFilesystem(t *testing.T) {
 	}
 	if string(data) != "hello world" {
 		t.Fatalf("ReadFile() = %q", data)
+	}
+}
+
+func TestReadCompactDirectoryExternalData(t *testing.T) {
+	mkfs, err := exec.LookPath("mkfs.erofs")
+	if err != nil {
+		t.Skip("mkfs.erofs is not available")
+	}
+
+	directory := t.TempDir()
+	source := filepath.Join(directory, "source", "dir")
+	if err := os.MkdirAll(source, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for index := 0; index < 300; index++ {
+		name := filepath.Join(source, "file-"+strconv.Itoa(index))
+		if err := os.WriteFile(name, nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	imagePath := filepath.Join(directory, "image.erofs")
+	args := []string{
+		"-b4096",
+		"-x1",
+		"--all-root",
+		"-T1700000000",
+		"-U00000000-0000-0000-0000-000000000000",
+		imagePath,
+		filepath.Join(directory, "source"),
+	}
+	if output, err := exec.Command(mkfs, args...).CombinedOutput(); err != nil {
+		t.Fatalf("mkfs.erofs failed: %v: %s", err, output)
+	}
+	image, err := os.ReadFile(imagePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	filesystem, err := Read(testBackend(t, image), int64(len(image)), 0, 0)
+	if err != nil {
+		t.Fatalf("Read() error = %v", err)
+	}
+	entries, err := filesystem.ReadDir("dir")
+	if err != nil {
+		t.Fatalf("ReadDir() error = %v", err)
+	}
+	if len(entries) != 300 {
+		t.Fatalf("ReadDir() returned %d entries, want 300", len(entries))
 	}
 }
 
