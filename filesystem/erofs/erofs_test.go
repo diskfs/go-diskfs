@@ -215,6 +215,40 @@ func TestReadInlineFileSpanningTailBoundary(t *testing.T) {
 	if len(data) != 4097 || data[0] != 'a' || data[4095] != 'a' || data[4096] != 'z' {
 		t.Fatalf("ReadFile() length = %d, boundary = %q..%q", len(data), data[:1], data[4096:])
 	}
+
+	openedFile, err := filesystem.Open("hello")
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	defer openedFile.Close()
+	file, ok := openedFile.(*File)
+	if !ok {
+		t.Fatalf("Open() returned %T, want *File", openedFile)
+	}
+	readAtBuffer := make([]byte, 2)
+	readAtCount, err := file.ReadAt(readAtBuffer, 4095)
+	if err != nil {
+		t.Fatalf("ReadAt() error = %v", err)
+	}
+	if readAtCount != 2 || string(readAtBuffer) != "az" {
+		t.Fatalf("ReadAt() = %d, %q; want 2, %q", readAtCount, readAtBuffer, "az")
+	}
+
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		t.Fatalf("Seek() error = %v", err)
+	}
+	readBuffer := make([]byte, 4097)
+	readCount, err := file.Read(readBuffer)
+	if err != nil && err != io.EOF {
+		t.Fatalf("Read() error = %v", err)
+	}
+	if readCount != len(readBuffer) || readBuffer[4095] != 'a' || readBuffer[4096] != 'z' {
+		t.Fatalf("Read() = %d; want %d with boundary %q..%q", readCount, len(readBuffer), readBuffer[4095:4096], readBuffer[4096:])
+	}
+	nextCount, nextErr := file.Read(make([]byte, 1))
+	if nextCount != 0 || nextErr != io.EOF {
+		t.Fatalf("Read() after end = %d, %v; want 0, EOF", nextCount, nextErr)
+	}
 }
 
 func TestReadRejectsChunkedLayout(t *testing.T) {

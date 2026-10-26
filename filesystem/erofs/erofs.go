@@ -302,6 +302,7 @@ func (f *FileSystem) readInodeData(node *inode, b []byte, offset int64) (int, er
 		return read, nil
 	}
 	if node.isDir() || node.mode&0xF000 == linuxModeRegular || node.isSymlink() {
+		total := 0
 		nonInlineSize := node.size
 		if node.dataLayout == dataLayoutFlatInline {
 			tailSize := node.size % f.blockSize()
@@ -314,10 +315,11 @@ func (f *FileSystem) readInodeData(node *inode, b []byte, offset int64) (int, er
 				return 0, fmt.Errorf("inode %d data range is outside the image", node.nid)
 			}
 			if err := readAt(f.backend, b[:readLength], location); err != nil {
-				return 0, err
+				return total, err
 			}
+			total += int(readLength)
 			if readLength == int64(len(b)) {
-				return len(b), nil
+				return total, nil
 			}
 			b = b[readLength:]
 			offset += readLength
@@ -329,12 +331,12 @@ func (f *FileSystem) readInodeData(node *inode, b []byte, offset int64) (int, er
 		inlineStart := inodeOffset + int64(node.inodeSize+node.xattrSize) + (offset - nonInlineSize)
 		if inlineStart < inodeOffset || inlineStart+int64(len(b)) > f.size ||
 			inlineStart/f.blockSize() != (inlineStart+int64(len(b))-1)/f.blockSize() {
-			return 0, fmt.Errorf("inode %d inline data crosses or exceeds a block boundary", node.nid)
+			return total, fmt.Errorf("inode %d inline data crosses or exceeds a block boundary", node.nid)
 		}
 		if err := readAt(f.backend, b, inlineStart); err != nil {
-			return 0, err
+			return total, err
 		}
-		return len(b), nil
+		return total + len(b), nil
 	}
 	return 0, fmt.Errorf("inode %d has no readable data", node.nid)
 }
