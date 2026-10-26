@@ -13,15 +13,12 @@ import (
 	"github.com/diskfs/go-diskfs/filesystem"
 )
 
-const defaultBlockSize int64 = 4096
-
 // FileSystem implements read-only access to EROFS images.
 type FileSystem struct {
 	superblock   *superblock
 	backend      backend.Storage
 	size         int64
 	blocksize    int64
-	workspace    string
 	lzmaDictSize uint32
 }
 
@@ -78,24 +75,8 @@ func Read(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) 
 	return result, nil
 }
 
-func Create(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) {
-	if size <= 0 || start < 0 {
-		return nil, fmt.Errorf("invalid filesystem size %d or start %d", size, start)
-	}
-	if blocksize == 0 {
-		blocksize = defaultBlockSize
-	}
-	if blocksize < 512 || blocksize > 65536 || blocksize&(blocksize-1) != 0 {
-		return nil, fmt.Errorf("invalid block size %d", blocksize)
-	}
-	workspace, err := os.MkdirTemp("", "diskfs_erofs")
-	if err != nil {
-		return nil, fmt.Errorf("unable to create EROFS workspace: %w", err)
-	}
-	if start != 0 {
-		b = backend.Sub(b, start, size)
-	}
-	return &FileSystem{backend: b, size: size, blocksize: blocksize, workspace: workspace}, nil
+func Create(_ backend.Storage, _, _, _ int64) (*FileSystem, error) {
+	return nil, filesystem.ErrNotImplemented
 }
 
 func (f *FileSystem) blockSize() int64 { return f.blocksize }
@@ -109,10 +90,7 @@ func (fs *FileSystem) Label() string {
 }
 func (fs *FileSystem) SetLabel(string) error { return filesystem.ErrReadonlyFilesystem }
 func (fs *FileSystem) Close() error {
-	if fs.workspace == "" {
-		return nil
-	}
-	return os.RemoveAll(fs.workspace)
+	return nil
 }
 
 func (f *FileSystem) stat(p string) (*inode, error) {

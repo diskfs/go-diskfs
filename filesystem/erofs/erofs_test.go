@@ -304,6 +304,16 @@ func TestReadPartitionOffset(t *testing.T) {
 	}
 }
 
+func TestCreateIsUnsupported(t *testing.T) {
+	filesystem, err := Create(nil, 16384, 0, 4096)
+	if err == nil || !errors.Is(err, fsapi.ErrNotImplemented) {
+		t.Fatalf("Create() error = %v, want %v", err, fsapi.ErrNotImplemented)
+	}
+	if filesystem != nil {
+		t.Fatalf("Create() = %#v, want nil", filesystem)
+	}
+}
+
 func TestFileReadAndSeek(t *testing.T) {
 	filesystem, err := Read(testBackend(t, buildImage(false)), 16384, 0, 0)
 	if err != nil {
