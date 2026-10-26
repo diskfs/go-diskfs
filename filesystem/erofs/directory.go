@@ -57,7 +57,8 @@ func parseDirectory(b []byte) ([]*directoryEntry, error) {
 			}
 		}
 		nameBytes := b[nameOffset:nextNameOffset]
-		if len(nameBytes) == 0 || len(nameBytes) > maxNameLength || bytes.IndexByte(nameBytes, 0) >= 0 {
+		if len(nameBytes) == 0 || len(nameBytes) > maxNameLength || bytes.IndexByte(nameBytes, 0) >= 0 ||
+			bytes.IndexByte(nameBytes, '/') >= 0 {
 			return nil, fmt.Errorf("directory entry %d has invalid name length %d", index, len(nameBytes))
 		}
 		name := string(nameBytes)

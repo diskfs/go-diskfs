@@ -46,6 +46,8 @@ func TestParseDirectoryErrors(t *testing.T) {
 		{"file type", func(b []byte) { b[10] = 0 }},
 		{"reserved", func(b []byte) { b[11] = 1 }},
 		{"unaligned name offset", func(b []byte) { binary.LittleEndian.PutUint16(b[8:], 13) }},
+		{"traversal name", func(b []byte) { copy(b[12:], "../hi") }},
+		{"nested name", func(b []byte) { copy(b[12:], "a/b") }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
