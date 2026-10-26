@@ -327,7 +327,10 @@ func (f *FileSystem) readInodeData(node *inode, b []byte, offset int64) (int, er
 		if node.dataLayout != dataLayoutFlatInline {
 			return 0, fmt.Errorf("inode %d data range is outside the image", node.nid)
 		}
-		inodeOffset := int64(f.superblock.metaBlockAddress)*f.blockSize() + int64(node.nid)*inodeSlotSize
+		inodeOffset, err := f.inodeOffset(node.nid)
+		if err != nil {
+			return total, err
+		}
 		inlineStart := inodeOffset + int64(node.inodeSize+node.xattrSize) + (offset - nonInlineSize)
 		if inlineStart < inodeOffset || inlineStart+int64(len(b)) > f.size ||
 			inlineStart/f.blockSize() != (inlineStart+int64(len(b))-1)/f.blockSize() {

@@ -18,6 +18,9 @@ func TestGetInodeErrors(t *testing.T) {
 			binary.LittleEndian.PutUint16(b[4164:], zAdviseInlineData)
 		}},
 		{"xattrs outside image", func(b []byte) { binary.LittleEndian.PutUint16(b[4130:], 10000) }},
+		{"large inode number wraps", func(b []byte) {
+			binary.LittleEndian.PutUint64(b[8192:], uint64(1)<<59|1)
+		}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -44,7 +44,10 @@ func (f *FileSystem) initCompressed(node *inode) error {
 	if node.compressed != nil && node.compressed.initialized {
 		return nil
 	}
-	inodeOffset := int64(f.superblock.metaBlockAddress)*f.blockSize() + int64(node.nid)*inodeSlotSize
+	inodeOffset, err := f.inodeOffset(node.nid)
+	if err != nil {
+		return err
+	}
 	headerOffset := roundUp64(inodeOffset+int64(node.inodeSize+node.xattrSize), 8)
 	header := make([]byte, 8)
 	if err := readAt(f.backend, header, headerOffset); err != nil {
@@ -228,7 +231,10 @@ func (f *FileSystem) compressedExtentEnd(node *inode, headLCN uint64, clusterOff
 }
 
 func (f *FileSystem) loadFullLCluster(node *inode, recorder *mapRecorder, lcn uint64) error {
-	inodeOffset := int64(f.superblock.metaBlockAddress)*f.blockSize() + int64(node.nid)*inodeSlotSize
+	inodeOffset, err := f.inodeOffset(node.nid)
+	if err != nil {
+		return err
+	}
 	end := roundUp64(inodeOffset+int64(node.inodeSize+node.xattrSize), 8)
 	pos := roundUp64(end, 8) + 16 + int64(lcn)*8
 	b := make([]byte, 8)
@@ -265,7 +271,10 @@ func decodeCompactBits(bits uint, b []byte, bitPosition int) (uint16, uint8) {
 
 func (f *FileSystem) loadCompactLCluster(node *inode, recorder *mapRecorder, requestedLCN uint64, lookahead bool) error {
 	info := node.compressed
-	inodeOffset := int64(f.superblock.metaBlockAddress)*f.blockSize() + int64(node.nid)*inodeSlotSize
+	inodeOffset, err := f.inodeOffset(node.nid)
+	if err != nil {
+		return err
+	}
 	ebase := 8 + roundUp64(inodeOffset+int64(node.inodeSize+node.xattrSize), 8)
 	totalIndex := uint64((node.size + f.blockSize() - 1) / f.blockSize())
 	if requestedLCN >= totalIndex || info.lclusterBits > 14 {

@@ -44,13 +44,25 @@ func (i *inode) isSymlink() bool {
 	return i.mode&0xF000 == linuxModeSymlink
 }
 
-func (f *FileSystem) getInode(nid uint64) (*inode, error) {
+func (f *FileSystem) inodeOffset(nid uint64) (int64, error) {
 	if nid>>63 != 0 {
-		return nil, fmt.Errorf("invalid inode number 0x%016x", nid)
+		return 0, fmt.Errorf("invalid inode number 0x%016x", nid)
 	}
-	offset := int64(f.superblock.metaBlockAddress)*f.blockSize() + int64(nid)*inodeSlotSize
-	if offset < 0 || offset+inodeCompactSize > f.size {
-		return nil, fmt.Errorf("inode %d offset %d is outside the image", nid, offset)
+	if f.size < inodeCompactSize {
+		return 0, fmt.Errorf("image is too small for inode %d", nid)
+	}
+	metadataBase := int64(f.superblock.metaBlockAddress) * f.blockSize()
+	available := f.size - inodeCompactSize - metadataBase
+	if available < 0 || nid > uint64(available)/inodeSlotSize {
+		return 0, fmt.Errorf("inode %d offset is outside the image", nid)
+	}
+	return metadataBase + int64(nid)*inodeSlotSize, nil
+}
+
+func (f *FileSystem) getInode(nid uint64) (*inode, error) {
+	offset, err := f.inodeOffset(nid)
+	if err != nil {
+		return nil, err
 	}
 
 	readLength := inodeExtendedSize
