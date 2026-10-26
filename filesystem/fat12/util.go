@@ -28,6 +28,12 @@ func universalizePath(p string) string {
 	return ps
 }
 
+// slashPath turns '\' into '/', so that path.Dir and path.Base split a path
+// the same way splitPath does.
+func slashPath(p string) string {
+	return strings.ReplaceAll(p, "\\", "/")
+}
+
 func splitPath(p string) []string {
 	ps := universalizePath(p)
 	parts := strings.Split(ps, "/")

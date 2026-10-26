@@ -522,6 +522,7 @@ func (fs *FileSystem) Chmod(_ string, _ os.FileMode) error { return filesystem.E
 func (fs *FileSystem) Chown(_ string, _, _ int) error      { return filesystem.ErrNotSupported }
 
 func (fs *FileSystem) Chtimes(p string, ctime, atime, mtime time.Time) error {
+	p = slashPath(p)
 	dir := path.Dir(p)
 	filename := path.Base(p)
 	if dir == filename {
@@ -549,6 +550,7 @@ func (fs *FileSystem) Chtimes(p string, ctime, atime, mtime time.Time) error {
 
 // GetArchiveBit returns the current state of the FAT archive attribute.
 func (fs *FileSystem) GetArchiveBit(p string) (bool, error) {
+	p = slashPath(p)
 	dir := path.Dir(p)
 	filename := path.Base(p)
 	if dir == filename {
@@ -569,6 +571,7 @@ func (fs *FileSystem) GetArchiveBit(p string) (bool, error) {
 
 // SetArchiveBit sets or clears the FAT archive attribute on the named file or directory.
 func (fs *FileSystem) SetArchiveBit(p string, set bool) error {
+	p = slashPath(p)
 	dir := path.Dir(p)
 	filename := path.Base(p)
 	if dir == filename {
@@ -593,6 +596,7 @@ func (fs *FileSystem) SetArchiveBit(p string, set bool) error {
 }
 
 func (fs *FileSystem) ReadDir(p string) ([]iofs.DirEntry, error) {
+	p = slashPath(p)
 	if err := validatePath(p); err != nil {
 		return nil, err
 	}
@@ -620,6 +624,7 @@ func (fs *FileSystem) Open(p string) (iofs.File, error) {
 }
 
 func (fs *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
+	p = slashPath(p)
 	dir := path.Dir(p)
 	filename := path.Base(p)
 	parentDir, entries, err := fs.readDirWithMkdir(dir, false)
@@ -683,6 +688,7 @@ func (fs *FileSystem) ReadFile(name string) ([]byte, error) {
 }
 
 func (fs *FileSystem) Remove(pathname string) error {
+	pathname = slashPath(pathname)
 	dir := path.Dir(pathname)
 	filename := path.Base(pathname)
 	if dir == filename {
@@ -728,6 +734,7 @@ func (fs *FileSystem) Remove(pathname string) error {
 }
 
 func (fs *FileSystem) Rename(oldpath, newpath string) error {
+	oldpath, newpath = slashPath(oldpath), slashPath(newpath)
 	dir := path.Dir(oldpath)
 	filename := path.Base(oldpath)
 	newDir := path.Dir(newpath)
@@ -762,6 +769,7 @@ func (fs *FileSystem) Rename(oldpath, newpath string) error {
 }
 
 func (fs *FileSystem) Stat(name string) (iofs.FileInfo, error) {
+	name = slashPath(name)
 	dir := path.Dir(name)
 	basename := path.Base(name)
 	des, err := fs.ReadDir(dir)
