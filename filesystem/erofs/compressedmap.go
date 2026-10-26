@@ -3,6 +3,7 @@ package erofs
 import (
 	"encoding/binary"
 	"fmt"
+	"math"
 )
 
 type compressedInfo struct {
@@ -20,6 +21,7 @@ type compressedExtent struct {
 	logicalLength  int64
 	physicalStart  int64
 	physicalLength int64
+	physicalBlock  uint32
 	algorithm      uint8
 	fragment       bool
 }
@@ -83,7 +85,11 @@ func (f *FileSystem) initCompressed(node *inode) error {
 		}
 		info.tailExtentHeadLCN = uint64(extent.logicalStart >> info.lclusterBits)
 		if node.dataLayout == dataLayoutCompressedFull {
-			info.fragmentOffset |= int64(extent.physicalStart) << 32
+			fragmentOffset := uint64(info.fragmentOffset) | uint64(extent.physicalBlock)<<32
+			if fragmentOffset > math.MaxInt64 {
+				return fmt.Errorf("fragment offset for inode %d is too large", node.nid)
+			}
+			info.fragmentOffset = int64(fragmentOffset)
 		}
 	}
 	info.initialized = true
@@ -153,6 +159,7 @@ func (f *FileSystem) mapCompressed(node *inode, offset int64, findTail bool) (*c
 	extent.logicalLength = end - extent.logicalStart
 	if findTail {
 		info.tailExtentHeadLCN = recorder.lcn
+		extent.physicalBlock = recorder.physicalBlock
 		return extent, nil
 	}
 	if info.advise&zAdviseFragment != 0 && recorder.lcn == info.tailExtentHeadLCN {
