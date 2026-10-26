@@ -314,6 +314,44 @@ func TestCreateIsUnsupported(t *testing.T) {
 	}
 }
 
+func TestSpecialPermissionBits(t *testing.T) {
+	tests := []struct {
+		name string
+		bits uint16
+		want iofs.FileMode
+	}{
+		{name: "setuid", bits: 0o4000, want: iofs.ModeSetuid},
+		{name: "setgid", bits: 0o2000, want: iofs.ModeSetgid},
+		{name: "sticky", bits: 0o1000, want: iofs.ModeSticky},
+		{name: "all", bits: 0o7000, want: iofs.ModeSetuid | iofs.ModeSetgid | iofs.ModeSticky},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			image := buildImage(false)
+			binary.LittleEndian.PutUint16(image[4100:], linuxModeDir|0o755|tt.bits)
+			binary.LittleEndian.PutUint16(image[4132:], linuxModeRegular|0o644|tt.bits)
+
+			filesystem, err := Read(testBackend(t, image), int64(len(image)), 0, 0)
+			if err != nil {
+				t.Fatalf("Read() error = %v", err)
+			}
+			expected := map[string]iofs.FileMode{
+				".":     iofs.ModeDir | 0o755 | tt.want,
+				"hello": 0o644 | tt.want,
+			}
+			for name, mode := range expected {
+				info, err := filesystem.Stat(name)
+				if err != nil {
+					t.Fatalf("Stat(%q) error = %v", name, err)
+				}
+				if info.Mode() != mode {
+					t.Fatalf("Stat(%q) mode = %v, want %v", name, info.Mode(), mode)
+				}
+			}
+		})
+	}
+}
+
 func TestFileReadAndSeek(t *testing.T) {
 	filesystem, err := Read(testBackend(t, buildImage(false)), 16384, 0, 0)
 	if err != nil {

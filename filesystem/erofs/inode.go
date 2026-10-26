@@ -177,5 +177,14 @@ func goFileMode(mode uint16) os.FileMode {
 	case linuxModeSocket:
 		result |= os.ModeSocket
 	}
+	if mode&0o4000 != 0 {
+		result |= os.ModeSetuid
+	}
+	if mode&0o2000 != 0 {
+		result |= os.ModeSetgid
+	}
+	if mode&0o1000 != 0 {
+		result |= os.ModeSticky
+	}
 	return result | os.FileMode(mode&0777)
 }
