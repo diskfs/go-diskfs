@@ -13,6 +13,10 @@ func (f *FileSystem) parseCompressionConfig(s *superblock) error {
 	if s.featureIncompat&featureIncompatComprCfgs == 0 {
 		return nil
 	}
+	const allCompressionAlgorithms uint16 = (1 << 4) - 1
+	if unknown := s.availableComprAlgs &^ allCompressionAlgorithms; unknown != 0 {
+		return fmt.Errorf("unsupported compression algorithms 0x%04x", unknown)
+	}
 	offset := int64(superOffset + s.superblockSize())
 	for algorithm := uint8(0); algorithm < 4; algorithm++ {
 		if s.availableComprAlgs&(1<<algorithm) == 0 {

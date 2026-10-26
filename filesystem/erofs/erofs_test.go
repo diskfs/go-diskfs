@@ -170,6 +170,34 @@ func TestReadCompactDirectoryExternalData(t *testing.T) {
 	}
 }
 
+func TestReadRejectsUnknownCompressionAlgorithms(t *testing.T) {
+	image := readFixtureBytes(t, compressedFixture)
+	superblockLength := superblockBaseSize + int(image[superOffset+13])*superblockExtSlotSize
+	superblock, err := parseSuperblock(image[superOffset:superOffset+superblockLength], int64(len(image)))
+	if err != nil {
+		t.Fatalf("parseSuperblock() error = %v", err)
+	}
+	if superblock.featureIncompat&featureIncompatComprCfgs == 0 {
+		t.Fatal("compressed fixture does not enable compression configurations")
+	}
+	const firstUnknownCompressionAlgorithm = compressionZstd + 1
+	if superblock.availableComprAlgs&(1<<firstUnknownCompressionAlgorithm) != 0 {
+		t.Fatal("compressed fixture already advertises an unknown compression algorithm")
+	}
+	superblock.availableComprAlgs |= 1 << firstUnknownCompressionAlgorithm
+
+	filesystem := &FileSystem{
+		superblock: superblock,
+		backend:    testBackend(t, image),
+		size:       int64(len(image)),
+		blocksize:  superblock.blockSize(),
+	}
+	err = filesystem.parseCompressionConfig(superblock)
+	if err == nil || !strings.Contains(err.Error(), "unsupported compression algorithms 0x0010") {
+		t.Fatalf("parseCompressionConfig() error = %v, want unsupported compression algorithms 0x0010", err)
+	}
+}
+
 func TestReadInlineFileSpanningTailBoundary(t *testing.T) {
 	image := buildImage(false)
 	setCompactInode(image, 4128, 1<<4|(uint16(dataLayoutFlatInline)<<1), linuxModeRegular, 4097, 3)
