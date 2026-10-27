@@ -19,5 +19,5 @@ func getAccessTime(info fs.FileInfo) time.Time {
 	if !ok {
 		return time.Time{}
 	}
-	return time.Unix(stat.Atim.Sec, stat.Atim.Nsec)
+	return time.Unix(int64(stat.Atim.Sec), int64(stat.Atim.Nsec))
 }
