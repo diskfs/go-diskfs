@@ -134,14 +134,14 @@ func partitionFromBytes(index int, b []byte, logicalSectorSize, physicalSectorSi
 // WriteContents fills the partition with the contents provided
 // reads from beginning of reader to exactly size of partition in bytes
 func (p *Partition) WriteContents(f backend.WritableFile, contents io.Reader) (uint64, error) {
-	pss, lss := p.sectorSizes()
+	pss, _ := p.sectorSizes()
 	total := uint64(0)
 
 	// chunks of physical sector size for efficient writing
 	b := make([]byte, pss)
 	// we start at the correct byte location
-	start := p.Start * uint32(lss)
-	size := p.Size * uint32(lss)
+	start := p.GetStart()
+	size := p.GetSize()
 
 	// loop in physical sector sizes
 	for {
@@ -155,7 +155,7 @@ func (p *Partition) WriteContents(f backend.WritableFile, contents io.Reader) (u
 		}
 		var written int
 		if read > 0 {
-			written, err = f.WriteAt(b[:read], int64(start)+int64(total))
+			written, err = f.WriteAt(b[:read], start+int64(total))
 			if err != nil {
 				return total, fmt.Errorf("error writing to file: %v", err)
 			}
@@ -177,17 +177,17 @@ func (p *Partition) WriteContents(f backend.WritableFile, contents io.Reader) (u
 // readContents reads the contents of the partition into a writer
 // streams the entire partition to the writer
 func (p *Partition) ReadContents(f backend.File, out io.Writer) (int64, error) {
-	pss, lss := p.sectorSizes()
+	pss, _ := p.sectorSizes()
 	total := int64(0)
 	// chunks of physical sector size for efficient writing
 	b := make([]byte, pss)
 	// we start at the correct byte location
-	start := p.Start * uint32(lss)
-	size := p.Size * uint32(lss)
+	start := p.GetStart()
+	size := p.GetSize()
 
 	// loop in physical sector sizes
 	for {
-		read, err := f.ReadAt(b, int64(start)+total)
+		read, err := f.ReadAt(b, start+total)
 		if err != nil && err != io.EOF {
 			return total, fmt.Errorf("error reading from file: %v", err)
 		}
@@ -197,7 +197,7 @@ func (p *Partition) ReadContents(f backend.File, out io.Writer) (int64, error) {
 		// increment our total
 		total += int64(read)
 		// is this the end of the data?
-		if err == io.EOF || total >= int64(size) {
+		if err == io.EOF || total >= size {
 			break
 		}
 	}
