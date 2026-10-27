@@ -349,3 +349,62 @@ func TestWriteContents(t *testing.T) {
 		}
 	})
 }
+
+func TestContentsBeyond4GiB(t *testing.T) {
+	// a partition that starts at 4 GiB must not be read or written at offset 0
+	const start = 1 << 32 / 512
+	partition := Partition{
+		Type:  Linux,
+		Start: start,
+		Size:  1,
+	}
+	want := int64(start) * 512
+	t.Run("write", func(t *testing.T) {
+		var offsets []int64
+		f := &testhelper.FileImpl{
+			Writer: func(b []byte, offset int64) (int, error) {
+				offsets = append(offsets, offset)
+				return len(b), nil
+			},
+		}
+		if _, err := partition.WriteContents(f, bytes.NewReader(make([]byte, 512))); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(offsets) != 1 || offsets[0] != want {
+			t.Errorf("wrote at offsets %v, expected [%d]", offsets, want)
+		}
+	})
+	t.Run("read", func(t *testing.T) {
+		var offsets []int64
+		f := &testhelper.FileImpl{
+			Reader: func(b []byte, offset int64) (int, error) {
+				offsets = append(offsets, offset)
+				return len(b), nil
+			},
+		}
+		if _, err := partition.ReadContents(f, io.Discard); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(offsets) != 1 || offsets[0] != want {
+			t.Errorf("read at offsets %v, expected [%d]", offsets, want)
+		}
+	})
+	t.Run("read 4 GiB size", func(t *testing.T) {
+		large := Partition{Type: Linux, Start: 1, Size: start}
+		f := &testhelper.FileImpl{
+			Reader: func(b []byte, offset int64) (int, error) {
+				if offset >= 3*512 {
+					return 0, io.EOF
+				}
+				return len(b), nil
+			},
+		}
+		read, err := large.ReadContents(f, io.Discard)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if read != 1024 {
+			t.Errorf("read %d bytes, expected 1024 before EOF", read)
+		}
+	})
+}
