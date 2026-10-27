@@ -667,7 +667,7 @@ func TestBlockTagSerialization(t *testing.T) {
 	// Verify checksum
 	checksum := binary.BigEndian.Uint32(b[0xc:0x10])
 	if checksum != 0xDEADBEEF {
-		t.Errorf("checksum = %x, want %x", checksum, 0xDEADBEEF)
+		t.Errorf("checksum = %x, want %x", checksum, uint32(0xDEADBEEF))
 	}
 }
 
