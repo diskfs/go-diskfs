@@ -1369,10 +1369,200 @@ func (fs *FileSystem) Label() string {
 }
 
 // Rename renames (moves) oldpath to newpath. If newpath already exists and is not a directory, Rename replaces it.
-//
-//nolint:revive // parameters will be used eventually
 func (fs *FileSystem) Rename(oldpath, newpath string) error {
-	return filesystem.ErrNotImplemented
+	if oldpath == newpath {
+		return nil
+	}
+
+	// Get the old entry and parent
+	oldParent, oldEntry, err := fs.getEntryAndParent(oldpath)
+	if err != nil {
+		return err
+	}
+	if oldEntry == nil {
+		return fmt.Errorf("file does not exist: %s", oldpath)
+	}
+	if oldParent.root && oldEntry == &oldParent.directoryEntry {
+		return fmt.Errorf("cannot rename root directory")
+	}
+
+	// Ensure the filesystem is writable
+	if _, err := fs.backend.Writable(); err != nil {
+		return err
+	}
+
+	// Check if newpath already exists
+	_, newEntry, err := fs.getEntryAndParent(newpath)
+	if err != nil {
+		return err
+	}
+
+	// If newpath resolves to the same file (hard link), it is a no-op per POSIX
+	if newEntry != nil && newEntry.inode == oldEntry.inode {
+		return nil
+	}
+
+	// If newpath exists and is different, remove it first
+	if newEntry != nil {
+		if newEntry.fileType == dirFileTypeDirectory && oldEntry.fileType != dirFileTypeDirectory {
+			return fmt.Errorf("cannot overwrite directory %s with non-directory", newpath)
+		}
+		if newEntry.fileType != dirFileTypeDirectory && oldEntry.fileType == dirFileTypeDirectory {
+			return fmt.Errorf("cannot overwrite non-directory %s with directory", newpath)
+		}
+		if err := fs.Remove(newpath); err != nil {
+			return fmt.Errorf("could not remove existing %s: %w", newpath, err)
+		}
+	}
+
+	// Read both parent directories fresh from disk (post-Remove if needed)
+	oldDirPath := path.Dir(oldpath)
+	newDirPath := path.Dir(newpath)
+	newFilename := path.Base(newpath)
+
+	newParent, err := fs.readDirWithMkdir(newDirPath, false)
+	if err != nil {
+		return fmt.Errorf("could not read new parent directory %s: %w", newDirPath, err)
+	}
+
+	sameParent := (oldDirPath == newDirPath)
+
+	var oldParentDir *Directory
+	if sameParent {
+		oldParentDir = newParent
+	} else {
+		oldParentDir, err = fs.readDirWithMkdir(oldDirPath, false)
+		if err != nil {
+			return fmt.Errorf("could not read old parent directory %s: %w", oldDirPath, err)
+		}
+	}
+
+	// Re-find the target entry in the freshly-read old parent
+	oldFilename := path.Base(oldpath)
+	var targetEntry *directoryEntry
+	for _, e := range oldParentDir.entries {
+		if e.filename == oldFilename && e.inode == oldEntry.inode {
+			targetEntry = e
+			break
+		}
+	}
+	if targetEntry == nil {
+		return fmt.Errorf("file does not exist: %s", oldpath)
+	}
+
+	isDir := targetEntry.fileType == dirFileTypeDirectory
+
+	// Handle directory rename across parents: update ".." entry and parent link counts
+	if isDir && !sameParent {
+		// Read the moved directory to update its ".." entry
+		movedDir, err := fs.readDirWithMkdir(oldpath, false)
+		if err != nil {
+			return fmt.Errorf("could not read moved directory: %w", err)
+		}
+
+		// Update ".." to point to the new parent's inode
+		dotDotUpdated := false
+		for _, e := range movedDir.entries {
+			if e.filename == ".." {
+				e.inode = newParent.inode
+				dotDotUpdated = true
+				break
+			}
+		}
+		if !dotDotUpdated {
+			return fmt.Errorf("could not find '..' entry in moved directory")
+		}
+
+		// Write the updated moved directory back
+		movedInode, err := fs.readInode(targetEntry.inode)
+		if err != nil {
+			return fmt.Errorf("could not read moved directory inode: %w", err)
+		}
+		movedDirBytes := movedDir.toBytes(
+			fs.superblock.blockSize,
+			fs.dirChecksumAppender(targetEntry.inode, movedInode.nfsFileVersion),
+			fs.superblock.features.metadataChecksums,
+		)
+		if err := fs.writeDirectory(movedInode, movedDirBytes); err != nil {
+			return fmt.Errorf("could not write moved directory: %w", err)
+		}
+
+		// Old parent loses the ".." link from the moved directory
+		oldParentInode, err := fs.readInode(oldParentDir.inode)
+		if err != nil {
+			return fmt.Errorf("could not read old parent inode: %w", err)
+		}
+		oldParentInode.hardLinks--
+		if err := fs.writeInode(oldParentInode); err != nil {
+			return fmt.Errorf("could not write old parent inode: %w", err)
+		}
+
+		// New parent gains the ".." link from the moved directory
+		newParentInode, err := fs.readInode(newParent.inode)
+		if err != nil {
+			return fmt.Errorf("could not read new parent inode: %w", err)
+		}
+		newParentInode.hardLinks++
+		if err := fs.writeInode(newParentInode); err != nil {
+			return fmt.Errorf("could not write new parent inode: %w", err)
+		}
+	}
+
+	// Update the directory entries
+	if sameParent {
+		// Same parent: just rename the entry in-place
+		targetEntry.filename = newFilename
+	} else {
+		// Remove entry from old parent
+		newEntries := make([]*directoryEntry, 0, len(oldParentDir.entries)-1)
+		for _, e := range oldParentDir.entries {
+			if e == targetEntry {
+				continue
+			}
+			newEntries = append(newEntries, e)
+		}
+		oldParentDir.entries = newEntries
+
+		// Add entry to new parent
+		newEntry := &directoryEntry{
+			inode:    targetEntry.inode,
+			filename: newFilename,
+			fileType: targetEntry.fileType,
+		}
+		newParent.entries = append(newParent.entries, newEntry)
+	}
+
+	// Write old parent directory (only if different from new parent)
+	if !sameParent {
+		oldParentInode, err := fs.readInode(oldParentDir.inode)
+		if err != nil {
+			return fmt.Errorf("could not read old parent inode: %w", err)
+		}
+		oldParentBytes := oldParentDir.toBytes(
+			fs.superblock.blockSize,
+			fs.dirChecksumAppender(oldParentDir.inode, oldParentInode.nfsFileVersion),
+			fs.superblock.features.metadataChecksums,
+		)
+		if err := fs.writeDirectory(oldParentInode, oldParentBytes); err != nil {
+			return fmt.Errorf("could not write old parent directory: %w", err)
+		}
+	}
+
+	// Write new parent directory
+	newParentInode, err := fs.readInode(newParent.inode)
+	if err != nil {
+		return fmt.Errorf("could not read new parent inode: %w", err)
+	}
+	newParentBytes := newParent.toBytes(
+		fs.superblock.blockSize,
+		fs.dirChecksumAppender(newParent.inode, newParentInode.nfsFileVersion),
+		fs.superblock.features.metadataChecksums,
+	)
+	if err := fs.writeDirectory(newParentInode, newParentBytes); err != nil {
+		return fmt.Errorf("could not write new parent directory: %w", err)
+	}
+
+	return nil
 }
 
 // Deprecated: use filesystem.Remove(p string) instead
