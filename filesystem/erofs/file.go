@@ -59,13 +59,13 @@ func (f *File) ReadAt(b []byte, offset int64) (int, error) {
 	if f.filesystem == nil {
 		return 0, os.ErrClosed
 	}
-	if offset < 0 || offset > f.node.size {
+	if offset < 0 {
 		return 0, fmt.Errorf("read offset %d is outside file size %d", offset, f.node.size)
 	}
-	if offset == f.node.size {
-		if len(b) == 0 {
-			return 0, nil
-		}
+	if len(b) == 0 {
+		return 0, nil
+	}
+	if offset >= f.node.size {
 		return 0, io.EOF
 	}
 	length := int64(len(b))
