@@ -6,10 +6,13 @@
 // Compressed reads support logical clusters larger than the filesystem block,
 // fragment tails, and shifted or interlaced incompressible extents.
 //
-// Physical compressed extents are limited to 1 MiB and decoded extents to
-// 12 MiB. Each open File caches one decoded extent, including packed-inode
-// fragments, until replaced or closed. ReadAt calls on the same File may run
-// concurrently.
+// LZ4, Zstd, DEFLATE, chunked files, multi-device images, compressed inline
+// tails, partial compressed references, 48-bit layouts, metaboxes, and long
+// xattr prefixes are unsupported. Recognizing the fragments/dedupe feature bit
+// does not imply support for every deduplication encoding. Physical compressed
+// extents are limited to 1 MiB and decoded extents to 12 MiB. Each open File
+// caches one decoded extent, including packed-inode fragments, until replaced
+// or closed. ReadAt calls on the same File may run concurrently.
 //
 // Extended attributes are skipped when locating inode data but are not exposed
 // through this API. Unsupported layouts and compression algorithms return
