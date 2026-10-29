@@ -10,8 +10,9 @@
 // through this API. Unsupported layouts and compression algorithms return
 // descriptive errors rather than returning invalid data.
 //
-// For an EROFS image embedded at a known offset, first create a restricted
-// backend with backend.Sub, then pass that backend and its size to Read:
+// For an EROFS image embedded at a known offset, create an offset backend with
+// backend.Sub, then pass that backend and the image size to Read. The EROFS
+// reader enforces this size; backend.Sub only translates offsets:
 //
 //	nested := backend.Sub(backend, offset, size)
 //	filesystem, err := erofs.Read(nested, size, 0, 0)

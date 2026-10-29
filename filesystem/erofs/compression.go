@@ -24,7 +24,7 @@ func (f *FileSystem) parseCompressionConfig(s *superblock) error {
 		}
 		offset = (offset + 3) &^ 3
 		lengthBytes := make([]byte, 2)
-		if err := readAt(f.backend, lengthBytes, offset); err != nil {
+		if err := f.readAt(lengthBytes, offset); err != nil {
 			return fmt.Errorf("unable to read compression configuration length: %w", err)
 		}
 		length := int(binary.LittleEndian.Uint16(lengthBytes))
@@ -32,7 +32,7 @@ func (f *FileSystem) parseCompressionConfig(s *superblock) error {
 			return fmt.Errorf("empty compression configuration for algorithm %d", algorithm)
 		}
 		config := make([]byte, length)
-		if err := readAt(f.backend, config, offset+2); err != nil {
+		if err := f.readAt(config, offset+2); err != nil {
 			return fmt.Errorf("unable to read compression configuration for algorithm %d: %w", algorithm, err)
 		}
 		if algorithm == compressionLZMA {

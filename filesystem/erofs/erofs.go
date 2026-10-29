@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	iofs "io/fs"
+	"math"
 	"os"
 	"path"
 	"strings"
@@ -31,20 +32,24 @@ func Read(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) 
 	if start < 0 {
 		return nil, fmt.Errorf("invalid filesystem start %d", start)
 	}
+	if start > math.MaxInt64-size {
+		return nil, fmt.Errorf("filesystem start %d and size %d exceed the supported address range", start, size)
+	}
 	if blocksize < 0 || (blocksize != 0 && blocksize&(blocksize-1) != 0) {
 		return nil, fmt.Errorf("block size %d is not a power of two", blocksize)
 	}
 	if start != 0 {
 		b = backend.Sub(b, start, size)
 	}
+	result := &FileSystem{backend: b, size: size}
 
 	header := make([]byte, 14)
-	if err := readAt(b, header, superOffset); err != nil {
+	if err := result.readAt(header, superOffset); err != nil {
 		return nil, fmt.Errorf("unable to read EROFS superblock header: %w", err)
 	}
 	superblockLength := superblockBaseSize + int(header[13])*superblockExtSlotSize
 	superblockBytes := make([]byte, superblockLength)
-	if err := readAt(b, superblockBytes, superOffset); err != nil {
+	if err := result.readAt(superblockBytes, superOffset); err != nil {
 		return nil, fmt.Errorf("unable to read EROFS superblock: %w", err)
 	}
 	s, err := parseSuperblock(superblockBytes, size)
@@ -54,7 +59,7 @@ func Read(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) 
 	if s.featureCompat&featureCompatChecksum != 0 {
 		checksumLength := superblockChecksumLength(s.blockSize())
 		checksumBytes := make([]byte, checksumLength)
-		if err := readAt(b, checksumBytes, superOffset); err != nil {
+		if err := result.readAt(checksumBytes, superOffset); err != nil {
 			return nil, fmt.Errorf("unable to read EROFS checksum area: %w", err)
 		}
 		if err := verifySuperblockChecksum(s, checksumBytes); err != nil {
@@ -65,7 +70,8 @@ func Read(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) 
 		return nil, fmt.Errorf("requested block size %d does not match superblock block size %d", blocksize, s.blockSize())
 	}
 
-	result := &FileSystem{superblock: s, backend: b, size: size, blocksize: s.blockSize()}
+	result.superblock = s
+	result.blocksize = s.blockSize()
 	if err := result.parseCompressionConfig(s); err != nil {
 		return nil, err
 	}
@@ -240,7 +246,7 @@ func (f *FileSystem) readInodeData(node *inode, b []byte, offset int64) (int, er
 				continue
 			}
 			encoded := make([]byte, extent.physicalLength)
-			if err := readAt(f.backend, encoded, extent.physicalStart); err != nil {
+			if err := f.readAt(encoded, extent.physicalStart); err != nil {
 				return read, fmt.Errorf("unable to read compressed data for inode %d: %w", node.nid, err)
 			}
 			start := currentOffset - extent.logicalStart
@@ -292,7 +298,7 @@ func (f *FileSystem) readInodeData(node *inode, b []byte, offset int64) (int, er
 			if location < 0 || location+readLength > f.size {
 				return 0, fmt.Errorf("inode %d data range is outside the image", node.nid)
 			}
-			if err := readAt(f.backend, b[:readLength], location); err != nil {
+			if err := f.readAt(b[:readLength], location); err != nil {
 				return total, err
 			}
 			total += int(readLength)
@@ -314,7 +320,7 @@ func (f *FileSystem) readInodeData(node *inode, b []byte, offset int64) (int, er
 			inlineStart/f.blockSize() != (inlineStart+int64(len(b))-1)/f.blockSize() {
 			return total, fmt.Errorf("inode %d inline data crosses or exceeds a block boundary", node.nid)
 		}
-		if err := readAt(f.backend, b, inlineStart); err != nil {
+		if err := f.readAt(b, inlineStart); err != nil {
 			return total, err
 		}
 		return total + len(b), nil
@@ -322,11 +328,16 @@ func (f *FileSystem) readInodeData(node *inode, b []byte, offset int64) (int, er
 	return 0, fmt.Errorf("inode %d has no readable data", node.nid)
 }
 
-func readAt(b backend.Storage, p []byte, offset int64) error {
+// readAt validates filesystem-relative bounds before accessing the backend,
+// which may contain other partitions and does not enforce the filesystem size.
+func (f *FileSystem) readAt(p []byte, offset int64) error {
+	if offset < 0 || offset > f.size || int64(len(p)) > f.size-offset {
+		return fmt.Errorf("read at offset %d with length %d is outside the filesystem size %d", offset, len(p), f.size)
+	}
 	if len(p) == 0 {
 		return nil
 	}
-	read, err := b.ReadAt(p, offset)
+	read, err := f.backend.ReadAt(p, offset)
 	if err != nil {
 		return err
 	}

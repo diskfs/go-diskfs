@@ -50,7 +50,7 @@ func (f *FileSystem) initCompressed(node *inode) error {
 	}
 	headerOffset := roundUp64(inodeOffset+int64(node.inodeSize+node.xattrSize), 8)
 	header := make([]byte, 8)
-	if err := readAt(f.backend, header, headerOffset); err != nil {
+	if err := f.readAt(header, headerOffset); err != nil {
 		return fmt.Errorf("unable to read compression header for inode %d: %w", node.nid, err)
 	}
 	info := &compressedInfo{}
@@ -238,7 +238,7 @@ func (f *FileSystem) loadFullLCluster(node *inode, recorder *mapRecorder, lcn ui
 	end := roundUp64(inodeOffset+int64(node.inodeSize+node.xattrSize), 8)
 	pos := roundUp64(end, 8) + 16 + int64(lcn)*8
 	b := make([]byte, 8)
-	if err := readAt(f.backend, b, pos); err != nil {
+	if err := f.readAt(b, pos); err != nil {
 		return fmt.Errorf("unable to read full compression index for inode %d: %w", node.nid, err)
 	}
 	recorder.lcn = lcn
@@ -310,7 +310,7 @@ func (f *FileSystem) loadCompactLCluster(node *inode, recorder *mapRecorder, req
 	packSize := int64(vcnt) << shift
 	packStart := pos &^ (packSize - 1)
 	pack := make([]byte, packSize)
-	if err := readAt(f.backend, pack, packStart); err != nil {
+	if err := f.readAt(pack, packStart); err != nil {
 		return fmt.Errorf("unable to read compact compression index for inode %d: %w", node.nid, err)
 	}
 	lobits := info.lclusterBits

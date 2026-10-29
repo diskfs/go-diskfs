@@ -70,7 +70,7 @@ func (f *FileSystem) getInode(nid uint64) (*inode, error) {
 		readLength = inodeCompactSize
 	}
 	b := make([]byte, readLength)
-	if _, err := f.backend.ReadAt(b, offset); err != nil {
+	if err := f.readAt(b, offset); err != nil {
 		return nil, fmt.Errorf("unable to read inode %d: %w", nid, err)
 	}
 	format := binary.LittleEndian.Uint16(b[0:2])
