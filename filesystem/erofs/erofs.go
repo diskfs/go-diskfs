@@ -126,9 +126,16 @@ func (f *FileSystem) stat(p string) (*inode, error) {
 }
 
 func (f *FileSystem) Open(p string) (iofs.File, error) {
-	if !iofs.ValidPath(p) {
-		return nil, iofs.ErrInvalid
+	file, err := f.open(p)
+	if err != nil {
+		return nil, &iofs.PathError{Op: "open", Path: p, Err: err}
 	}
+	return file, nil
+}
+
+// open leaves errors unwrapped so each public method can supply its operation
+// and the original caller path in a PathError.
+func (f *FileSystem) open(p string) (iofs.File, error) {
 	node, err := f.stat(p)
 	if err != nil {
 		return nil, err
@@ -152,22 +159,22 @@ func (f *FileSystem) Open(p string) (iofs.File, error) {
 
 func (f *FileSystem) OpenFile(p string, flag int) (filesystem.File, error) {
 	if flag != os.O_RDONLY {
-		return nil, filesystem.ErrReadonlyFilesystem
+		return nil, &iofs.PathError{Op: "openfile", Path: p, Err: filesystem.ErrReadonlyFilesystem}
 	}
-	file, err := f.Open(p)
+	file, err := f.open(p)
 	if err != nil {
-		return nil, err
+		return nil, &iofs.PathError{Op: "openfile", Path: p, Err: err}
 	}
 	if regular, ok := file.(*File); ok {
 		return regular, nil
 	}
-	return nil, fmt.Errorf("%s is a directory", p)
+	return nil, &iofs.PathError{Op: "openfile", Path: p, Err: fmt.Errorf("%s is a directory", p)}
 }
 
 func (f *FileSystem) Stat(p string) (iofs.FileInfo, error) {
 	node, err := f.stat(p)
 	if err != nil {
-		return nil, err
+		return nil, &iofs.PathError{Op: "stat", Path: p, Err: err}
 	}
 	return &fileInfo{name: path.Base(p), node: node}, nil
 }
@@ -175,14 +182,14 @@ func (f *FileSystem) Stat(p string) (iofs.FileInfo, error) {
 func (f *FileSystem) ReadDir(p string) ([]iofs.DirEntry, error) {
 	node, err := f.stat(p)
 	if err != nil {
-		return nil, err
+		return nil, &iofs.PathError{Op: "readdir", Path: p, Err: err}
 	}
 	if !node.isDir() {
-		return nil, fmt.Errorf("%s is not a directory", p)
+		return nil, &iofs.PathError{Op: "readdir", Path: p, Err: fmt.Errorf("%s is not a directory", p)}
 	}
 	entries, err := f.readDirectory(node)
 	if err != nil {
-		return nil, err
+		return nil, &iofs.PathError{Op: "readdir", Path: p, Err: err}
 	}
 	result := make([]iofs.DirEntry, 0, len(entries))
 	for _, entry := range entries {
@@ -195,15 +202,19 @@ func (f *FileSystem) ReadDir(p string) ([]iofs.DirEntry, error) {
 }
 
 func (f *FileSystem) ReadFile(p string) ([]byte, error) {
-	file, err := f.Open(p)
+	file, err := f.open(p)
 	if err != nil {
-		return nil, err
+		return nil, &iofs.PathError{Op: "readfile", Path: p, Err: err}
 	}
 	defer file.Close()
 	if _, ok := file.(*File); !ok {
-		return nil, fmt.Errorf("%s is a directory", p)
+		return nil, &iofs.PathError{Op: "readfile", Path: p, Err: fmt.Errorf("%s is a directory", p)}
 	}
-	return io.ReadAll(file)
+	data, err := io.ReadAll(file)
+	if err != nil {
+		return data, &iofs.PathError{Op: "readfile", Path: p, Err: err}
+	}
+	return data, nil
 }
 
 func (f *FileSystem) readInodeData(node *inode, b []byte, offset int64) (int, error) {
