@@ -25,6 +25,10 @@ type FileSystem struct {
 
 var _ filesystem.FileSystem = (*FileSystem)(nil)
 
+// Read opens an existing image. start is a byte offset into b and size is the
+// filesystem length in bytes. blocksize is zero to use the image's block size,
+// or its expected size in bytes.
+// The caller owns b and must keep it open and unchanged while using the reader.
 func Read(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) {
 	if size <= 0 {
 		return nil, fmt.Errorf("invalid filesystem size %d", size)
@@ -95,6 +99,9 @@ func (fs *FileSystem) Label() string {
 	return strings.TrimRight(string(fs.superblock.volumeName[:]), "\x00")
 }
 func (fs *FileSystem) SetLabel(string) error { return filesystem.ErrReadonlyFilesystem }
+
+// Close is a no-op. It does not close the caller-owned backend or open files;
+// close each File to release its decoded extent and close the backend separately.
 func (fs *FileSystem) Close() error {
 	return nil
 }
