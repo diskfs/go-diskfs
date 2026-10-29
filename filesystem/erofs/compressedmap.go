@@ -137,20 +137,14 @@ func (f *FileSystem) mapCompressed(node *inode, offset int64, findTail bool) (*c
 		return nil, err
 	}
 	extent := &compressedExtent{}
-	end := int64((recorder.lcn + 1) << info.lclusterBits)
 	switch recorder.clusterType {
 	case zClusterTypePlain, zClusterTypeHead1, zClusterTypeHead2:
 		if endOffset >= recorder.clusterOffset {
 			recorder.headType = recorder.clusterType
-			extent.logicalStart = int64(recorder.lcn)<<info.lclusterBits | int64(recorder.clusterOffset)
-			if end > node.size {
-				end = node.size
-			}
 		} else {
 			if recorder.lcn == 0 {
 				return nil, fmt.Errorf("invalid logical cluster zero for inode %d", node.nid)
 			}
-			end = int64(recorder.lcn)<<info.lclusterBits | int64(recorder.clusterOffset)
 			recorder.delta[0] = 1
 			if err := f.lookBack(node, &recorder, recorder.delta[0]); err != nil {
 				return nil, err
@@ -164,7 +158,7 @@ func (f *FileSystem) mapCompressed(node *inode, offset int64, findTail bool) (*c
 		return nil, fmt.Errorf("invalid logical cluster type %d for inode %d", recorder.clusterType, node.nid)
 	}
 	extent.logicalStart = int64(recorder.lcn)<<info.lclusterBits | int64(recorder.clusterOffset)
-	end, err = f.compressedExtentEnd(node, recorder.lcn, recorder.clusterOffset)
+	end, err := f.compressedExtentEnd(node, recorder.lcn)
 	if err != nil {
 		return nil, err
 	}
@@ -207,7 +201,7 @@ func (f *FileSystem) mapCompressed(node *inode, offset int64, findTail bool) (*c
 	return extent, nil
 }
 
-func (f *FileSystem) compressedExtentEnd(node *inode, headLCN uint64, clusterOffset int) (int64, error) {
+func (f *FileSystem) compressedExtentEnd(node *inode, headLCN uint64) (int64, error) {
 	info := node.compressed
 	lcn := headLCN
 	for {
