@@ -11,7 +11,10 @@ type StatT struct {
 	GID       uint32
 	Inode     uint64
 	LinkCount uint32
-	DeviceID  uint32
+	// DeviceID preserves the EROFS/Linux new_encode_dev value for device nodes.
+	// Major is (DeviceID >> 8) & 0xfff; minor is (DeviceID & 0xff) |
+	// ((DeviceID >> 12) & 0xfff00). It is zero for other inode types.
+	DeviceID uint32
 }
 
 type fileInfo struct {

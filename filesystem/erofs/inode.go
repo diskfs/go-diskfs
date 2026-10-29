@@ -132,7 +132,7 @@ func (f *FileSystem) getInode(nid uint64) (*inode, error) {
 			return nil, fmt.Errorf("inode %d uses unsupported 48-bit block addresses", nid)
 		}
 	case linuxModeChar, linuxModeBlock:
-		i.rdev = decodeDevice(binary.LittleEndian.Uint32(b[16:20]))
+		i.rdev = binary.LittleEndian.Uint32(b[16:20])
 	case linuxModeFIFO, linuxModeSocket:
 		i.rdev = 0
 	default:
@@ -153,12 +153,6 @@ func (f *FileSystem) getInode(nid uint64) (*inode, error) {
 		}
 	}
 	return i, nil
-}
-
-func decodeDevice(encoded uint32) uint32 {
-	major := (encoded & 0xfff00) >> 8
-	minor := encoded&0xff | (encoded>>12)&0xfff00
-	return major<<8 | minor
 }
 
 func goFileMode(mode uint16) os.FileMode {
