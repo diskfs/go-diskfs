@@ -9,6 +9,14 @@ import (
 	"github.com/ulikunitz/xz/lzma"
 )
 
+// decodedExtent holds one LZMA extent in inode-relative byte coordinates. A
+// File owns one entry, including when reading a fragment through the packed NID.
+type decodedExtent struct {
+	nid          uint64
+	logicalStart int64
+	data         []byte
+}
+
 func (f *FileSystem) parseCompressionConfig(s *superblock) error {
 	if s.featureIncompat&featureIncompatComprCfgs == 0 {
 		return nil

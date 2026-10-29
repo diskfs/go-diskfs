@@ -86,7 +86,7 @@ func (f *FileSystem) readDirectory(i *inode) ([]*directoryEntry, error) {
 			length = remaining
 		}
 		b := make([]byte, length)
-		if _, err := f.readInodeData(i, b, offset); err != nil {
+		if _, err := f.readInodeData(i, b, offset, nil); err != nil {
 			return nil, err
 		}
 		blockEntries, err := parseDirectory(b)

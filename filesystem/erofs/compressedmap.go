@@ -6,6 +6,15 @@ import (
 	"math"
 )
 
+const (
+	// Limit each physical cluster to 1 MiB encoded and 12 MiB decoded, matching
+	// Z_EROFS_PCLUSTER_MAX_SIZE and Z_EROFS_PCLUSTER_MAX_DSIZE in the EROFS
+	// on-disk definitions (fs/erofs/erofs_fs.h). These bounds cap input/output
+	// allocations and the decoded extent retained in the cache.
+	maxEncodedExtentSize = 1 << 20
+	maxDecodedExtentSize = 12 << 20
+)
+
 type compressedInfo struct {
 	advise            uint16
 	lclusterBits      uint
@@ -189,7 +198,7 @@ func (f *FileSystem) mapCompressed(node *inode, offset int64, findTail bool) (*c
 		(extent.algorithm < compressionShifted && f.superblock.availableComprAlgs&(1<<extent.algorithm) == 0) {
 		return nil, fmt.Errorf("unsupported compression algorithm %d for inode %d", extent.algorithm, node.nid)
 	}
-	if extent.physicalLength == 0 || extent.physicalLength > 1024*1024 || extent.logicalLength > 12*1024*1024 {
+	if extent.physicalLength == 0 || extent.physicalLength > maxEncodedExtentSize || extent.logicalLength <= 0 || extent.logicalLength > maxDecodedExtentSize {
 		return nil, fmt.Errorf("invalid compressed extent sizes for inode %d", node.nid)
 	}
 	if extent.physicalStart < 0 || extent.physicalStart+extent.physicalLength > f.size {

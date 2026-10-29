@@ -217,7 +217,10 @@ func (f *FileSystem) ReadFile(p string) ([]byte, error) {
 	return data, nil
 }
 
-func (f *FileSystem) readInodeData(node *inode, b []byte, offset int64) (int, error) {
+// cache belongs to the open File, whose mutex is held by the caller. Passing it
+// through fragment reads retains the packed inode's decoded extent as well.
+// Directory reads do not need a cache and pass nil.
+func (f *FileSystem) readInodeData(node *inode, b []byte, offset int64, cache *decodedExtent) (int, error) {
 	if len(b) == 0 {
 		return 0, nil
 	}
@@ -225,6 +228,13 @@ func (f *FileSystem) readInodeData(node *inode, b []byte, offset int64) (int, er
 		read := 0
 		for read < len(b) {
 			currentOffset := offset + int64(read)
+			if cache != nil && cache.nid == node.nid && currentOffset >= cache.logicalStart {
+				start := currentOffset - cache.logicalStart
+				if start < int64(len(cache.data)) {
+					read += copy(b[read:], cache.data[start:])
+					continue
+				}
+			}
 			extent, err := f.mapCompressed(node, currentOffset, false)
 			if err != nil {
 				return read, err
@@ -249,7 +259,7 @@ func (f *FileSystem) readInodeData(node *inode, b []byte, offset int64) (int, er
 				if packedOffset < 0 || packedOffset+int64(len(target)) > packedNode.size {
 					return read, fmt.Errorf("fragment range is outside packed inode for inode %d", node.nid)
 				}
-				n, err := f.readInodeData(packedNode, target, packedOffset)
+				n, err := f.readInodeData(packedNode, target, packedOffset, cache)
 				read += n
 				if err != nil {
 					return read, err
@@ -290,6 +300,9 @@ func (f *FileSystem) readInodeData(node *inode, b []byte, offset int64) (int, er
 			decoded, err := f.decompressLZMA(encoded, extent.logicalLength)
 			if err != nil {
 				return read, err
+			}
+			if cache != nil {
+				*cache = decodedExtent{nid: node.nid, logicalStart: extent.logicalStart, data: decoded}
 			}
 			copy(target, decoded[start:start+int64(len(target))])
 			read += len(target)

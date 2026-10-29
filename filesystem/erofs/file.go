@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"sync"
 
 	"github.com/diskfs/go-diskfs/filesystem"
 )
@@ -24,6 +25,10 @@ var _ fs.File = (*File)(nil)
 var _ fs.ReadDirFile = (*directoryFile)(nil)
 
 type File struct {
+	// mu protects the cursor and the single decoded extent, including concurrent
+	// ReadAt calls. Each open file retains at most maxDecodedExtentSize bytes.
+	mu         sync.Mutex
+	decoded    decodedExtent
 	filesystem *FileSystem
 	node       *inode
 	name       string
@@ -31,6 +36,8 @@ type File struct {
 }
 
 func (f *File) Read(b []byte) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	if f.filesystem == nil {
 		return 0, os.ErrClosed
 	}
@@ -44,7 +51,7 @@ func (f *File) Read(b []byte) (int, error) {
 	if f.node.size-f.offset < length {
 		length = f.node.size - f.offset
 	}
-	read, err := f.filesystem.readInodeData(f.node, b[:length], f.offset)
+	read, err := f.filesystem.readInodeData(f.node, b[:length], f.offset, &f.decoded)
 	f.offset += int64(read)
 	if err != nil {
 		return read, err
@@ -56,6 +63,8 @@ func (f *File) Read(b []byte) (int, error) {
 }
 
 func (f *File) ReadAt(b []byte, offset int64) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	if f.filesystem == nil {
 		return 0, os.ErrClosed
 	}
@@ -72,7 +81,7 @@ func (f *File) ReadAt(b []byte, offset int64) (int, error) {
 	if f.node.size-offset < length {
 		length = f.node.size - offset
 	}
-	read, err := f.filesystem.readInodeData(f.node, b[:length], offset)
+	read, err := f.filesystem.readInodeData(f.node, b[:length], offset, &f.decoded)
 	if err != nil {
 		return read, err
 	}
@@ -85,6 +94,8 @@ func (f *File) ReadAt(b []byte, offset int64) (int, error) {
 func (f *File) Write([]byte) (int, error) { return 0, filesystem.ErrReadonlyFilesystem }
 
 func (f *File) Seek(offset int64, whence int) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	if f.filesystem == nil {
 		return 0, os.ErrClosed
 	}
@@ -107,11 +118,16 @@ func (f *File) Seek(offset int64, whence int) (int64, error) {
 }
 
 func (f *File) Close() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.decoded = decodedExtent{}
 	f.filesystem = nil
 	return nil
 }
 
 func (f *File) Stat() (fs.FileInfo, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	if f.filesystem == nil {
 		return nil, os.ErrClosed
 	}
