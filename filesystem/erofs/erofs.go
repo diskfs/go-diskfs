@@ -378,20 +378,20 @@ func (f *FileSystem) readAt(p []byte, offset int64) error {
 	return nil
 }
 
-func (fs *FileSystem) Mkdir(string) error { return filesystem.ErrNotImplemented }
+func (fs *FileSystem) Mkdir(string) error { return filesystem.ErrReadonlyFilesystem }
 func (fs *FileSystem) Mknod(string, uint32, int) error {
-	return filesystem.ErrNotImplemented
+	return filesystem.ErrReadonlyFilesystem
 }
-func (fs *FileSystem) Link(string, string) error { return filesystem.ErrNotImplemented }
+func (fs *FileSystem) Link(string, string) error { return filesystem.ErrReadonlyFilesystem }
 func (fs *FileSystem) Symlink(string, string) error {
-	return filesystem.ErrNotImplemented
+	return filesystem.ErrReadonlyFilesystem
 }
-func (fs *FileSystem) Chmod(string, os.FileMode) error { return filesystem.ErrNotImplemented }
+func (fs *FileSystem) Chmod(string, os.FileMode) error { return filesystem.ErrReadonlyFilesystem }
 func (fs *FileSystem) Chown(string, int, int) error {
-	return filesystem.ErrNotImplemented
+	return filesystem.ErrReadonlyFilesystem
 }
 func (f *FileSystem) Chtimes(string, time.Time, time.Time, time.Time) error {
-	return filesystem.ErrNotImplemented
+	return filesystem.ErrReadonlyFilesystem
 }
-func (fs *FileSystem) Rename(string, string) error { return filesystem.ErrNotImplemented }
-func (fs *FileSystem) Remove(string) error         { return filesystem.ErrNotImplemented }
+func (fs *FileSystem) Rename(string, string) error { return filesystem.ErrReadonlyFilesystem }
+func (fs *FileSystem) Remove(string) error         { return filesystem.ErrReadonlyFilesystem }

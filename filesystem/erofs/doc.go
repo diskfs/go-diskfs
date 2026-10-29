@@ -26,6 +26,8 @@
 // Read borrows its backend. The caller must keep it open and unchanged while
 // using the filesystem. FileSystem.Close is a no-op; it does not close the
 // backend or open files. File.Close releases that file's decoded extent.
+// Existing images reject mutations with filesystem.ErrReadonlyFilesystem;
+// image creation is not implemented.
 //
 // For an EROFS image embedded at a known offset, create an offset backend with
 // backend.Sub, then pass that backend and the image size to Read. The EROFS
