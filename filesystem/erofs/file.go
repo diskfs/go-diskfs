@@ -157,10 +157,8 @@ func (f *directoryFile) ReadDir(n int) ([]fs.DirEntry, error) {
 	if f.offset >= len(f.entries) {
 		return nil, io.EOF
 	}
+	n = min(n, len(f.entries)-f.offset)
 	end := f.offset + n
-	if end > len(f.entries) {
-		end = len(f.entries)
-	}
 	entries := make([]fs.DirEntry, 0, end-f.offset)
 	for _, entry := range f.entries[f.offset:end] {
 		entries = append(entries, &dirEntry{entry: entry, filesystem: f.filesystem})
