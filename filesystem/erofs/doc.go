@@ -14,6 +14,11 @@
 // caches one decoded extent, including packed-inode fragments, until replaced
 // or closed. ReadAt calls on the same File may run concurrently.
 //
+// Symlinks are exposed as link objects: Stat reports ModeSymlink and ReadFile
+// or Open reads the stored target name. Paths are not resolved through symlinks,
+// including intermediate components. Consumers extracting a binary must use its
+// regular-file deployment path, rather than a symlink to it.
+//
 // Extended attributes are skipped when locating inode data but are not exposed
 // through this API. Unsupported layouts and compression algorithms return
 // descriptive errors rather than returning invalid data.
