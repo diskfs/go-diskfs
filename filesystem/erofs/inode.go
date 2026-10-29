@@ -28,6 +28,8 @@ type inode struct {
 	inodeSize  int
 	xattrSize  int
 	dataLayout uint8
+	// startBlock is a filesystem block number for flat data (the on-disk union
+	// instead stores compressed block counts or a device number for other types).
 	startBlock uint64
 	rdev       uint32
 	compressed *compressedInfo
@@ -48,6 +50,7 @@ func (f *FileSystem) inodeOffset(nid uint64) (int64, error) {
 	if f.size < inodeCompactSize {
 		return 0, fmt.Errorf("image is too small for inode %d", nid)
 	}
+	// NIDs count 32-byte inode slots from the metadata area's block address.
 	metadataBase := int64(f.superblock.metaBlockAddress) * f.blockSize()
 	available := f.size - inodeCompactSize - metadataBase
 	if available < 0 || nid > uint64(available)/inodeSlotSize {

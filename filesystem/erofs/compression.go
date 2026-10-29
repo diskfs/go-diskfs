@@ -65,6 +65,11 @@ func (f *FileSystem) parseCompressionConfig(s *superblock) error {
 }
 
 func (f *FileSystem) decompressLZMA(encoded []byte, decodedLength int64) ([]byte, error) {
+	// MicroLZMA replaces the initial zero range-coder byte with the bitwise
+	// complement of the LZMA properties byte, as documented in the MicroLZMA
+	// decompressor section of https://docs.kernel.org/staging/xz.html.
+	// Restore the zero byte and build a classic .lzma header from the properties,
+	// dictionary size and exact output length so the LZMA decoder can read it.
 	input := encoded
 	for len(input) > 0 && input[0] == 0 {
 		input = input[1:]

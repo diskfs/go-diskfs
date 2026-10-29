@@ -16,15 +16,19 @@ const (
 )
 
 type compressedInfo struct {
-	advise            uint16
-	lclusterBits      uint
-	algorithmType     [2]uint8
+	advise uint16
+	// Logical clusters are 1<<lclusterBits bytes, independent of physical blocks.
+	lclusterBits  uint
+	algorithmType [2]uint8
+	// fragmentOffset is a byte offset into the special packed inode's data.
 	fragmentOffset    int64
 	tailExtentHeadLCN uint64
 	initialized       bool
 }
 
 type compressedExtent struct {
+	// Logical ranges are inode-relative bytes; physical ranges are
+	// filesystem-relative bytes. physicalBlock is a filesystem block number.
 	logicalStart   int64
 	logicalLength  int64
 	physicalStart  int64
@@ -35,6 +39,7 @@ type compressedExtent struct {
 }
 
 type mapRecorder struct {
+	// lcn counts logical clusters; clusterOffset is a byte offset within one.
 	lcn            uint64
 	clusterType    uint8
 	headType       uint8
@@ -268,6 +273,11 @@ func decodeCompactBits(bits uint, b []byte, bitPosition int) (uint16, uint8) {
 	return uint16(value & ((1 << bits) - 1)), uint8(value >> bits & 3)
 }
 
+// loadCompactLCluster decodes the EROFS compacted compression-index layout.
+// With COMPACTED_2B enabled, initial 4-byte records align the 2-byte records to
+// 32-byte packs, followed by trailing 4-byte records. Each pack ends with a base
+// physical block number; the head/non-head records encode logical offsets or
+// lookback distances and counts.
 func (f *FileSystem) loadCompactLCluster(node *inode, recorder *mapRecorder, requestedLCN uint64, lookahead bool) error {
 	info := node.compressed
 	inodeOffset, err := f.inodeOffset(node.nid)
