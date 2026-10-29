@@ -19,7 +19,6 @@ const (
 
 type inode struct {
 	nid        uint64
-	format     uint16
 	mode       uint16
 	size       int64
 	uid        uint32
@@ -30,9 +29,7 @@ type inode struct {
 	xattrSize  int
 	dataLayout uint8
 	startBlock uint64
-	blocks     uint64
 	rdev       uint32
-	dotOmitted bool
 	compressed *compressedInfo
 }
 
@@ -85,7 +82,6 @@ func (f *FileSystem) getInode(nid uint64) (*inode, error) {
 
 	i := &inode{
 		nid:        nid,
-		format:     format,
 		dataLayout: layout,
 	}
 	xattrCount := binary.LittleEndian.Uint16(b[2:4])
@@ -109,7 +105,6 @@ func (f *FileSystem) getInode(nid uint64) (*inode, error) {
 			nb = 0
 		}
 		i.startBlock = uint64(binary.LittleEndian.Uint32(b[16:20])) | uint64(nb)<<32
-		i.blocks = i.startBlock
 	} else {
 		if readLength < inodeExtendedSize {
 			return nil, fmt.Errorf("inode %d extended inode extends beyond the image", nid)
@@ -118,13 +113,11 @@ func (f *FileSystem) getInode(nid uint64) (*inode, error) {
 		i.size = int64(binary.LittleEndian.Uint64(b[8:16]))
 		i.startBlock = uint64(binary.LittleEndian.Uint32(b[16:20])) |
 			uint64(binary.LittleEndian.Uint16(b[6:8]))<<32
-		i.blocks = i.startBlock
 		i.uid = binary.LittleEndian.Uint32(b[24:28])
 		i.gid = binary.LittleEndian.Uint32(b[28:32])
 		i.mtime = time.Unix(int64(binary.LittleEndian.Uint64(b[32:40])), int64(binary.LittleEndian.Uint32(b[40:44]))).UTC()
 		i.nlink = binary.LittleEndian.Uint32(b[44:48])
 	}
-	i.dotOmitted = i.isDir() && format&(1<<4) != 0
 
 	switch i.mode & 0xF000 {
 	case linuxModeDir, linuxModeRegular, linuxModeSymlink:

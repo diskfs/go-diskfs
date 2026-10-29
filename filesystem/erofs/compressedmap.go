@@ -20,7 +20,6 @@ type compressedInfo struct {
 	lclusterBits      uint
 	algorithmType     [2]uint8
 	fragmentOffset    int64
-	inlineDataSize    int
 	tailExtentHeadLCN uint64
 	initialized       bool
 }
@@ -76,8 +75,8 @@ func (f *FileSystem) initCompressed(node *inode) error {
 	info.algorithmType[1] = header[6] >> 4
 	if info.advise&zAdviseFragment != 0 {
 		info.fragmentOffset = int64(binary.LittleEndian.Uint32(header[0:4]))
-	} else if info.advise&zAdviseInlineData != 0 {
-		info.inlineDataSize = int(binary.LittleEndian.Uint16(header[2:4]))
+	} else if info.advise&zAdviseInlineData != 0 && binary.LittleEndian.Uint16(header[2:4]) != 0 {
+		return fmt.Errorf("inline compressed tails are not supported for inode %d", node.nid)
 	}
 	if node.dataLayout == dataLayoutCompressedCompact &&
 		((info.advise&zAdviseBigPcluster1 == 0) != (info.advise&zAdviseBigPcluster2 == 0)) {
@@ -85,9 +84,6 @@ func (f *FileSystem) initCompressed(node *inode) error {
 	}
 	if info.lclusterBits > 27 {
 		return fmt.Errorf("invalid logical cluster bits %d for inode %d", info.lclusterBits, node.nid)
-	}
-	if info.inlineDataSize != 0 {
-		return fmt.Errorf("inline compressed tails are not supported for inode %d", node.nid)
 	}
 	node.compressed = info
 	if info.advise&zAdviseFragment != 0 {
