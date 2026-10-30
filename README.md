@@ -90,7 +90,7 @@ With a `File` in hand, you then can:
 * `Seek(offset int64, whence int)` to set the next read or write to an offset in the file
 
 ### Read-Only Filesystems
-Some filesystem types are intended to be created once, after which they are read-only, for example `ISO9660`/`.iso` and `squashfs`. EROFS is currently read-only.
+Some filesystem types are intended to be created once, after which they are read-only, for example `ISO9660`/`.iso` and `squashfs`. EROFS is currently read-only with no creation support.
 
 `godiskfs` recognizes read-only filesystems and limits working with them to the following:
 
