@@ -179,6 +179,8 @@ func (d *Disk) CreateFilesystem(spec FilesystemSpec) (filesystem.FileSystem, err
 		return ext4.Create(d.Backend, size, start, d.LogicalBlocksize, &ext4.Params{VolumeName: spec.VolumeLabel})
 	case filesystem.TypeSquashfs:
 		return squashfs.Create(d.Backend, size, start, d.LogicalBlocksize)
+	case filesystem.TypeErofs:
+		return nil, filesystem.ErrNotImplemented
 	default:
 		return nil, errors.New("unknown filesystem type requested")
 	}

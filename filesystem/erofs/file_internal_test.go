@@ -21,7 +21,10 @@ func TestFileReadAtEOF(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			reader := opened.(io.ReaderAt)
+			reader, ok := opened.(io.ReaderAt)
+			if !ok {
+				t.Fatalf("OpenFile() returned %T, want io.ReaderAt", opened)
+			}
 			for _, offset := range []int64{info.Size(), info.Size() + 1, math.MaxInt64} {
 				for _, length := range []int{0, 1} {
 					n, err := reader.ReadAt(make([]byte, length), offset)

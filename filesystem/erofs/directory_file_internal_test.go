@@ -15,7 +15,10 @@ func TestReadDirLargeCount(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer opened.Close()
-	directory := opened.(fs.ReadDirFile)
+	directory, ok := opened.(fs.ReadDirFile)
+	if !ok {
+		t.Fatalf("Open() returned %T, want fs.ReadDirFile", opened)
+	}
 	first, err := directory.ReadDir(1)
 	if err != nil || len(first) != 1 {
 		t.Fatalf("ReadDir(1) = %v, %v", first, err)

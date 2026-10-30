@@ -12,7 +12,7 @@ func validSuperblockBytes() []byte {
 	binary.LittleEndian.PutUint16(b[14:16], 0)
 	binary.LittleEndian.PutUint32(b[36:40], 2)
 	binary.LittleEndian.PutUint32(b[40:44], 1)
-	copy(b[64:80], []byte("test volume"))
+	copy(b[64:80], "test volume")
 	return b
 }
 

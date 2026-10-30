@@ -49,8 +49,8 @@ type mapRecorder struct {
 	compressedBlks uint32
 }
 
-func roundUp64(value, alignment int64) int64 {
-	return (value + alignment - 1) &^ (alignment - 1)
+func roundUp8(value int64) int64 {
+	return (value + 7) &^ 7
 }
 
 func (f *FileSystem) initCompressed(node *inode) error {
@@ -61,7 +61,7 @@ func (f *FileSystem) initCompressed(node *inode) error {
 	if err != nil {
 		return err
 	}
-	headerOffset := roundUp64(inodeOffset+int64(node.inodeSize+node.xattrSize), 8)
+	headerOffset := roundUp8(inodeOffset + int64(node.inodeSize+node.xattrSize))
 	header := make([]byte, 8)
 	if err := f.readAt(header, headerOffset); err != nil {
 		return fmt.Errorf("unable to read compression header for inode %d: %w", node.nid, err)
@@ -178,28 +178,36 @@ func (f *FileSystem) mapCompressed(node *inode, offset int64, findTail bool) (*c
 		return nil, err
 	}
 	extent.physicalLength = int64(recorder.compressedBlks) * f.blockSize()
-	if recorder.headType == zClusterTypePlain {
+	switch recorder.headType {
+	case zClusterTypePlain:
 		if info.advise&zAdviseInterlaced != 0 {
 			extent.algorithm = compressionInterlaced
 		} else {
 			extent.algorithm = compressionShifted
 		}
-	} else if recorder.headType == zClusterTypeHead2 {
+	case zClusterTypeHead2:
 		extent.algorithm = info.algorithmType[1]
-	} else {
+	default:
 		extent.algorithm = info.algorithmType[0]
 	}
-	if extent.algorithm >= compressionInterlaced+1 ||
-		(extent.algorithm < compressionShifted && f.superblock.availableComprAlgs&(1<<extent.algorithm) == 0) {
-		return nil, fmt.Errorf("unsupported compression algorithm %d for inode %d", extent.algorithm, node.nid)
-	}
-	if extent.physicalLength == 0 || extent.physicalLength > maxEncodedExtentSize || extent.logicalLength <= 0 || extent.logicalLength > maxDecodedExtentSize {
-		return nil, fmt.Errorf("invalid compressed extent sizes for inode %d", node.nid)
-	}
-	if extent.physicalStart < 0 || extent.physicalStart+extent.physicalLength > f.size {
-		return nil, fmt.Errorf("compressed extent for inode %d is outside the image", node.nid)
+	if err := f.validateCompressedExtent(node, extent); err != nil {
+		return nil, err
 	}
 	return extent, nil
+}
+
+func (f *FileSystem) validateCompressedExtent(node *inode, extent *compressedExtent) error {
+	if extent.algorithm >= compressionInterlaced+1 ||
+		(extent.algorithm < compressionShifted && f.superblock.availableComprAlgs&(1<<extent.algorithm) == 0) {
+		return fmt.Errorf("unsupported compression algorithm %d for inode %d", extent.algorithm, node.nid)
+	}
+	if extent.physicalLength == 0 || extent.physicalLength > maxEncodedExtentSize || extent.logicalLength <= 0 || extent.logicalLength > maxDecodedExtentSize {
+		return fmt.Errorf("invalid compressed extent sizes for inode %d", node.nid)
+	}
+	if extent.physicalStart < 0 || extent.physicalStart+extent.physicalLength > f.size {
+		return fmt.Errorf("compressed extent for inode %d is outside the image", node.nid)
+	}
+	return nil
 }
 
 func (f *FileSystem) compressedExtentEnd(node *inode, headLCN uint64) (int64, error) {
@@ -239,8 +247,8 @@ func (f *FileSystem) loadFullLCluster(node *inode, recorder *mapRecorder, lcn ui
 	if err != nil {
 		return err
 	}
-	end := roundUp64(inodeOffset+int64(node.inodeSize+node.xattrSize), 8)
-	pos := roundUp64(end, 8) + 16 + int64(lcn)*8
+	end := roundUp8(inodeOffset + int64(node.inodeSize+node.xattrSize))
+	pos := end + 16 + int64(lcn)*8
 	b := make([]byte, 8)
 	if err := f.readAt(b, pos); err != nil {
 		return fmt.Errorf("unable to read full compression index for inode %d: %w", node.nid, err)
@@ -268,7 +276,7 @@ func (f *FileSystem) loadFullLCluster(node *inode, recorder *mapRecorder, lcn ui
 	return f.validateLCluster(node, recorder)
 }
 
-func decodeCompactBits(bits uint, b []byte, bitPosition int) (uint16, uint8) {
+func decodeCompactBits(bits uint, b []byte, bitPosition int) (lo uint16, clusterType uint8) {
 	value := binary.LittleEndian.Uint32(b[bitPosition/8:bitPosition/8+4]) >> (bitPosition & 7)
 	return uint16(value & ((1 << bits) - 1)), uint8(value >> bits & 3)
 }
@@ -284,7 +292,7 @@ func (f *FileSystem) loadCompactLCluster(node *inode, recorder *mapRecorder, req
 	if err != nil {
 		return err
 	}
-	ebase := 8 + roundUp64(inodeOffset+int64(node.inodeSize+node.xattrSize), 8)
+	ebase := 8 + roundUp8(inodeOffset+int64(node.inodeSize+node.xattrSize))
 	totalIndex := uint64((node.size + f.blockSize() - 1) / f.blockSize())
 	if requestedLCN >= totalIndex || info.lclusterBits > 14 {
 		return fmt.Errorf("invalid logical cluster %d for inode %d", requestedLCN, node.nid)
@@ -309,11 +317,12 @@ func (f *FileSystem) loadCompactLCluster(node *inode, recorder *mapRecorder, req
 	}
 	pos += int64(lcn) << shift
 	var vcnt uint
-	if shift == 2 && info.lclusterBits <= 14 {
+	switch {
+	case shift == 2 && info.lclusterBits <= 14:
 		vcnt = 2
-	} else if shift == 1 && info.lclusterBits <= 12 {
+	case shift == 1 && info.lclusterBits <= 12:
 		vcnt = 16
-	} else {
+	default:
 		return fmt.Errorf("unsupported compact index packing for inode %d", node.nid)
 	}
 	packSize := int64(vcnt) << shift
@@ -368,15 +377,16 @@ func (f *FileSystem) loadCompactLCluster(node *inode, recorder *mapRecorder, req
 		index--
 		lo, clusterType = decodeCompactBits(lobits, pack, encodeBits*index)
 		if clusterType == zClusterTypeNonHead {
-			if !bigPcluster {
+			switch {
+			case !bigPcluster:
 				index -= int(lo)
-			} else if lo&zD0ClusterCount != 0 {
+			case lo&zD0ClusterCount != 0:
 				index--
 				nblk += uint32(lo &^ zD0ClusterCount)
 				continue
-			} else if lo <= 1 {
+			case lo <= 1:
 				return fmt.Errorf("invalid big pcluster delta for inode %d", node.nid)
-			} else {
+			default:
 				index -= int(lo) - 2
 				continue
 			}

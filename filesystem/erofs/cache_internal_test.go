@@ -15,7 +15,10 @@ func TestConcurrentCompressedReadAt(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer opened.Close()
-	reader := opened.(io.ReaderAt)
+	reader, ok := opened.(io.ReaderAt)
+	if !ok {
+		t.Fatalf("OpenFile() returned %T, want io.ReaderAt", opened)
+	}
 	payload := fullFixturePayload()
 	var workers sync.WaitGroup
 	for worker := 0; worker < 8; worker++ {

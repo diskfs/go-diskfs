@@ -119,20 +119,19 @@ func TestReadFullCompressedFixture(t *testing.T) {
 	}
 }
 
-func compressedMetadata(t *testing.T, filesystem *FileSystem, path string) (node *inode, headerOffset int64) {
+func compressionHeaderOffset(t *testing.T, filesystem *FileSystem, path string) int64 {
 	t.Helper()
 	node, err := filesystem.stat(path)
 	if err != nil {
 		t.Fatalf("stat(%q) error = %v", path, err)
 	}
 	inodeOffset := int64(filesystem.superblock.metaBlockAddress)*filesystem.blockSize() + int64(node.nid)*inodeSlotSize
-	headerOffset = roundUp64(inodeOffset+int64(node.inodeSize+node.xattrSize), 8)
-	return node, headerOffset
+	return roundUp8(inodeOffset + int64(node.inodeSize+node.xattrSize))
 }
 
 func TestCompressedFixtureCorruption(t *testing.T) {
 	filesystem := readTestImage(t, compressedFixture)
-	_, headerOffset := compressedMetadata(t, filesystem, "sub/data.bin")
+	headerOffset := compressionHeaderOffset(t, filesystem, "sub/data.bin")
 	indexOffset := headerOffset + 8
 
 	tests := []struct {
@@ -189,7 +188,7 @@ func TestCompressedFixtureCorruption(t *testing.T) {
 
 func TestFullCompressedFixtureCorruption(t *testing.T) {
 	filesystem := readTestImage(t, fullFixture)
-	_, headerOffset := compressedMetadata(t, filesystem, "data.bin")
+	headerOffset := compressionHeaderOffset(t, filesystem, "data.bin")
 	indexOffset := headerOffset + 16
 
 	tests := []struct {
@@ -254,7 +253,7 @@ func TestReadMkfsErofsImage(t *testing.T) {
 	if err := os.Mkdir(source, 0o755); err != nil {
 		t.Fatalf("os.Mkdir() error = %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(source, "hello.txt"), []byte("hello world\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(source, "hello.txt"), []byte("hello world\n"), 0o600); err != nil {
 		t.Fatalf("os.WriteFile() error = %v", err)
 	}
 	imagePath := filepath.Join(directory, "image.erofs")
@@ -301,7 +300,7 @@ func TestReadCompressedMkfsErofsImage(t *testing.T) {
 	}
 	copy(payload[len(payload)-48*1024:], make([]byte, 48*1024))
 	sourcePath := filepath.Join(directory, "test", "path", "file")
-	if err := os.WriteFile(sourcePath, payload, 0o644); err != nil {
+	if err := os.WriteFile(sourcePath, payload, 0o600); err != nil {
 		t.Fatalf("os.WriteFile() error = %v", err)
 	}
 	mtime := time.Unix(1577934245, 0).UTC()

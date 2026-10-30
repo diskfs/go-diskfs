@@ -28,7 +28,10 @@ func TestDeviceIDPreservesEncoding(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					stat := info.Sys().(*StatT)
+					stat, ok := info.Sys().(*StatT)
+					if !ok {
+						t.Fatalf("Sys() returned %T, want *StatT", info.Sys())
+					}
 					if stat.DeviceID != encoded {
 						t.Fatalf("DeviceID = %#x, want %#x", stat.DeviceID, encoded)
 					}

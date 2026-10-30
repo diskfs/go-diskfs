@@ -16,22 +16,21 @@ import (
 	"testing/fstest"
 
 	"github.com/diskfs/go-diskfs/backend"
-	"github.com/diskfs/go-diskfs/backend/file"
+	backendfile "github.com/diskfs/go-diskfs/backend/file"
 	fsapi "github.com/diskfs/go-diskfs/filesystem"
 )
 
 func testBackend(t *testing.T, image []byte) backend.Storage {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "image.erofs")
-	if err := os.WriteFile(path, image, 0o600); err != nil {
-		t.Fatalf("os.WriteFile() error = %v", err)
-	}
-	f, err := os.Open(path)
+	f, err := os.CreateTemp(t.TempDir(), "image-*.erofs")
 	if err != nil {
-		t.Fatalf("os.Open() error = %v", err)
+		t.Fatalf("os.CreateTemp() error = %v", err)
 	}
 	t.Cleanup(func() { _ = f.Close() })
-	return file.New(f, true)
+	if _, err := f.Write(image); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+	return backendfile.New(f, true)
 }
 
 func setCompactInode(b []byte, offset int, format, mode uint16, size, startBlock uint32) {
@@ -47,7 +46,7 @@ func setCompactInode(b []byte, offset int, format, mode uint16, size, startBlock
 	binary.LittleEndian.PutUint16(b[offset+26:], 0)
 }
 
-func setDirectoryEntry(b []byte, offset int, nid uint64, name string, fileType byte) {
+func setDirectoryEntry(b []byte, offset int, nid uint64, fileType byte) {
 	binary.LittleEndian.PutUint64(b[offset:], nid)
 	binary.LittleEndian.PutUint16(b[offset+8:], 12)
 	b[offset+10] = fileType
@@ -67,13 +66,13 @@ func buildImage(inline bool) []byte {
 	if !inline {
 		format := 1<<4 | uint16(dataLayoutFlatPlain)<<1
 		setCompactInode(image, 4128, format, linuxModeRegular, 11, 3)
-		copy(image[12288:], []byte("hello world"))
+		copy(image[12288:], "hello world")
 	} else {
-		copy(image[4160:], []byte("hello world"))
+		copy(image[4160:], "hello world")
 	}
 
-	setDirectoryEntry(image, 8192, 1, "hello", fileTypeRegular)
-	copy(image[8204:], []byte("hello"))
+	setDirectoryEntry(image, 8192, 1, fileTypeRegular)
+	copy(image[8204:], "hello")
 	return image
 }
 
@@ -134,7 +133,7 @@ func TestReadCompactDirectoryExternalData(t *testing.T) {
 	}
 	for index := 0; index < 300; index++ {
 		name := filepath.Join(source, "file-"+strconv.Itoa(index))
-		if err := os.WriteFile(name, nil, 0o644); err != nil {
+		if err := os.WriteFile(name, nil, 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -405,11 +404,15 @@ func TestInvalidPathsAndModes(t *testing.T) {
 
 func TestCompressedReadAtBoundaries(t *testing.T) {
 	filesystem := readTestImage(t, compressedFixture)
-	file, err := filesystem.Open("sub/data.bin")
+	opened, err := filesystem.Open("sub/data.bin")
 	if err != nil {
 		t.Fatalf("Open() error = %v", err)
 	}
-	defer file.Close()
+	defer opened.Close()
+	file, ok := opened.(*File)
+	if !ok {
+		t.Fatalf("Open() returned %T, want *File", opened)
+	}
 	expected := testPayload()
 
 	tests := []struct {
@@ -426,7 +429,7 @@ func TestCompressedReadAtBoundaries(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("%d/%d", tt.offset, tt.length), func(t *testing.T) {
 			b := make([]byte, tt.length)
-			read, err := file.(*File).ReadAt(b, tt.offset)
+			read, err := file.ReadAt(b, tt.offset)
 			want := expected[min(tt.offset, int64(len(expected))):]
 			want = want[:min(int64(len(want)), int64(tt.length))]
 			if !bytes.Equal(b[:read], want) {
@@ -441,7 +444,7 @@ func TestCompressedReadAtBoundaries(t *testing.T) {
 		})
 	}
 
-	if _, err := file.(*File).Seek(61439, io.SeekStart); err != nil {
+	if _, err := file.Seek(61439, io.SeekStart); err != nil {
 		t.Fatalf("Seek() error = %v", err)
 	}
 	b := make([]byte, 2)
@@ -501,7 +504,7 @@ func buildMetadataImage() []byte {
 	}
 	nameOffset := 84
 	for index, entry := range names {
-		fileType := byte(fileTypeRegular)
+		fileType := fileTypeRegular
 		switch entry.name {
 		case "block":
 			fileType = fileTypeBlockDevice
@@ -514,7 +517,7 @@ func buildMetadataImage() []byte {
 		case "symlink":
 			fileType = fileTypeSymlink
 		}
-		setDirectoryEntry(directory, index*direntSize, entry.nid, entry.name, fileType)
+		setDirectoryEntry(directory, index*direntSize, entry.nid, fileType)
 		binary.LittleEndian.PutUint16(directory[index*direntSize+8:], uint16(nameOffset))
 		copy(directory[nameOffset:], entry.name)
 		nameOffset += len(entry.name)
@@ -524,7 +527,7 @@ func buildMetadataImage() []byte {
 	return image
 }
 
-func TestSpecialFileMetadataAndHardLinks(t *testing.T) {
+func TestSpecialFileMetadata(t *testing.T) {
 	filesystem, err := Read(testBackend(t, buildMetadataImage()), 16384, 0, 0)
 	if err != nil {
 		t.Fatalf("Read() error = %v", err)
@@ -590,6 +593,16 @@ func TestSpecialFileMetadataAndHardLinks(t *testing.T) {
 	if !ok || charStat.DeviceID != 0x0301 {
 		t.Fatalf("Stat(char).Sys() = %#v, want device ID 0x0301", charInfo.Sys())
 	}
+	if target, err := filesystem.ReadFile("symlink"); err != nil || string(target) != "hello.txt" {
+		t.Fatalf("ReadFile(symlink) = %q, %v", target, err)
+	}
+}
+
+func TestHardLinks(t *testing.T) {
+	filesystem, err := Read(testBackend(t, buildMetadataImage()), 16384, 0, 0)
+	if err != nil {
+		t.Fatalf("Read() error = %v", err)
+	}
 	for _, name := range []string{"hardlink", "hardlink2"} {
 		info, err := filesystem.Stat(name)
 		if err != nil {
@@ -603,8 +616,5 @@ func TestSpecialFileMetadataAndHardLinks(t *testing.T) {
 		if err != nil || string(data) != "hello world" {
 			t.Fatalf("ReadFile(%q) = %q, %v", name, data, err)
 		}
-	}
-	if target, err := filesystem.ReadFile("symlink"); err != nil || string(target) != "hello.txt" {
-		t.Fatalf("ReadFile(symlink) = %q, %v", target, err)
 	}
 }

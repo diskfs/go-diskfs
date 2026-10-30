@@ -91,38 +91,8 @@ func parseSuperblock(b []byte, imageSize int64) (*superblock, error) {
 	if s.superblockSize() > len(b) || int64(superOffset)+int64(s.superblockSize()) > imageSize {
 		return nil, fmt.Errorf("invalid superblock extension count %d", s.superblockExtSlots)
 	}
-	allowedCompat := featureCompatChecksum | featureCompatMtime | featureCompatXattr
-	if unknown := s.featureCompat &^ allowedCompat; unknown != 0 {
-		return nil, fmt.Errorf("unsupported compatible feature bits 0x%08x", unknown)
-	}
-	allowedIncompat := featureIncompatLZ4Padding | featureIncompatComprCfgs | featureIncompatFragments
-	if unknown := s.featureIncompat &^ allowedIncompat; unknown != 0 {
-		return nil, fmt.Errorf("unsupported incompatible feature bits 0x%08x", unknown)
-	}
-	if s.extraDevices != 0 {
-		return nil, fmt.Errorf("multi-device images are not supported")
-	}
-	if s.dirBlockBits != 0 {
-		return nil, fmt.Errorf("directory block size 2^%d is not supported", s.dirBlockBits)
-	}
-	if s.xattrPrefixCount != 0 || s.xattrPrefixStart != 0 {
-		return nil, fmt.Errorf("long xattr prefixes are not supported")
-	}
-	if s.xattrFilterReserved != 0 {
-		return nil, fmt.Errorf("reserved superblock byte 112 is nonzero")
-	}
-	if s.ishareXattrPrefixID != 0 {
-		return nil, fmt.Errorf("shared xattr prefixes are not supported")
-	}
-	if b[106] != 0 || b[107] != 0 {
-		return nil, fmt.Errorf("reserved superblock bytes 106-107 are nonzero")
-	}
-	reserved3 := uint64(0)
-	if s.superblockSize() > 136 && len(b) >= 144 {
-		reserved3 = binary.LittleEndian.Uint64(b[136:144])
-	}
-	if s.rootNID8 != 0 || s.metaboxNID != 0 || binary.LittleEndian.Uint64(b[120:128]) != 0 || reserved3 != 0 {
-		return nil, fmt.Errorf("48-bit and metabox layouts are not supported")
+	if err := s.validateFeatures(b); err != nil {
+		return nil, err
 	}
 	if s.blocks == 0 || s.metaBlockAddress >= s.blocks {
 		return nil, fmt.Errorf("invalid metadata block address %d with %d blocks", s.metaBlockAddress, s.blocks)
@@ -138,6 +108,43 @@ func parseSuperblock(b []byte, imageSize int64) (*superblock, error) {
 		return nil, fmt.Errorf("filesystem has %d blocks but image only has %d", s.blocks, imageSize/s.blockSize())
 	}
 	return s, nil
+}
+
+func (s *superblock) validateFeatures(b []byte) error {
+	allowedCompat := featureCompatChecksum | featureCompatMtime | featureCompatXattr
+	if unknown := s.featureCompat &^ allowedCompat; unknown != 0 {
+		return fmt.Errorf("unsupported compatible feature bits 0x%08x", unknown)
+	}
+	allowedIncompat := featureIncompatLZ4Padding | featureIncompatComprCfgs | featureIncompatFragments
+	if unknown := s.featureIncompat &^ allowedIncompat; unknown != 0 {
+		return fmt.Errorf("unsupported incompatible feature bits 0x%08x", unknown)
+	}
+	if s.extraDevices != 0 {
+		return fmt.Errorf("multi-device images are not supported")
+	}
+	if s.dirBlockBits != 0 {
+		return fmt.Errorf("directory block size 2^%d is not supported", s.dirBlockBits)
+	}
+	if s.xattrPrefixCount != 0 || s.xattrPrefixStart != 0 {
+		return fmt.Errorf("long xattr prefixes are not supported")
+	}
+	if s.xattrFilterReserved != 0 {
+		return fmt.Errorf("reserved superblock byte 112 is nonzero")
+	}
+	if s.ishareXattrPrefixID != 0 {
+		return fmt.Errorf("shared xattr prefixes are not supported")
+	}
+	if b[106] != 0 || b[107] != 0 {
+		return fmt.Errorf("reserved superblock bytes 106-107 are nonzero")
+	}
+	reserved3 := uint64(0)
+	if s.superblockSize() > 136 && len(b) >= 144 {
+		reserved3 = binary.LittleEndian.Uint64(b[136:144])
+	}
+	if s.rootNID8 != 0 || s.metaboxNID != 0 || binary.LittleEndian.Uint64(b[120:128]) != 0 || reserved3 != 0 {
+		return fmt.Errorf("48-bit and metabox layouts are not supported")
+	}
+	return nil
 }
 
 func superblockChecksumLength(blockSize int64) int {

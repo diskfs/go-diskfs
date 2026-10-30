@@ -1,15 +1,16 @@
 package erofs
 
+const superMagic uint32 = 0xE0F5E1E2
+
 const (
-	superMagic            uint32 = 0xE0F5E1E2
-	superOffset                  = 1024
-	superblockBaseSize           = 128
-	superblockExtSlotSize        = 16
-	inodeSlotSize                = 32
-	inodeCompactSize             = 32
-	inodeExtendedSize            = 64
-	direntSize                   = 12
-	maxNameLength                = 255
+	superOffset           = 1024
+	superblockBaseSize    = 128
+	superblockExtSlotSize = 16
+	inodeSlotSize         = 32
+	inodeCompactSize      = 32
+	inodeExtendedSize     = 64
+	direntSize            = 12
+	maxNameLength         = 255
 )
 
 const (

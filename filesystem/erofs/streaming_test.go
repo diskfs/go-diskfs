@@ -55,7 +55,10 @@ func TestAdjacentReadsReuseDecodedExtent(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer opened.Close()
-			reader := opened.(io.ReaderAt)
+			reader, ok := opened.(io.ReaderAt)
+			if !ok {
+				t.Fatalf("OpenFile() returned %T, want io.ReaderAt", opened)
+			}
 			payload := fullFixturePayload()
 			buffer := make([]byte, 4096)
 			for offset := 0; offset < len(payload); offset += len(buffer) {
@@ -106,7 +109,7 @@ func BenchmarkLargeExtentStreaming(b *testing.B) {
 			binary.LittleEndian.PutUint32(payload[offset:], seed)
 		}
 	}
-	if err := os.WriteFile(filepath.Join(source, "payload"), payload, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(source, "payload"), payload, 0o600); err != nil {
 		b.Fatal(err)
 	}
 	imagePath := filepath.Join(directory, "image.erofs")

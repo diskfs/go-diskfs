@@ -176,5 +176,5 @@ func goFileMode(mode uint16) os.FileMode {
 	if mode&0o1000 != 0 {
 		result |= os.ModeSticky
 	}
-	return result | os.FileMode(mode&0777)
+	return result | os.FileMode(mode&0o777)
 }
