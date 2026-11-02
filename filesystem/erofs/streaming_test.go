@@ -7,12 +7,9 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"testing"
 
 	"github.com/diskfs/go-diskfs/backend"
-	"github.com/diskfs/go-diskfs/backend/file"
 )
 
 type extentReadBackend struct {
@@ -90,53 +87,17 @@ func TestAdjacentReadsReuseDecodedExtent(t *testing.T) {
 // BenchmarkLargeExtentStreaming measures a fresh open/extraction each time,
 // including first decode, so it cannot benchmark an already warmed cache. The
 // image uses 1 MiB physical clusters and multi-megabyte decoded extents, with a
-// fragment tail. Generation requires mkfs.erofs and is outside the timed region.
+// fragment tail. The image and expected payload are loaded outside the timed region.
 func BenchmarkLargeExtentStreaming(b *testing.B) {
-	mkfs, err := exec.LookPath("mkfs.erofs")
-	if err != nil {
-		b.Skip("mkfs.erofs is not available")
-	}
-	directory := b.TempDir()
-	source := filepath.Join(directory, "source")
-	if err := os.Mkdir(source, 0o755); err != nil {
-		b.Fatal(err)
-	}
-	payload := make([]byte, 15<<20)
-	seed := uint32(0x45524f46)
-	for record := 0; record < len(payload); record += 64 << 10 {
-		for offset := record; offset < record+(16<<10); offset += 4 {
-			seed = seed*1664525 + 1013904223
-			binary.LittleEndian.PutUint32(payload[offset:], seed)
-		}
-	}
-	if err := os.WriteFile(filepath.Join(source, "payload"), payload, 0o600); err != nil {
-		b.Fatal(err)
-	}
-	imagePath := filepath.Join(directory, "image.erofs")
-	command := exec.Command(mkfs, "-zlzma", "-C1048576", "-Efragments", imagePath, source)
-	if output, err := command.CombinedOutput(); err != nil {
-		b.Fatalf("mkfs.erofs: %v: %s", err, output)
-	}
-	image, err := os.Open(imagePath)
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer image.Close()
-	info, err := image.Stat()
-	if err != nil {
-		b.Fatal(err)
-	}
-	filesystem, err := Read(file.New(image, true), info.Size(), 0, 0)
-	if err != nil {
-		b.Fatal(err)
-	}
+	filesystem := readTestImage(b, largeFixture)
+	payload := largeFixturePayload()
 	for _, bufferSize := range []int{32 << 10, len(payload)} {
 		b.Run(fmt.Sprintf("buffer=%d", bufferSize), func(b *testing.B) {
 			buffer := make([]byte, bufferSize)
 			b.SetBytes(int64(len(payload)))
 			b.ReportAllocs()
 			for b.Loop() {
-				opened, err := filesystem.Open("payload")
+				opened, err := filesystem.Open("test/path/file")
 				if err != nil {
 					b.Fatal(err)
 				}

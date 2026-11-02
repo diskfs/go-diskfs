@@ -34,12 +34,28 @@ full = work / "full"
 full.mkdir()
 payload = b"EROFS deterministic fixture payload\n" * 2622
 (full / "data.bin").write_bytes(payload.ljust(96 * 1024, b"\0"))
+
+large = work / "large"
+(large / "dir").mkdir(parents=True)
+for index in range(300):
+    (large / "dir" / f"file-{index}").touch()
+(large / "test" / "path").mkdir(parents=True)
+payload = bytearray(15 * 1024 * 1024)
+seed = 0x45524F46
+for record in range(0, len(payload), 64 * 1024):
+    for offset in range(record, record + 16 * 1024, 4):
+        seed = (seed * 1664525 + 1013904223) & 0xFFFFFFFF
+        payload[offset:offset + 4] = seed.to_bytes(4, "little")
+(large / "test" / "path" / "file").write_bytes(payload)
 PY
 
-set -- -b4096 -x-1 --all-root -T1700000000 \
+# Store common mkfs options for reuse through "$@" below.
+set -- --quiet -b4096 -x-1 --all-root -T1700000000 \
     -U00000000-0000-0000-0000-000000000000
 mkfs.erofs "$@" "$output_dir/uncompressed.erofs" "$work_dir/source"
 mkfs.erofs "$@" -zlzma -C65536 -Efragments \
     "$output_dir/compressed.erofs" "$work_dir/source"
 mkfs.erofs "$@" -zlzma -Elegacy-compress \
     "$output_dir/full.erofs" "$work_dir/full"
+mkfs.erofs "$@" -zlzma -C1048576 -Efragments --workers=1 \
+    "$output_dir/large.erofs" "$work_dir/large"

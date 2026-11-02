@@ -8,9 +8,6 @@ import (
 	"io"
 	iofs "io/fs"
 	"os"
-	"os/exec"
-	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -121,44 +118,13 @@ func TestReadInlineFilesystem(t *testing.T) {
 }
 
 func TestReadCompactDirectoryExternalData(t *testing.T) {
-	mkfs, err := exec.LookPath("mkfs.erofs")
+	filesystem := readTestImage(t, largeFixture)
+	node, err := filesystem.stat("dir")
 	if err != nil {
-		t.Skip("mkfs.erofs is not available")
+		t.Fatalf("stat(dir) error = %v", err)
 	}
-
-	directory := t.TempDir()
-	source := filepath.Join(directory, "source", "dir")
-	if err := os.MkdirAll(source, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	for index := 0; index < 300; index++ {
-		name := filepath.Join(source, "file-"+strconv.Itoa(index))
-		if err := os.WriteFile(name, nil, 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	imagePath := filepath.Join(directory, "image.erofs")
-	args := []string{
-		"-b4096",
-		"-x1",
-		"--all-root",
-		"-T1700000000",
-		"-U00000000-0000-0000-0000-000000000000",
-		imagePath,
-		filepath.Join(directory, "source"),
-	}
-	if output, err := exec.Command(mkfs, args...).CombinedOutput(); err != nil {
-		t.Fatalf("mkfs.erofs failed: %v: %s", err, output)
-	}
-	image, err := os.ReadFile(imagePath)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	filesystem, err := Read(testBackend(t, image), int64(len(image)), 0, 0)
-	if err != nil {
-		t.Fatalf("Read() error = %v", err)
+	if node.inodeSize != inodeCompactSize || node.size <= filesystem.blockSize() {
+		t.Fatalf("dir inode size = %d, data size = %d; want a compact inode with external data", node.inodeSize, node.size)
 	}
 	entries, err := filesystem.ReadDir("dir")
 	if err != nil {
