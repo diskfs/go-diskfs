@@ -1,7 +1,20 @@
 # EROFS Test Fixtures
 
 The fixtures were generated with `erofs-utils` 1.9.4 and can be read by tests
-without external tools.
+without external tools. To regenerate them, install Python 3 and
+`mkfs.erofs` from `erofs-utils` 1.9.4 with LZMA support, then run:
+
+```sh
+./filesystem/erofs/testdata/generate.sh
+```
+
+The script works from any directory, creates and cleans up its source trees,
+and fixes permissions, ownership, timestamps, UUIDs, and block sizes. An optional
+output directory lets you compare regenerated images with the committed ones:
+
+```sh
+./filesystem/erofs/testdata/generate.sh /tmp/erofs-fixtures
+```
 
 The source tree contains an empty directory, an empty file, `hello.txt`
 containing `hello world\n`, a `link` symlink to `hello.txt`, and
@@ -13,32 +26,6 @@ pseudo-random sequence `seed = seed * 1664525 + 1013904223`, starting with
 `EROFS deterministic fixture payload\n` and truncated to length. It uses the
 full compressed index layout without storing the whole file in the packed
 inode.
-
-Create `sub/data.bin` with:
-
-```sh
-python3 - <<'EOF'
-import pathlib
-payload = bytearray()
-seed = 0x45524F46
-for _ in range(96 * 1024 // 4):
-    seed = (seed * 1664525 + 1013904223) & 0xFFFFFFFF
-    payload += seed.to_bytes(4, "little")
-pathlib.Path("sub/data.bin").write_bytes(payload)
-EOF
-```
-
-Generate the fixtures with:
-
-```sh
-mkfs.erofs -b4096 -x-1 --all-root -T1700000000 \
-  -U00000000-0000-0000-0000-000000000000 \
-  uncompressed.erofs SOURCE
-mkfs.erofs -b4096 -zlzma -x-1 --all-root -C65536 -Efragments -T1700000000 \
-  -U00000000-0000-0000-0000-000000000000 compressed.erofs SOURCE
-mkfs.erofs -b4096 -zlzma -x-1 --all-root -Elegacy-compress -T1700000000 \
-  -U00000000-0000-0000-0000-000000000000 full.erofs SOURCE
-```
 
 SHA-256:
 
