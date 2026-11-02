@@ -1,5 +1,9 @@
 // Package erofs provides read-only access to EROFS filesystem images.
 //
+// The implementation follows the [EROFS on-disk documentation], especially the
+// [core format specification]. Compression structures follow the [Linux EROFS
+// on-disk definitions], with decoding based on the [MicroLZMA format documentation].
+//
 // It supports an EROFS on-disk-format subset with block sizes from 512 through
 // 65536 bytes, compact and extended inodes, uncompressed FLAT_PLAIN and
 // FLAT_INLINE data, and LZMA-compressed compact and full index layouts.
@@ -35,4 +39,9 @@
 //
 //	nested := backend.Sub(backend, offset, size)
 //	filesystem, err := erofs.Read(nested, size, 0, 0)
+//
+// [EROFS on-disk documentation]: https://erofs.docs.kernel.org/en/latest/ondisk/index.html
+// [core format specification]: https://erofs.docs.kernel.org/en/latest/ondisk/core_ondisk.html
+// [Linux EROFS on-disk definitions]: https://raw.githubusercontent.com/torvalds/linux/master/fs/erofs/erofs_fs.h
+// [MicroLZMA format documentation]: https://docs.kernel.org/staging/xz.html
 package erofs
