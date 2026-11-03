@@ -74,4 +74,6 @@ const (
 	TypeFat12
 	// TypeFat16 is a FAT16 compatible filesystem
 	TypeFat16
+	// TypeErofs is an EROFS compatible filesystem
+	TypeErofs
 )

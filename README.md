@@ -67,7 +67,13 @@ Once you have a valid disk, and optionally partition, you can access filesystems
 * `CreateFilesystem()` - create a filesystem in an individual partition or the entire disk
 * `GetFilesystem()` - access an existing filesystem in a partition or the entire disk
 
-As of this writing, supported filesystems include `FAT32` and `ISO9660` (a.k.a. `.iso`).
+As of this writing, supported filesystems include `FAT32`, `ISO9660` (a.k.a. `.iso`), `SquashFS`, `ext4`, and read-only `EROFS`.
+
+EROFS support targets a read-only subset of the EROFS on-disk format: basic and
+LZMA-compressed files, compact and full compression indexes, fragment tails,
+and large logical clusters. Extended attributes are not exposed. See the
+[filesystem/erofs](./filesystem/erofs) package documentation for details,
+including how to read an image nested inside another backend.
 
 With a filesystem in hand, you can create, access and modify directories and files.
 
@@ -84,7 +90,7 @@ With a `File` in hand, you then can:
 * `Seek(offset int64, whence int)` to set the next read or write to an offset in the file
 
 ### Read-Only Filesystems
-Some filesystem types are intended to be created once, after which they are read-only, for example `ISO9660`/`.iso` and `squashfs`.
+Some filesystem types are intended to be created once, after which they are read-only, for example `ISO9660`/`.iso` and `squashfs`. EROFS is currently read-only with no creation support.
 
 `godiskfs` recognizes read-only filesystems and limits working with them to the following:
 

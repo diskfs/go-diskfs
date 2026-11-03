@@ -616,4 +616,53 @@ func TestGetFilesystem(t *testing.T) {
 			t.Errorf("returned filesystem was unexpectedly nil")
 		}
 	})
+	t.Run("erofs partition", func(t *testing.T) {
+		image, err := os.ReadFile("../filesystem/erofs/testdata/compressed.erofs")
+		if err != nil {
+			t.Fatalf("error reading EROFS fixture: %v", err)
+		}
+		f, err := os.CreateTemp("", "erofs_disk_test")
+		if err != nil {
+			t.Fatalf("error creating temporary disk: %v", err)
+		}
+		defer f.Close()
+		if _, err := f.Write(make([]byte, 4096)); err != nil {
+			t.Fatalf("error writing partition prefix: %v", err)
+		}
+		if _, err := f.Write(image); err != nil {
+			t.Fatalf("error writing EROFS image: %v", err)
+		}
+		fileInfo, err := f.Stat()
+		if err != nil {
+			t.Fatalf("error reading temporary disk info: %v", err)
+		}
+
+		table := &mbr.Table{
+			Partitions: []*mbr.Partition{
+				{Index: 1, Start: 8, Size: uint32(len(image) / 512)},
+			},
+			LogicalSectorSize: 512,
+		}
+		d := &disk.Disk{
+			Backend:           file.New(f, true),
+			LogicalBlocksize:  512,
+			PhysicalBlocksize: 512,
+			Size:              fileInfo.Size(),
+			Table:             table,
+		}
+		fs, err := d.GetFilesystem(1)
+		if err != nil {
+			t.Fatalf("GetFilesystem() error = %v", err)
+		}
+		if fs.Type() != filesystem.TypeErofs {
+			t.Fatalf("filesystem type = %v, want %v", fs.Type(), filesystem.TypeErofs)
+		}
+		data, err := fs.ReadFile("sub/data.bin")
+		if err != nil {
+			t.Fatalf("ReadFile() error = %v", err)
+		}
+		if len(data) != 96*1024 {
+			t.Fatalf("ReadFile() length = %d, want %d", len(data), 96*1024)
+		}
+	})
 }
