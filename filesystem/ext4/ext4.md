@@ -297,6 +297,12 @@ The conversion usually happens when a single entry will exceed the capacity of a
 1. Find the data blocks for that inode, see [inode to data blocks](#inode-to-data-blocks).
 1. Interpret the data blocks.
 
+The extents describe only the blocks that are allocated, so they need not cover the whole file. When reading a logical byte range:
+
+* File blocks that no extent covers (the holes of a sparse file) read as zeros.
+* Uninitialized extents (length field > 32768, see [inode to data blocks](#inode-to-data-blocks)) are allocated but were never written; they read as zeros and their disk blocks are not fetched.
+* Extents must be sorted by file block and must not overlap. A mapping that violates this is treated as corrupt and the read fails instead of returning data from the wrong place.
+
 ### Create File
 
 1. Walk the tree until you find the inode for the parent directory.
