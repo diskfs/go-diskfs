@@ -9,7 +9,7 @@ require (
 	github.com/go-test/deep v1.1.1
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
-	github.com/klauspost/compress v1.18.5
+	github.com/klauspost/compress v1.20.3
 	github.com/pierrec/lz4/v4 v4.1.26
 	github.com/pkg/xattr v0.4.12
 	github.com/sirupsen/logrus v1.9.4
