@@ -1121,6 +1121,90 @@ func TestRemoveIntegrity(t *testing.T) {
 	})
 }
 
+// TestRename tests renaming or moving files and folders around updates ext4
+// file structure.
+func TestRename(t *testing.T) {
+	// createTestFS builds a fresh 100 MB ext4 image (1 KiB blocks, firstDataBlock=1)
+	// and returns an open filesystem backed by a temporary file.
+	createTestFS := func(t *testing.T) (string, *FileSystem, *os.File) {
+		t.Helper()
+		outfile, f := testCreateEmptyFile(t, 25*MB)
+		fs, err := Create(file.New(f, false), 25*MB, 0, 512, &Params{})
+		if err != nil {
+			t.Fatalf("Create failed: %v", err)
+		}
+		return outfile, fs, f
+	}
+
+	// writeFile creates/overwrites a file path with the given payload.
+	writeFile := func(t *testing.T, fs *FileSystem, p string, payload []byte) {
+		t.Helper()
+		f, err := fs.OpenFile(p, os.O_CREATE|os.O_RDWR)
+		if err != nil {
+			t.Fatalf("OpenFile %s: %v", p, err)
+		}
+		if _, err := f.Write(payload); err != nil {
+			t.Fatalf("Write %s: %v", p, err)
+		}
+		f.Close()
+	}
+
+	// fill generates a deterministic payload of the given size filled with byte b.
+	fill := func(b byte, n int) []byte {
+		data := make([]byte, n)
+		for i := range data {
+			data[i] = b
+		}
+		return data
+	}
+
+	t.Run("rename local file and directory names", func(t *testing.T) {
+		fsname, fs, f := createTestFS(t)
+		defer func() { os.Remove(fsname) }()
+		defer f.Close()
+
+		// create 'a' and rename to 'b'
+		const dataSize = 1024
+		aFileData := fill('A', dataSize)
+		writeFile(t, fs, "a", aFileData)
+		err := fs.Rename("a", "b")
+		if err != nil {
+			t.Fatalf("failed to rename file: %v", err)
+		}
+
+		// mk 'tempdir' rename/move 'b' into tempdir/
+		if err = fs.Mkdir("tempdir"); err != nil {
+			t.Fatalf("failed to create tempdir: %v", err)
+		}
+		if err = fs.Rename("/b", "/tempdir/b"); err != nil {
+			t.Fatalf("failed to move /b to new /tempdir/b location: %+v", err)
+		}
+
+		// move 'tempdir' to 'newdir' & check layout
+		if err = fs.Rename("/tempdir", "/newdir"); err != nil {
+			t.Fatalf("failed to move /tempdir to /newdir: %v", err)
+		}
+		ents, err := fs.ReadDir("newdir")
+		if err != nil {
+			t.Fatalf("failed to read newdir: %v", err)
+		}
+		if len(ents) != 1 {
+			t.Fatalf("expected 1 dir entry, got: %d %v", len(ents), ents)
+		}
+		fd, err := fs.Open("newdir/b")
+		if err != nil {
+			t.Fatalf("failed to open moved directory file: %v", err)
+		}
+		bdata, err := io.ReadAll(fd)
+		if err != nil {
+			t.Fatalf("failed to read moved directory file: %v", err)
+		}
+		if !bytes.Equal(bdata, aFileData) {
+			t.Fatalf("moved file data not equal original data")
+		}
+	})
+}
+
 // safeFirstByte returns the first byte of buf as a string, or "<empty>" if buf is nil/empty.
 func safeFirstByte(buf []byte) string {
 	if len(buf) == 0 {
