@@ -156,6 +156,39 @@ func Create(b backend.Storage, size, start, blocksize int64) (*FileSystem, error
 //
 //	rclone -P --transfers 16 --checkers 16 copy :archive:/path/to/tensorflow.sqfs /tmp/tensorflow
 func Read(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) {
+	return ReadWithOptions(b, size, start, blocksize)
+}
+
+type ReadOption func(*ReadOptions)
+
+type ReadOptions struct {
+	// ZstdMaxMemory is the decoder history a zstd frame may ask for.
+	ZstdMaxMemory uint64
+}
+
+// WithZstdMaxMemory sets the decoder history, in bytes, a zstd frame may ask for, by its window or as a single
+// segment. A frame asking for more fails to decompress. The default, 8 MiB, reads the images of mksquashfs and of this
+// package; a larger one reads frames compressed with a larger window, as zstd --long or --ultra may write, at the cost
+// of as much memory per decompression. 0 keeps the default.
+func WithZstdMaxMemory(n uint64) ReadOption {
+	return func(o *ReadOptions) {
+		o.ZstdMaxMemory = n
+	}
+}
+
+func (o ReadOptions) apply(c Compressor) {
+	if z, ok := c.(*CompressorZstd); ok {
+		z.maxMemory = o.ZstdMaxMemory
+	}
+}
+
+// ReadWithOptions reads a filesystem from a given disk, like Read, with the given options applied.
+func ReadWithOptions(b backend.Storage, size, start, blocksize int64, opts ...ReadOption) (*FileSystem, error) {
+	var o ReadOptions
+	for _, opt := range opts {
+		opt(&o)
+	}
+
 	var (
 		read int
 		err  error
@@ -196,12 +229,16 @@ func Read(b backend.Storage, size, start, blocksize int64) (*FileSystem, error) 
 	if err != nil {
 		return nil, fmt.Errorf("error parsing superblock: %v", err)
 	}
+	if err := validateBlocksize(int64(s.blocksize)); err != nil {
+		return nil, fmt.Errorf("invalid superblock: %w", err)
+	}
 
 	// create the compressor function we will use
 	compress, err := newCompressor(s.compression)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create compressor: %v", err)
 	}
+	o.apply(compress)
 
 	// load fragments
 	fragments, err := readFragmentTable(s, b, compress)
@@ -739,9 +776,9 @@ func (fs *FileSystem) readBlock(location int64, compressed bool, size uint32) ([
 		return nil, fmt.Errorf("read %d bytes instead of expected %d", read, size)
 	}
 	if compressed {
-		b, err = fs.compressor.decompress(b)
+		b, err = fs.compressor.decompress(b, int(fs.blocksize))
 		if err != nil {
-			return nil, fmt.Errorf("decompress error: %v", err)
+			return nil, fmt.Errorf("decompress error: %w", err)
 		}
 	}
 	return b, nil
@@ -756,6 +793,9 @@ func (fs *FileSystem) readFragment(index, offset uint32, fragmentSize int64) ([]
 		return nil, fmt.Errorf("cannot find fragment block with index %d", index)
 	}
 	fragmentInfo := fs.fragments[index]
+	if int64(fragmentInfo.size) > fs.blocksize {
+		return nil, fmt.Errorf("fragment block %d is %d bytes, more than the block size %d", index, fragmentInfo.size, fs.blocksize)
+	}
 	pos := int64(fragmentInfo.start)
 	data, _, err := fs.cache.get(pos, func() (data []byte, size uint16, err error) {
 		// figure out the size of the compressed block and if it is compressed
@@ -773,15 +813,18 @@ func (fs *FileSystem) readFragment(index, offset uint32, fragmentSize int64) ([]
 			if fs.compressor == nil {
 				return nil, 0, fmt.Errorf("fragment compressed but do not have valid compressor")
 			}
-			data, err = fs.compressor.decompress(b)
+			data, err = fs.compressor.decompress(b, int(fs.blocksize))
 			if err != nil {
-				return nil, 0, fmt.Errorf("decompress error: %v", err)
+				return nil, 0, fmt.Errorf("decompress error: %w", err)
 			}
 		}
 		return data, 0, nil
 	})
 	if err != nil {
 		return nil, err
+	}
+	if fragmentSize < 0 || int64(offset)+fragmentSize > int64(len(data)) {
+		return nil, fmt.Errorf("fragment of %d bytes at offset %d is outside fragment block %d of %d bytes", fragmentSize, offset, index, len(data))
 	}
 	// now get the data from the offset
 	return data[offset : int64(offset)+fragmentSize], nil

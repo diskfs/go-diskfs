@@ -2,10 +2,14 @@ package squashfs
 
 import (
 	"bytes"
+	"encoding/binary"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/klauspost/compress/zstd"
 )
 
 func TestNewCompressor(t *testing.T) {
@@ -62,7 +66,7 @@ func testCompressAndDecompress(t *testing.T, c Compressor, compressed []byte) {
 //nolint:thelper // this is not a helper function
 func testDecompress(t *testing.T, c Compressor, compressed []byte, errorStr string) {
 	t.Run("decompress", func(t *testing.T) {
-		out, err := c.decompress(compressed)
+		out, err := c.decompress(compressed, int(maxBlocksize))
 		switch {
 		case errorStr != "" && err == nil:
 			t.Errorf("expected error %q, got nil", errorStr)
@@ -103,7 +107,7 @@ func testCompress(t *testing.T, c Compressor, errorStr string) {
 			}
 			return
 		}
-		decompressed, err := c.decompress(out)
+		decompressed, err := c.decompress(out, int(maxBlocksize))
 		switch {
 		case err != nil:
 			t.Errorf("unexpected error: %v", err)
@@ -244,8 +248,100 @@ func TestCompressorZstdLevel(t *testing.T) {
 	if bytes.Equal(fast, best) {
 		t.Errorf("levels 1 and 19 compressed to the same bytes")
 	}
-	out, err := (&CompressorZstd{}).decompress(best)
+	out, err := (&CompressorZstd{}).decompress(best, int(maxBlocksize))
 	if err != nil || !bytes.Equal(out, in) {
 		t.Errorf("round trip failed: %v", err)
+	}
+}
+
+// TestDecompressLimit checks that no decompressor produces more than the size it is given: a small block of zeros
+// expands to more than a block, and must fail as soon as it does instead of being decoded to the end.
+func TestDecompressLimit(t *testing.T) {
+	const maxSize = int(maxBlocksize)
+	bomb := make([]byte, 64*maxSize)
+
+	for _, c := range []Compressor{
+		&CompressorGzip{CompressionLevel: 9},
+		&CompressorLzma{},
+		&CompressorXz{},
+		&CompressorLz4{},
+		&CompressorZstd{},
+	} {
+		t.Run(fmt.Sprintf("%T", c), func(t *testing.T) {
+			compressed, err := c.compress(bomb)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if _, err := c.decompress(compressed, maxSize); !errors.Is(err, ErrDecompressedTooLarge) {
+				t.Errorf("%d bytes decompressing to %d: expected %v, got %v", len(compressed), len(bomb), ErrDecompressedTooLarge, err)
+			}
+
+			// exactly the limit is allowed
+			exact, err := c.compress(bomb[:maxSize])
+			if err != nil {
+				t.Fatal(err)
+			}
+			out, err := c.decompress(exact, maxSize)
+			if err != nil || len(out) != maxSize {
+				t.Errorf("block of exactly %d bytes: got %d bytes, %v", maxSize, len(out), err)
+			}
+		})
+	}
+
+	// LZO cannot compress: the fixture of TestCompressionLzo, one byte short of room
+	t.Run("*squashfs.CompressorLzo", func(t *testing.T) {
+		compressed := []byte{
+			0x75, 0xde, 0xc9, 0x4e, 0xd0, 0xef, 0x19, 0xdb, 0x0a, 0x6a, 0x35, 0x26,
+			0x61, 0x86, 0x2d, 0xa0, 0x42, 0x18, 0xa8, 0x89, 0xe9, 0xc4, 0x7b, 0x1a,
+			0xc7, 0x85, 0x8e, 0xd6, 0x36, 0xd6, 0x83, 0x84, 0x21, 0xf4, 0x06, 0x38,
+			0x07, 0x7b, 0x33, 0x3f, 0x72, 0x4c, 0xae, 0xcd, 0xfd, 0xa0, 0xb0, 0x71,
+			0x2f, 0x64, 0x62, 0x62, 0x2f, 0xc3, 0x5f, 0xa1, 0x21, 0xc6, 0xbf, 0x2c,
+			0x39, 0xef, 0x56, 0x23, 0x61, 0xb0, 0x98, 0x84, 0xcd, 0x24, 0xc4, 0xbf,
+			0x30, 0xae, 0xd9, 0x9e, 0xb0, 0x7b, 0xc5, 0xa3, 0x8d, 0xf7, 0x4f, 0xb8,
+			0xdd, 0x7b, 0x77, 0xb6, 0x8c, 0x5a, 0x10, 0xa4, 0xce, 0xc2, 0x0a, 0x3d,
+			0x51, 0x23, 0x8c, 0x10, 0x1a, 0x11, 0x00, 0x00,
+		}
+		c := &CompressorLzo{}
+		if _, err := c.decompress(compressed, len(testCompressUncompressed)-1); !errors.Is(err, ErrDecompressedTooLarge) {
+			t.Errorf("expected %v, got %v", ErrDecompressedTooLarge, err)
+		}
+		if out, err := c.decompress(compressed, len(testCompressUncompressed)); err != nil || !bytes.Equal(out, testCompressUncompressed) {
+			t.Errorf("block of exactly the limit: %v", err)
+		}
+	})
+}
+
+func TestDecompressZstdMaxMemory(t *testing.T) {
+	const asked = 10 << 20 // 10 MiB, above the default
+	magic := []byte{0x28, 0xb5, 0x2f, 0xfd}
+	lastRawBlock := []byte{0x09, 0x00, 0x00, 'x'} // last block, raw, 1 byte
+
+	// https://www.rfc-editor.org/rfc/rfc8878#name-frame-header
+	// window descriptor: 2^(10+13) + 2 * 2^(10+13)/8 = 10 MiB
+	window := append(append(bytes.Clone(magic), 0x00, 13<<3|2), lastRawBlock...)
+	// single segment, 8-byte frame content size, no window descriptor
+	singleSegment := append(append(bytes.Clone(magic), 0xe0), binary.LittleEndian.AppendUint64(nil, asked)...)
+	singleSegment = append(singleSegment, lastRawBlock...)
+
+	for name, tc := range map[string]struct {
+		frame []byte
+		err   error
+	}{
+		"window":         {window, zstd.ErrWindowSizeExceeded},
+		"single segment": {singleSegment, zstd.ErrDecoderSizeExceeded},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := (&CompressorZstd{}).decompress(tc.frame, int(maxBlocksize)); !errors.Is(err, tc.err) {
+				t.Errorf("default limit, frame asking for %d bytes: expected %v, got %v", asked, tc.err, err)
+			}
+
+			// a larger limit reads the header: the frame then decodes, or fails on its 1 byte of content
+			c := &CompressorZstd{}
+			ReadOptions{ZstdMaxMemory: 16 << 20}.apply(c)
+			if _, err := c.decompress(tc.frame, int(maxBlocksize)); errors.Is(err, zstd.ErrWindowSizeExceeded) || errors.Is(err, zstd.ErrDecoderSizeExceeded) {
+				t.Errorf("16 MiB limit, frame asking for %d bytes: got %v", asked, err)
+			}
+		})
 	}
 }
