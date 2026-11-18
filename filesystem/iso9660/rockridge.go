@@ -273,7 +273,7 @@ type rockRidgePosixAttributes struct {
 	linkCount uint32
 	uid       uint32
 	gid       uint32
-	serial    uint64
+	serial    uint32
 }
 
 func (d rockRidgePosixAttributes) Equal(o directoryEntrySystemUseExtension) bool {
@@ -346,7 +346,8 @@ func (d rockRidgePosixAttributes) Data() []byte {
 	binary.LittleEndian.PutUint32(ret[24:28], d.gid)
 	binary.BigEndian.PutUint32(ret[28:32], d.gid)
 	if d.length == 44 {
-		binary.LittleEndian.PutUint64(ret[32:40], d.serial)
+		binary.LittleEndian.PutUint32(ret[32:36], d.serial)
+		binary.BigEndian.PutUint32(ret[36:40], d.serial)
 	}
 	return ret
 }
@@ -415,9 +416,9 @@ func (r *rockRidgeExtension) parsePosixAttributes(b []byte) (directoryEntrySyste
 		m |= uint32(os.ModeNamedPipe)
 	}
 
-	var serial uint64
+	var serial uint32
 	if len(b) == 44 {
-		serial = binary.LittleEndian.Uint64(b[36:44])
+		serial = binary.LittleEndian.Uint32(b[36:40])
 	}
 	return rockRidgePosixAttributes{
 		mode:      os.FileMode(m),
