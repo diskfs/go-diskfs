@@ -577,7 +577,7 @@ func (de *directoryEntry) statT() *StatT {
 			s.UID = e.uid
 			s.GID = e.gid
 			s.NLink = e.linkCount
-			s.Inode = uint32(e.serial)
+			s.Inode = e.serial
 		case rockRidgeSymlink:
 			s.RockRidge = true
 			if !e.continued {

@@ -1,6 +1,7 @@
 package iso9660
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/user"
@@ -132,9 +133,13 @@ func TestRockRidgePosixAttributesRoundTrip(t *testing.T) {
 		uid:       1000,
 		gid:       1000,
 		length:    rr.pxLength,
-		serial:    42,
+		serial:    0x12345678,
 	}
 	b := original.Bytes()
+	wantSerial := []byte{0x78, 0x56, 0x34, 0x12, 0x12, 0x34, 0x56, 0x78}
+	if !bytes.Equal(b[36:44], wantSerial) {
+		t.Fatalf("PX serial bytes = %x, want %x", b[36:44], wantSerial)
+	}
 	parsed, err := rr.parsePosixAttributes(b)
 	if err != nil {
 		t.Fatalf("unexpected error parsing PX: %v", err)
