@@ -156,3 +156,62 @@ func TestReadMetaBlockLimit(t *testing.T) {
 		t.Errorf("%d bytes: expected %v, got %v", metadataBlockSize+1, ErrDecompressedTooLarge, err)
 	}
 }
+
+func TestReadMetadata(t *testing.T) {
+	// three uncompressed metadata blocks, of 5, 4 and 3 bytes, at 0, 7 and 13
+	table := []byte{
+		0x5, 0x80, 1, 2, 3, 4, 5,
+		0x4, 0x80, 6, 7, 8, 9,
+		0x3, 0x80, 10, 11, 12,
+	}
+	tests := []struct {
+		name        string
+		blockOffset uint32
+		byteOffset  uint16
+		size        int
+		out         []byte
+		err         string
+	}{
+		{"within the first block", 0, 1, 2, []byte{2, 3}, ""},
+		{"to the end of the first block", 0, 0, 5, []byte{1, 2, 3, 4, 5}, ""},
+		{"across two blocks", 0, 3, 4, []byte{4, 5, 6, 7}, ""},
+		{"across three blocks", 0, 4, 6, []byte{5, 6, 7, 8, 9, 10}, ""},
+		{"from a later block", 7, 1, 2, []byte{7, 8}, ""},
+		{"from the end of a block", 0, 5, 2, []byte{6, 7}, ""},
+		{"nothing", 0, 2, 0, []byte{}, ""},
+		{"offset beyond the block", 0, 6, 1, nil, "offset 6 is beyond the 5 bytes of metadata block at 0"},
+		{"beyond the end of the table", 7, 0, 20, nil, "metadata block at 18 compressed, but no compressor provided"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fs := &FileSystem{cache: newLRU(10)}
+			b, err := fs.readMetadata(bytes.NewReader(table), nil, 0, tt.blockOffset, tt.byteOffset, tt.size)
+			switch {
+			case tt.err != "" && (err == nil || !strings.Contains(err.Error(), tt.err)):
+				t.Errorf("expected error %q, got %v", tt.err, err)
+			case tt.err == "" && err != nil:
+				t.Errorf("unexpected error: %v", err)
+			case !bytes.Equal(b, tt.out):
+				t.Errorf("got % x, expected % x", b, tt.out)
+			}
+		})
+	}
+
+	// the bytes returned are the caller's own: changing them does not change what the cache returns next
+	t.Run("returns a copy", func(t *testing.T) {
+		fs := &FileSystem{cache: newLRU(10)}
+		b, err := fs.readMetadata(bytes.NewReader(table), nil, 0, 0, 0, 5)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b[0] = 0xff
+		b, err = fs.readMetadata(bytes.NewReader(table), nil, 0, 0, 0, 5)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if b[0] != 1 {
+			t.Errorf("cached block changed through a returned slice: got % x", b)
+		}
+	})
+}

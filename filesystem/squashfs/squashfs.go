@@ -754,10 +754,6 @@ func (fs *FileSystem) getDirectory(blockOffset uint32, byteOffset uint16, size i
 	if err != nil {
 		return nil, fmt.Errorf("error reading block at position %d: %v", blockOffset, err)
 	}
-	// for parseDirectory, we only want to use precisely the right number of bytes
-	if len(uncompressed) > size {
-		uncompressed = uncompressed[:size]
-	}
 	// get the inode from the offset into the uncompressed block
 	return parseDirectory(uncompressed)
 }
