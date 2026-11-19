@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/zlib"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 
@@ -14,10 +15,13 @@ import (
 	"github.com/ulikunitz/xz/lzma"
 )
 
+// ErrDecompressedTooLarge is returned when a block decompresses to more bytes than its kind allows.
+var ErrDecompressedTooLarge = errors.New("decompressed block larger than allowed")
+
 // Compressor defines a compressor. Fulfilled by various implementations in this package
 type Compressor interface {
 	compress([]byte) ([]byte, error)
-	decompress([]byte) ([]byte, error)
+	decompress([]byte, int) ([]byte, error)
 	loadOptions([]byte) error
 	optionsBytes() []byte
 	flavour() compression
@@ -41,17 +45,13 @@ func (c *CompressorLzma) compress(in []byte) ([]byte, error) {
 	}
 	return b.Bytes(), nil
 }
-func (c *CompressorLzma) decompress(in []byte) ([]byte, error) {
+func (c *CompressorLzma) decompress(in []byte, maxSize int) ([]byte, error) {
 	b := bytes.NewReader(in)
 	lz, err := lzma.NewReader(b)
 	if err != nil {
 		return nil, fmt.Errorf("error creating lzma decompressor: %v", err)
 	}
-	p, err := io.ReadAll(lz)
-	if err != nil {
-		return nil, fmt.Errorf("error decompressing: %v", err)
-	}
-	return p, nil
+	return readAllLimited(lz, maxSize)
 }
 
 //nolint:unused,revive // it is important to implement the interface
@@ -101,15 +101,15 @@ func (c *CompressorGzip) compress(in []byte) ([]byte, error) {
 	}
 	return b.Bytes(), nil
 }
-func (c *CompressorGzip) decompress(in []byte) ([]byte, error) {
+func (c *CompressorGzip) decompress(in []byte, maxSize int) ([]byte, error) {
 	b := bytes.NewReader(in)
 	gz, err := zlib.NewReader(b)
 	if err != nil {
 		return nil, fmt.Errorf("error creating gzip decompressor: %v", err)
 	}
-	p, err := io.ReadAll(gz)
+	p, err := readAllLimited(gz, maxSize)
 	if err != nil {
-		return nil, fmt.Errorf("error decompressing: %v", err)
+		return nil, err
 	}
 	if err := gz.Close(); err != nil {
 		return nil, err
@@ -187,17 +187,13 @@ func (c *CompressorXz) compress(in []byte) ([]byte, error) {
 	}
 	return b.Bytes(), nil
 }
-func (c *CompressorXz) decompress(in []byte) ([]byte, error) {
+func (c *CompressorXz) decompress(in []byte, maxSize int) ([]byte, error) {
 	b := bytes.NewReader(in)
 	xzReader, err := xz.NewReader(b)
 	if err != nil {
 		return nil, fmt.Errorf("error creating xz decompressor: %v", err)
 	}
-	p, err := io.ReadAll(xzReader)
-	if err != nil {
-		return nil, fmt.Errorf("error decompressing: %v", err)
-	}
-	return p, nil
+	return readAllLimited(xzReader, maxSize)
 }
 func (c *CompressorXz) loadOptions(b []byte) error {
 	expected := 8
@@ -258,14 +254,10 @@ func (c *CompressorLz4) compress(in []byte) ([]byte, error) {
 	}
 	return b.Bytes(), nil
 }
-func (c *CompressorLz4) decompress(in []byte) ([]byte, error) {
+func (c *CompressorLz4) decompress(in []byte, maxSize int) ([]byte, error) {
 	b := bytes.NewReader(in)
 	lz := lz4.NewReader(b)
-	p, err := io.ReadAll(lz)
-	if err != nil {
-		return nil, fmt.Errorf("error decompressing: %v", err)
-	}
-	return p, nil
+	return readAllLimited(lz, maxSize)
 }
 func (c *CompressorLz4) loadOptions(b []byte) error {
 	expected := 8
@@ -308,6 +300,8 @@ type CompressorZstd struct {
 	// Level is the zstd level, 1 to 22. 0 keeps the encoder's default,
 	// which corresponds to level 3.
 	Level uint32
+	// maxMemory is the decoder history a frame may ask for, zstdMaxMemory if 0, see WithZstdMaxMemory
+	maxMemory uint64
 }
 
 const (
@@ -359,17 +353,26 @@ func (c *CompressorZstd) compress(in []byte) ([]byte, error) {
 	}
 	return b.Bytes(), nil
 }
-func (c *CompressorZstd) decompress(in []byte) ([]byte, error) {
-	z, err := zstd.NewReader(nil)
+
+// zstdMaxMemory is the default of the decoder history a frame may ask for, by its window or as a single segment, see
+// WithZstdMaxMemory. RFC 8878 leaves that limit to the decoder, recommending support for windows up to 8 MiB
+// (https://www.rfc-editor.org/rfc/rfc8878#section-3.1.1.1.2). A block is at most 1 MiB, so no frame needs more history
+// than that: mksquashfs, compressing each block with its size known, declares at most the block, and the
+// klauspost/compress encoder of CompressorZstd.compress declares its default window, 8 MiB.
+// The output is bounded by readAllLimited, to the size of the block.
+const zstdMaxMemory = 8 << 20
+
+func (c *CompressorZstd) decompress(in []byte, maxSize int) ([]byte, error) {
+	maxMemory := c.maxMemory
+	if maxMemory == 0 {
+		maxMemory = zstdMaxMemory
+	}
+	z, err := zstd.NewReader(bytes.NewReader(in), zstd.WithDecoderMaxMemory(maxMemory))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create zstd decompressor: %w", err)
 	}
 	defer z.Close()
-	p, err := z.DecodeAll(in, nil)
-	if err != nil {
-		return nil, fmt.Errorf("error decompressing zstd: %w", err)
-	}
-	return p, nil
+	return readAllLimited(z, maxSize)
 }
 
 type CompressorLzo struct {
@@ -378,14 +381,16 @@ type CompressorLzo struct {
 func (c *CompressorLzo) compress(_ []byte) ([]byte, error) {
 	return nil, fmt.Errorf("LZO compression not yet supported")
 }
-func (c *CompressorLzo) decompress(in []byte) ([]byte, error) {
-	b := bytes.NewReader(in)
-	lz := lzo.NewReader(b)
-	p, err := io.ReadAll(lz)
-	if err != nil {
-		return nil, fmt.Errorf("error decompressing: %v", err)
+func (c *CompressorLzo) decompress(in []byte, maxSize int) ([]byte, error) {
+	out := make([]byte, maxSize)
+	n, err := lzo.Decompress(in, out)
+	if errors.Is(err, lzo.ErrOutputOverrun) {
+		return nil, fmt.Errorf("%w: more than %d bytes", ErrDecompressedTooLarge, maxSize)
 	}
-	return p, nil
+	if err != nil {
+		return nil, fmt.Errorf("error decompressing: %w", err)
+	}
+	return out[:n], nil
 }
 
 //nolint:unused,revive // it is important to implement the interface
@@ -398,6 +403,18 @@ func (c *CompressorLzo) optionsBytes() []byte {
 }
 func (c *CompressorLzo) flavour() compression {
 	return compressionLzo
+}
+
+// readAllLimited reads r to the end, failing with ErrDecompressedTooLarge as soon as it produces more than maxSize bytes.
+func readAllLimited(r io.Reader, maxSize int) ([]byte, error) {
+	p, err := io.ReadAll(io.LimitReader(r, int64(maxSize)+1))
+	if err != nil {
+		return nil, fmt.Errorf("error decompressing: %w", err)
+	}
+	if len(p) > maxSize {
+		return nil, fmt.Errorf("%w: more than %d bytes", ErrDecompressedTooLarge, maxSize)
+	}
+	return p, nil
 }
 
 func newCompressor(flavour compression) (Compressor, error) {

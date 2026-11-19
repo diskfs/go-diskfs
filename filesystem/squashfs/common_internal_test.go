@@ -12,11 +12,17 @@ func (c *testCompressorAddBytes) compress(b []byte) ([]byte, error) {
 	}
 	return b[:len(b)-len(c.b)], nil
 }
-func (c *testCompressorAddBytes) decompress(b []byte) ([]byte, error) {
+func (c *testCompressorAddBytes) decompress(b []byte, maxSize int) ([]byte, error) {
 	if c.err != nil {
 		return nil, c.err
 	}
-	return append(b, c.b...), nil
+	out := make([]byte, 0, len(b)+len(c.b))
+	out = append(out, b...)
+	out = append(out, c.b...)
+	if len(out) > maxSize {
+		return nil, ErrDecompressedTooLarge
+	}
+	return out, nil
 }
 
 //nolint:unused,revive // it is important to implement the interface

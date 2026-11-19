@@ -2,6 +2,7 @@ package squashfs
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -137,5 +138,21 @@ func TestReadMetaBlock(t *testing.T) {
 			t.Logf("% x", b)
 			t.Logf("% x", tt.out)
 		}
+	}
+}
+
+// TestReadMetaBlockLimit checks that a metadata block may decompress to at most 8 KiB.
+func TestReadMetaBlockLimit(t *testing.T) {
+	b := []byte{0x5, 0x00, 1, 2, 3, 4, 5}
+	// 5 bytes in, metadataBlockSize - 5 added: exactly the limit, then one byte over it
+	exact := &testCompressorAddBytes{b: make([]byte, metadataBlockSize-5)}
+	over := &testCompressorAddBytes{b: make([]byte, metadataBlockSize-4)}
+
+	fs := &FileSystem{}
+	if out, _, err := fs.readMetaBlock(bytes.NewReader(b), exact, 0); err != nil || len(out) != int(metadataBlockSize) {
+		t.Errorf("exactly %d bytes: got %d bytes, %v", metadataBlockSize, len(out), err)
+	}
+	if _, _, err := fs.readMetaBlock(bytes.NewReader(b), over, 0); !errors.Is(err, ErrDecompressedTooLarge) {
+		t.Errorf("%d bytes: expected %v, got %v", metadataBlockSize+1, ErrDecompressedTooLarge, err)
 	}
 }
