@@ -57,7 +57,7 @@ type groupDescriptor struct {
 	inodeBitmapChecksum             uint32
 	unusedInodes                    uint32
 	size                            uint16
-	number                          uint16
+	number                          uint32
 }
 
 func (gd *groupDescriptor) equal(other *groupDescriptor) bool {
@@ -176,7 +176,7 @@ func groupDescriptorFromBytes(b []byte, gdSize uint16, number int, checksumType 
 		checksumInput = b[0x0:0x40]
 	}
 
-	gdNumber := uint16(number)
+	gdNumber := uint32(number)
 
 	gd := groupDescriptor{
 		size:                            gdSize,
@@ -305,11 +305,11 @@ func (f *blockGroupFlags) toInt() uint16 {
 //	we do know that the maximum number of block groups in 32-bit mode is 2^19, which must be uint32
 //	and in 64-bit mode it is 2^51 which must be uint64
 //	So we start with uint32 = [4]byte{} for regular mode and [8]byte{} for mod32
-func groupDescriptorChecksum(b []byte, hashSeed uint32, groupNumber uint16, checksumType gdtChecksumType) uint16 {
+func groupDescriptorChecksum(b []byte, hashSeed uint32, groupNumber uint32, checksumType gdtChecksumType) uint16 {
 	var checksum uint16
 
 	numBytes := make([]byte, 4)
-	binary.LittleEndian.PutUint16(numBytes, groupNumber)
+	binary.LittleEndian.PutUint32(numBytes, groupNumber)
 	switch checksumType {
 	case gdtChecksumNone:
 		checksum = 0
