@@ -1,6 +1,8 @@
 package ext4
 
 import (
+	"bytes"
+	"encoding/binary"
 	"fmt"
 	"os"
 	"testing"
@@ -98,5 +100,55 @@ func TestGroupDescriptorsToBytes(t *testing.T) {
 	diff, diffString := testhelper.DumpByteSlicesWithDiffs(b, expected, 32, false, true, true)
 	if diff {
 		t.Errorf("groupDescriptors.toBytes() mismatched, actual then expected\n%s", diffString)
+	}
+}
+
+func TestGroupDescriptorChecksumLargeGroupNumbers(t *testing.T) {
+	const seed uint32 = 0x12345678
+
+	tests := []struct {
+		group    uint32
+		checksum uint16
+	}{
+		{65535, 0x2068},
+		{65536, 0x8eba},
+		{65537, 0xaa81},
+		{0x80000000, 0x29e5},
+		{0xfffffffe, 0xc348},
+		{0xffffffff, 0xe773},
+	}
+
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("group_%d", tt.group), func(t *testing.T) {
+			// Synthetic 64-byte EXT4 group descriptor.
+			b := make([]byte, groupDescriptorSize64Bit)
+
+			binary.LittleEndian.PutUint32(b[0x00:], 42)
+			binary.LittleEndian.PutUint32(b[0x04:], 100)
+			binary.LittleEndian.PutUint16(b[0x1e:], tt.checksum)
+
+			gd, err := groupDescriptorFromBytes(
+				b,
+				groupDescriptorSize64Bit,
+				int(tt.group),
+				gdtChecksumMetadata,
+				seed,
+			)
+			if err != nil {
+				t.Fatalf("failed to parse group %d: %v", tt.group, err)
+			}
+
+			if gd.number != tt.group {
+				t.Errorf("group number = %d, want %d",
+					gd.number, tt.group)
+			}
+
+			// Verify that serialization preserves the checksum.
+			got := gd.toBytes(gdtChecksumMetadata, seed)
+			if !bytes.Equal(got, b) {
+				t.Errorf("group %d: serialized descriptor mismatch\n"+
+					"got:  %x\nwant: %x", tt.group, got, b)
+			}
+		})
 	}
 }

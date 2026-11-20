@@ -3284,7 +3284,7 @@ func buildGroupDescriptorsFromSuperblock(sb *superblock) groupDescriptors {
 
 	for g := 0; g < groups; g++ {
 		var d groupDescriptor
-		d.number = uint16(g)
+		d.number = uint32(g)
 		d.size = descSize
 
 		firstBlockOfGroup := uint64(sb.firstDataBlock) + uint64(g)*blocksPerGroup
