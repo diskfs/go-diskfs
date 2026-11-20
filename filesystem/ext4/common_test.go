@@ -68,11 +68,11 @@ var (
 	gdtRELines = []testGDTLineHandler{
 		{regexp.MustCompile(`^Group (\d+): \(Blocks (\d+)-(\d+)\) csum 0x([0-9a-f]+) \[(.*)]`), func(gd *groupDescriptor, matches []string) error {
 			// group number
-			number, err := strconv.ParseUint(matches[1], 10, 16)
+			number, err := strconv.ParseUint(matches[1], 10, 32)
 			if err != nil {
 				return fmt.Errorf("failed to parse group number: %v", err)
 			}
-			gd.number = uint16(number)
+			gd.number = uint32(number)
 			// parse the flags
 			flags := strings.Split(matches[5], ",")
 			for _, flag := range flags {
