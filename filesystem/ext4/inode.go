@@ -232,18 +232,6 @@ func inodeFromBytes(b []byte, sb *superblock, number uint32) (*inode, error) {
 	// only work with the amount of data that is the size of the inode, even if more was passed in
 	b = b[:sb.inodeSize]
 
-	// checksum before using the data
-	checksumBytes := make([]byte, 4)
-
-	// checksum before using the data
-	copy(checksumBytes[0:2], b[0x7c:0x7e])
-	copy(checksumBytes[2:4], b[0x82:0x84])
-	// zero out checksum fields before calculating the checksum
-	b[0x7c] = 0
-	b[0x7d] = 0
-	b[0x82] = 0
-	b[0x83] = 0
-
 	// block count, reserved block count and free blocks depends on whether the fs is 64-bit or not
 	owner := make([]byte, 4)
 	fileSize := make([]byte, 8)
@@ -386,11 +374,18 @@ func inodeFromBytes(b []byte, sb *superblock, number uint32) (*inode, error) {
 		blockPointers:          blockPointers,
 		linkTarget:             linkTarget,
 	}
-	checksum := binary.LittleEndian.Uint32(checksumBytes)
-	actualChecksum := inodeChecksum(b, sb.checksumSeed, number, i.nfsFileVersion)
-
-	if actualChecksum != checksum {
-		return nil, fmt.Errorf("checksum mismatch, on-disk %x vs calculated %x", checksum, actualChecksum)
+	// Linux does not maintain inode checksums when metadata_csum is disabled.
+	if sb.features.metadataChecksums {
+		checksum := uint32(binary.LittleEndian.Uint16(b[0x7c:0x7e])) | uint32(binary.LittleEndian.Uint16(b[0x82:0x84]))<<16
+		// Zero out checksum fields before calculating the checksum.
+		b[0x7c] = 0
+		b[0x7d] = 0
+		b[0x82] = 0
+		b[0x83] = 0
+		actualChecksum := inodeChecksum(b, sb.checksumSeed, number, i.nfsFileVersion)
+		if actualChecksum != checksum {
+			return nil, fmt.Errorf("checksum mismatch, on-disk %x vs calculated %x", checksum, actualChecksum)
+		}
 	}
 
 	return &i, nil
