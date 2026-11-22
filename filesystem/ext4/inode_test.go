@@ -32,7 +32,7 @@ func TestInodeFromBytesChecksum(t *testing.T) {
 				},
 			}
 			data := make([]byte, sb.inodeSize)
-			binary.LittleEndian.PutUint16(data[0x00:0x02], uint16(fileTypeRegularFile)|0644)
+			binary.LittleEndian.PutUint16(data[0x00:0x02], uint16(fileTypeRegularFile)|0o644)
 			binary.LittleEndian.PutUint32(data[0x04:0x08], 42)
 			binary.LittleEndian.PutUint32(data[0x64:0x68], 17)
 			binary.LittleEndian.PutUint16(data[0x80:0x82], 32)
