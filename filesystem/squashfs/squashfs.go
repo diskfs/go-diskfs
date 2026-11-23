@@ -35,6 +35,7 @@ type FileSystem struct {
 	xattrs     *xAttrTable
 	rootDir    inode
 	cache      *lru
+	dirCache   *dirCache
 }
 
 // Equal compare if two filesystems are equal
@@ -275,6 +276,7 @@ func ReadWithOptions(b backend.Storage, size, start, blocksize int64, opts ...Re
 		fragments:  fragments,
 		uidsGids:   uidsgids,
 		cache:      newLRU(int(defaultCacheSize) / int(s.blocksize)),
+		dirCache:   newDirCache(defaultDirCacheEntries),
 	}
 	// for efficiency, read in the root inode right now
 	rootInode, err := fs.getInode(s.rootInode.block, s.rootInode.offset, inodeBasicDirectory)
@@ -570,24 +572,79 @@ func (fs *FileSystem) Stat(name string) (iofs.FileInfo, error) {
 
 // readDirectory - read directory entry on squashfs only (not workspace)
 func (fs *FileSystem) readDirectory(p string) ([]*directoryEntry, error) {
-	// use the root inode to find the location of the root direectory in the table
-	entries, err := fs.getDirectoryEntries(p, fs.rootDir)
+	entriesRaw, err := fs.readDirectoryRaw(p)
 	if err != nil {
 		return nil, fmt.Errorf("could not read directory at path %s: %v", p, err)
+	}
+	entries, err := fs.hydrateDirectoryEntries(entriesRaw)
+	if err != nil {
+		return nil, fmt.Errorf("could not populate directory entries for %s with properties: %v", p, err)
 	}
 	return entries, nil
 }
 
-func (fs *FileSystem) getDirectoryEntries(p string, in inode) ([]*directoryEntry, error) {
+// readDirectoryRaw returns the entries of the directory at p, as stored in the directory table, without reading their
+// inodes. It starts from the closest directory to p, p itself included, found in the directory cache, rather than
+// from the root, and caches every directory it parses on the way down.
+//
+// The returned slice is shared with the cache: callers must not modify it.
+func (fs *FileSystem) readDirectoryRaw(p string) ([]*directoryEntryRaw, error) {
+	parts := splitPath(p)
+	if len(parts) == 1 && parts[0] == "." {
+		parts = nil
+	}
+
+	// find the closest cached directory, going up from p
+	var (
+		entries []*directoryEntryRaw
+		depth   int
+		cached  bool
+	)
+	for depth = len(parts); depth >= 0; depth-- {
+		if entries, cached = fs.dirCache.get(path.Join(parts[:depth]...)); cached {
+			break
+		}
+	}
+	if !cached {
+		var err error
+		depth = 0
+		if entries, err = fs.readDirectoryInode(fs.rootDir); err != nil {
+			return nil, err
+		}
+		fs.dirCache.add("", entries)
+	}
+
+	// then go down to p
+	for ; depth < len(parts); depth++ {
+		var entry *directoryEntryRaw
+		for _, e := range entries {
+			if e.name == parts[depth] {
+				entry = e
+				break
+			}
+		}
+		if entry == nil {
+			return nil, fmt.Errorf("could not find path %s", p)
+		}
+		in, err := fs.getInode(entry.startBlock, entry.offset, entry.inodeType)
+		if err != nil {
+			return nil, fmt.Errorf("error finding inode for %s: %v", path.Join(parts[:depth+1]...), err)
+		}
+		if entries, err = fs.readDirectoryInode(in); err != nil {
+			return nil, fmt.Errorf("could not get entries of %s: %v", path.Join(parts[:depth+1]...), err)
+		}
+		fs.dirCache.add(path.Join(parts[:depth+1]...), entries)
+	}
+	return entries, nil
+}
+
+// readDirectoryInode returns the entries of the directory the inode in describes, as stored in the directory table.
+func (fs *FileSystem) readDirectoryInode(in inode) ([]*directoryEntryRaw, error) {
 	var (
 		block  uint32
 		offset uint16
 		size   int
 	)
-
-	// break path down into parts and levels
-	parts := splitPath(p)
-
 	iType := in.inodeType()
 	body := in.getBody()
 	//nolint:exhaustive // we only are looking for directory types here
@@ -610,42 +667,7 @@ func (fs *FileSystem) getDirectoryEntries(p string, in inode) ([]*directoryEntry
 	if err != nil {
 		return nil, fmt.Errorf("unable to read directory from table: %v", err)
 	}
-	entriesRaw := dir.entries
-	var entries []*directoryEntry
-	// if this is the directory we are looking for, return the entries
-	if len(parts) == 0 || (len(parts) == 1 && parts[0] == ".") {
-		entries, err = fs.hydrateDirectoryEntries(entriesRaw)
-		if err != nil {
-			return nil, fmt.Errorf("could not populate directory entries for %s with properties: %v", p, err)
-		}
-		return entries, nil
-	}
-
-	// it is not, so dig down one level
-	// find the entry among the children that has the desired name
-	for _, entry := range entriesRaw {
-		// only care if not self or parent entry
-		checkFilename := entry.name
-		if checkFilename == parts[0] {
-			// read the inode for this entry
-			inode, err := fs.getInode(entry.startBlock, entry.offset, entry.inodeType)
-			if err != nil {
-				return nil, fmt.Errorf("error finding inode for %s: %v", p, err)
-			}
-
-			childPath := ""
-			if len(parts) > 1 {
-				childPath = path.Join(parts[1:]...)
-			}
-			entries, err = fs.getDirectoryEntries(childPath, inode)
-			if err != nil {
-				return nil, fmt.Errorf("could not get entries: %v", err)
-			}
-			return entries, nil
-		}
-	}
-	// if we made it here, we were not looking for this directory, but did not find it among our children
-	return nil, fmt.Errorf("could not find path %s", p)
+	return dir.entries, nil
 }
 
 func (fs *FileSystem) hydrateDirectoryEntries(entries []*directoryEntryRaw) ([]*directoryEntry, error) {
