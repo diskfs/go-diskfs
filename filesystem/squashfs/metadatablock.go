@@ -106,19 +106,20 @@ func (fs *FileSystem) readMetaBlock(r io.ReaderAt, c Compressor, location int64)
 // readMetadata read as many bytes of metadata as required for the given size, with the byteOffset provided as a starting
 // point into the first block. Can read multiple blocks if necessary, e.g. if a block is 8192 bytes (standard), and
 // requests to read 500 bytes beginning at offset 8000 into the first block.
-// it always returns to the end of the block, even if that is greater than the given size. This makes it easy to use more
-// data than expected on first read. The consumer is expected to cut it down, if needed
+// It returns exactly size bytes, in a new slice the caller may keep or modify: copying up to the end of the block
+// instead would cost up to a whole block per call, e.g. for every inode of a directory being listed.
 func (fs *FileSystem) readMetadata(r io.ReaderAt, c Compressor, firstBlock int64, initialBlockOffset uint32, byteOffset uint16, size int) ([]byte, error) {
-	var (
-		b           []byte
-		blockOffset = int(initialBlockOffset)
-	)
-	// we know how many blocks, so read them all in
+	blockOffset := int(initialBlockOffset)
 	m, read, err := fs.readMetaBlock(r, c, firstBlock+int64(blockOffset))
 	if err != nil {
 		return nil, err
 	}
-	b = append(b, m[byteOffset:]...)
+	if int(byteOffset) > len(m) {
+		return nil, fmt.Errorf("offset %d is beyond the %d bytes of metadata block at %d", byteOffset, len(m), firstBlock+int64(blockOffset))
+	}
+	m = m[byteOffset:]
+	b := make([]byte, 0, size)
+	b = append(b, m[:min(len(m), size)]...)
 	// do we have any more to read?
 	for len(b) < size {
 		blockOffset += int(read)
@@ -126,7 +127,7 @@ func (fs *FileSystem) readMetadata(r io.ReaderAt, c Compressor, firstBlock int64
 		if err != nil {
 			return nil, err
 		}
-		b = append(b, m...)
+		b = append(b, m[:min(len(m), size-len(b))]...)
 	}
 	return b, nil
 }
