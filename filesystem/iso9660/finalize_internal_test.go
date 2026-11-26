@@ -68,6 +68,66 @@ func TestCopyFileData(t *testing.T) {
 	}
 }
 
+func TestCopyFileDataAcrossBuffers(t *testing.T) {
+	data := make([]byte, 3*copyBufferSize+123)
+	if _, err := rand.Read(data); err != nil {
+		t.Fatal("error getting random bytes:", err)
+	}
+	from, err := os.CreateTemp(t.TempDir(), "from")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer from.Close()
+	if _, err := from.Write(data); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name       string
+		fromOffset int64
+		toOffset   int64
+		size       int
+		want       int
+	}{
+		{"whole file", 0, 0, 0, len(data)},
+		{"limit inside first buffer", 0, 0, 64, 64},
+		{"limit across buffers", 0, 0, 2*copyBufferSize + 7, 2*copyBufferSize + 7},
+		{"offsets to end of file", 64, 2048, 0, len(data) - 64},
+		{"offsets with limit", 100, 4096, copyBufferSize + 1, copyBufferSize + 1},
+		{"limit past end of file", 10, 0, len(data), len(data) - 10},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			to, err := os.CreateTemp(t.TempDir(), "to")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer to.Close()
+			copied, err := copyFileData(from, to, tt.fromOffset, tt.toOffset, tt.size)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if copied != tt.want {
+				t.Fatalf("copied %d bytes, want %d", copied, tt.want)
+			}
+			got := make([]byte, copied)
+			if _, err := to.ReadAt(got, tt.toOffset); err != nil {
+				t.Fatal(err)
+			}
+			if want := data[tt.fromOffset : tt.fromOffset+int64(copied)]; !bytes.Equal(got, want) {
+				t.Fatal("copied data does not match the source")
+			}
+			info, err := to.Stat()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if info.Size() != tt.toOffset+int64(copied) {
+				t.Fatalf("target is %d bytes, want %d", info.Size(), tt.toOffset+int64(copied))
+			}
+		})
+	}
+}
+
 func TestSortFinalizeFileInfoPathTable(t *testing.T) {
 	tests := []struct {
 		left  *finalizeFileInfo
