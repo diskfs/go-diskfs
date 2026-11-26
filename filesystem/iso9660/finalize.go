@@ -13,6 +13,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/diskfs/go-diskfs/backend"
@@ -1144,26 +1145,42 @@ func (fsm *FileSystem) Finalize(options FinalizeOptions) error {
 	return nil
 }
 
+// copyBufferSize is large enough that copying file data is not dominated by syscalls.
+const copyBufferSize = 256 * 1024
+
+// copyBuffers reuses copy buffers across files, so that images with many small files
+// don't allocate a buffer per file.
+var copyBuffers = sync.Pool{New: func() any {
+	buf := make([]byte, copyBufferSize)
+	return &buf
+}}
+
 // copyFileData copy data from file `from` at offset `fromOffset` to file `to` at offset `toOffset`.
 // Copies `size` bytes. If `size` is 0, copies as many bytes as it can.
 func copyFileData(from backend.File, to backend.WritableFile, fromOffset, toOffset int64, size int) (int, error) {
-	buf := make([]byte, 2048)
+	bufp, ok := copyBuffers.Get().(*[]byte)
+	if !ok {
+		buf := make([]byte, copyBufferSize)
+		bufp = &buf
+	}
+	defer copyBuffers.Put(bufp)
+	buf := *bufp
 	copied := 0
 	for {
-		n, err := from.ReadAt(buf, fromOffset+int64(copied))
+		chunk := buf
+		if size > 0 && size-copied < len(chunk) {
+			chunk = chunk[:size-copied]
+		}
+		n, err := from.ReadAt(chunk, fromOffset+int64(copied))
 		if err != nil && err != io.EOF {
 			return copied, err
-		}
-
-		if size > 0 && n > (size-copied) {
-			n = size - copied
 		}
 
 		if n == 0 {
 			break
 		}
 
-		if _, err := to.WriteAt(buf[:n], toOffset+int64(copied)); err != nil {
+		if _, err := to.WriteAt(chunk[:n], toOffset+int64(copied)); err != nil {
 			return copied, err
 		}
 		copied += n
